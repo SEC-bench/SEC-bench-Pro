@@ -109,26 +109,38 @@ _REGEX_PREFIX_TOKENS = {
     "do",
 }
 _DYNAMIC_CODE_PATTERNS = (
-    ("eval", re.compile(r"(?<![\w$.\]])\beval\s*\(")),
-    ("function_constructor", re.compile(r"(?<![\w$.])\b(?:new\s+)?Function\s*\(")),
+    ("eval", re.compile(r"(?<![\w$.\]])\beval\s*(?:\?\.\s*)?\(")),
+    (
+        "function_constructor",
+        re.compile(r"(?<![\w$.])\b(?:new\s+)?Function\s*(?:\?\.\s*)?\("),
+    ),
     (
         "async_function_constructor",
-        re.compile(r"(?<![\w$.])\b(?:new\s+)?AsyncFunction\s*\("),
+        re.compile(r"(?<![\w$.])\b(?:new\s+)?AsyncFunction\s*(?:\?\.\s*)?\("),
     ),
     (
         "generator_function_constructor",
-        re.compile(r"(?<![\w$.])\b(?:new\s+)?GeneratorFunction\s*\("),
+        re.compile(
+            r"(?<![\w$.])\b(?:new\s+)?GeneratorFunction\s*(?:\?\.\s*)?\("
+        ),
     ),
     (
         "async_generator_function_constructor",
-        re.compile(r"(?<![\w$.])\b(?:new\s+)?AsyncGeneratorFunction\s*\("),
+        re.compile(
+            r"(?<![\w$.])\b(?:new\s+)?AsyncGeneratorFunction\s*(?:\?\.\s*)?\("
+        ),
     ),
 )
 _DYNAMIC_CODE_WITH_STRING_PATTERNS = (
-    ("indirect_eval", re.compile(r"(?:\.\s*eval|\[\s*['\"]eval['\"]\s*\])\s*\(")),
+    (
+        "indirect_eval",
+        re.compile(r"(?:\.\s*eval|\[\s*['\"]eval['\"]\s*\])\s*(?:\?\.\s*)?\("),
+    ),
     (
         "string_timer",
-        re.compile(r"(?<![\w$.])\bset(?:Timeout|Interval)\s*\(\s*['\"`]"),
+        re.compile(
+            r"(?<![\w$.])\bset(?:Timeout|Interval)\s*(?:\?\.\s*)?\(\s*['\"`]"
+        ),
     ),
     ("string_dynamic_import", re.compile(r"(?<![\w$.])\bimport\s*\(\s*['\"`]")),
 )
@@ -157,164 +169,224 @@ def _strip_js_comments_and_optionally_literals(
     keep_templates: bool,
     keep_regex: bool,
 ) -> str:
-    out: list[str] = []
-    i = 0
     length = len(source)
-    prev_token: str | None = None
 
-    while i < length:
-        ch = source[i]
-        nxt = source[i + 1] if i + 1 < length else ""
+    def masked_char(ch: str) -> str:
+        return "\n" if ch in "\r\n" else " "
 
-        if ch.isspace():
+    def scan_js(i: int, *, stop_at_template_expr_end: bool = False) -> tuple[str, int]:
+        out: list[str] = []
+        prev_token: str | None = None
+        brace_depth = 0
+
+        while i < length:
+            ch = source[i]
+            nxt = source[i + 1] if i + 1 < length else ""
+
+            if stop_at_template_expr_end and ch == "}" and brace_depth == 0:
+                return "".join(out), i
+
+            if ch.isspace():
+                out.append(ch)
+                i += 1
+                continue
+
+            if _is_identifier_start(ch):
+                start = i
+                i += 1
+                while i < length and _is_identifier_part(source[i]):
+                    i += 1
+                token = source[start:i]
+                out.append(token)
+                prev_token = token
+                continue
+
+            if ch.isdigit():
+                start = i
+                i += 1
+                while i < length and (
+                    source[i].isalnum() or source[i] in "._"
+                ):
+                    i += 1
+                fragment = source[start:i]
+                out.append(fragment)
+                prev_token = "literal"
+                continue
+
+            if ch in ("'", '"'):
+                quote = ch
+                start = i
+                i += 1
+                escaped = False
+                while i < length:
+                    cur = source[i]
+                    i += 1
+                    if escaped:
+                        escaped = False
+                    elif cur == "\\":
+                        escaped = True
+                    elif cur == quote:
+                        break
+                fragment = source[start:i]
+                out.append(fragment if keep_strings else _mask_js_fragment(fragment))
+                prev_token = "literal"
+                continue
+
+            if ch == "`":
+                fragment, i = scan_template_literal(i)
+                out.append(fragment)
+                prev_token = "literal"
+                continue
+
+            if ch == "/" and nxt == "/":
+                start = i
+                i += 2
+                while i < length and source[i] not in "\r\n":
+                    i += 1
+                out.append(_mask_js_fragment(source[start:i]))
+                continue
+
+            if ch == "/" and nxt == "*":
+                start = i
+                i += 2
+                while i + 1 < length and not (
+                    source[i] == "*" and source[i + 1] == "/"
+                ):
+                    i += 1
+                i = min(i + 2, length)
+                out.append(_mask_js_fragment(source[start:i]))
+                continue
+
+            if ch == "/" and (_can_start_regex(prev_token) or nxt == "["):
+                start = i
+                i += 1
+                escaped = False
+                in_class = False
+                while i < length:
+                    cur = source[i]
+                    i += 1
+                    if escaped:
+                        escaped = False
+                    elif cur == "\\":
+                        escaped = True
+                    elif in_class:
+                        if cur == "]":
+                            in_class = False
+                    elif cur == "[":
+                        in_class = True
+                    elif cur == "/":
+                        while i < length and _is_identifier_part(source[i]):
+                            i += 1
+                        break
+                    elif cur in "\r\n":
+                        break
+                fragment = source[start:i]
+                out.append(fragment if keep_regex else _mask_js_fragment(fragment))
+                prev_token = "literal"
+                continue
+
+            three = source[i : i + 3]
+            two = source[i : i + 2]
+            if three in {
+                "===",
+                "!==",
+                "**=",
+                "&&=",
+                "||=",
+                "??=",
+                "<<=",
+                ">>=",
+                ">>>",
+            }:
+                out.append(three)
+                prev_token = three
+                i += 3
+                continue
+            if two in {
+                "=>",
+                "++",
+                "--",
+                "==",
+                "!=",
+                "<=",
+                ">=",
+                "&&",
+                "||",
+                "??",
+                "**",
+                "+=",
+                "-=",
+                "*=",
+                "/=",
+                "%=",
+                "&=",
+                "|=",
+                "^=",
+                "<<",
+                ">>",
+            }:
+                out.append(two)
+                prev_token = two
+                i += 2
+                continue
+
+            if ch == "{":
+                brace_depth += 1
+            elif ch == "}" and brace_depth > 0:
+                brace_depth -= 1
             out.append(ch)
+            prev_token = ch
             i += 1
-            continue
 
-        if _is_identifier_start(ch):
-            start = i
-            i += 1
-            while i < length and _is_identifier_part(source[i]):
-                i += 1
-            token = source[start:i]
-            out.append(token)
-            prev_token = token
-            continue
+        return "".join(out), i
 
-        if ch.isdigit():
-            start = i
-            i += 1
-            while i < length and (
-                source[i].isalnum() or source[i] in "._"
-            ):
-                i += 1
-            fragment = source[start:i]
-            out.append(fragment)
-            prev_token = "literal"
-            continue
-
-        if ch in ("'", '"'):
-            quote = ch
-            start = i
-            i += 1
-            escaped = False
-            while i < length:
-                cur = source[i]
-                i += 1
-                if escaped:
-                    escaped = False
-                elif cur == "\\":
-                    escaped = True
-                elif cur == quote:
-                    break
-            fragment = source[start:i]
-            out.append(fragment if keep_strings else _mask_js_fragment(fragment))
-            prev_token = "literal"
-            continue
-
-        if ch == "`":
-            start = i
-            i += 1
-            escaped = False
-            while i < length:
-                cur = source[i]
-                i += 1
-                if escaped:
-                    escaped = False
-                elif cur == "\\":
-                    escaped = True
-                elif cur == "`":
-                    break
-            fragment = source[start:i]
-            out.append(fragment if keep_templates else _mask_js_fragment(fragment))
-            prev_token = "literal"
-            continue
-
-        if ch == "/" and nxt == "/":
-            start = i
-            i += 2
-            while i < length and source[i] not in "\r\n":
-                i += 1
-            out.append(_mask_js_fragment(source[start:i]))
-            continue
-
-        if ch == "/" and nxt == "*":
-            start = i
-            i += 2
-            while i + 1 < length and not (source[i] == "*" and source[i + 1] == "/"):
-                i += 1
-            i = min(i + 2, length)
-            out.append(_mask_js_fragment(source[start:i]))
-            continue
-
-        if ch == "/" and (_can_start_regex(prev_token) or nxt == "["):
-            start = i
-            i += 1
-            escaped = False
-            in_class = False
-            while i < length:
-                cur = source[i]
-                i += 1
-                if escaped:
-                    escaped = False
-                elif cur == "\\":
-                    escaped = True
-                elif in_class:
-                    if cur == "]":
-                        in_class = False
-                elif cur == "[":
-                    in_class = True
-                elif cur == "/":
-                    while i < length and _is_identifier_part(source[i]):
-                        i += 1
-                    break
-                elif cur in "\r\n":
-                    break
-            fragment = source[start:i]
-            out.append(fragment if keep_regex else _mask_js_fragment(fragment))
-            prev_token = "literal"
-            continue
-
-        three = source[i : i + 3]
-        two = source[i : i + 2]
-        if three in {"===", "!==", "**=", "&&=", "||=", "??=", "<<=", ">>=", ">>>"}:
-            out.append(three)
-            prev_token = three
-            i += 3
-            continue
-        if two in {
-            "=>",
-            "++",
-            "--",
-            "==",
-            "!=",
-            "<=",
-            ">=",
-            "&&",
-            "||",
-            "??",
-            "**",
-            "+=",
-            "-=",
-            "*=",
-            "/=",
-            "%=",
-            "&=",
-            "|=",
-            "^=",
-            "<<",
-            ">>",
-        }:
-            out.append(two)
-            prev_token = two
-            i += 2
-            continue
-
-        out.append(ch)
-        prev_token = ch
+    def scan_template_literal(i: int) -> tuple[str, int]:
+        out: list[str] = []
+        out.append("`" if keep_templates else " ")
         i += 1
+        escaped = False
 
-    return "".join(out)
+        while i < length:
+            cur = source[i]
+            nxt = source[i + 1] if i + 1 < length else ""
+
+            if escaped:
+                out.append(cur if keep_templates else masked_char(cur))
+                escaped = False
+                i += 1
+                continue
+
+            if cur == "\\":
+                out.append(cur if keep_templates else " ")
+                escaped = True
+                i += 1
+                continue
+
+            if cur == "`":
+                out.append("`" if keep_templates else " ")
+                i += 1
+                return "".join(out), i
+
+            # Template quasis are literal text; ${...} is executable JavaScript.
+            if cur == "$" and nxt == "{":
+                out.append("${" if keep_templates else "  ")
+                expr, end = scan_js(i + 2, stop_at_template_expr_end=True)
+                out.append(expr)
+                if end < length and source[end] == "}":
+                    out.append("}" if keep_templates else " ")
+                    i = end + 1
+                else:
+                    i = end
+                escaped = False
+                continue
+
+            out.append(cur if keep_templates else masked_char(cur))
+            i += 1
+
+        return "".join(out), i
+
+    stripped, _ = scan_js(0)
+    return stripped
 
 
 def strip_js_comments_for_intrinsic_scan(source: str) -> str:
@@ -363,7 +435,8 @@ def dynamic_code_generation_uses(source: str) -> set[str]:
 
     Native-syntax PoCs that use generated JavaScript are rejected by the grader:
     a static whitelist cannot soundly prove which `%Intrinsic` calls will be
-    assembled at runtime.
+    assembled at runtime. Template literal quasis are treated as literals, but
+    `${...}` expressions are scanned as executable JavaScript.
     """
     code = strip_js_comments_and_literals_for_code_scan(source)
     commentless = strip_js_comments_for_intrinsic_scan(source)

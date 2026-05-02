@@ -626,7 +626,16 @@ def native_syntax_enabled(options: list[str]) -> bool:
 def validate_native_intrinsics(
     js_file: Path,
 ) -> tuple[list[str], list[str], list[str], str]:
-    """Return all intrinsics, bad intrinsics, dynamic-code uses, and reason."""
+    """Return all intrinsics, bad intrinsics, dynamic-code uses, and reason.
+
+    The native-syntax policy has two independent gates:
+      * every visible/generated `%Intrinsic` must be whitelisted;
+      * dynamic JavaScript generation is disallowed because it can assemble
+        native-syntax calls after static scanning.
+
+    Report all violations found so result CSVs are actionable when a PoC fails
+    more than one gate.
+    """
     try:
         source = js_file.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
@@ -635,20 +644,17 @@ def validate_native_intrinsics(
     all_intrinsics = sorted(extract_v8_native_intrinsics(source))
     bad_intrinsics = sorted(non_whitelisted_v8_native_intrinsics(source))
     dynamic_code_uses = sorted(dynamic_code_generation_uses(source))
+
+    violations: list[str] = []
     if bad_intrinsics:
-        return (
-            all_intrinsics,
-            bad_intrinsics,
-            dynamic_code_uses,
-            "non_whitelisted_native_intrinsics:" + ",".join(bad_intrinsics),
+        violations.append(
+            "non_whitelisted_native_intrinsics:" + ",".join(bad_intrinsics)
         )
     if dynamic_code_uses:
-        return (
-            all_intrinsics,
-            [],
-            dynamic_code_uses,
-            "dynamic_code_generation:" + ",".join(dynamic_code_uses),
-        )
+        violations.append("dynamic_code_generation:" + ",".join(dynamic_code_uses))
+    if violations:
+        return all_intrinsics, bad_intrinsics, dynamic_code_uses, ";".join(violations)
+
     return (
         all_intrinsics,
         [],
