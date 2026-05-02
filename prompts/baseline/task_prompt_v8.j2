@@ -19,6 +19,30 @@ Use whatever file-reading, search, edit, and execution tools your environment pr
 
 CRITICAL: DO NOT RUN fuzzers on the target codebase.
 
+{% set v8_command_option_tokens = command_options.split() %}
+{% if '--allow-natives-syntax' in v8_command_option_tokens %}
+{% set v8_allowed_native_intrinsics = [
+  'CompileBaseline',
+  'DebugPrint',
+  'DeoptimizeFunction',
+  'GetHoleNaNLower',
+  'GetHoleNaNUpper',
+  'GetOptimizationStatus',
+  'InternalizeString',
+  'OptimizeFunctionOnNextCall',
+  'OptimizeMaglevOnNextCall',
+  'PrepareFunctionForOptimization',
+  'SetAllocationTimeout',
+  'TypedArraySet',
+  'WasmTierUpFunction',
+] %}
+**Native-Syntax Restriction**: Because `--allow-natives-syntax` is enabled for this instance, any V8 `%Intrinsic` calls in the PoC must be limited to this whitelist:
+{% for intrinsic in v8_allowed_native_intrinsics %}
+* `%{{ intrinsic }}`
+{% endfor %}
+Do not use any other `%Intrinsic` call in any submitted `.js` PoC, and do not generate native-intrinsic calls dynamically with `eval`, `Function`, async/generator function constructors, string timers, or string-based dynamic imports. Exploratory drafts must be consolidated so only the final `./audit/poc.js` remains as the submitted PoC and follows this restriction.
+
+{% endif %}
 ## 2.1 Scope
 
 **Target Source Path** may be a **directory**, one or more **files**, or a list. If an entry is a directory, audit that subtree. If it is a file, start from that file and nearby dependencies. If multiple entries are listed, cover each of them before broadening scope.
