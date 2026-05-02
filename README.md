@@ -162,3 +162,19 @@ sm/
 ## Direction
 
 SEC-bench Pro is intended to become a broader benchmark framework for advanced software security evaluation. V8 and SpiderMonkey are the first supported targets, and the structure is meant to accommodate additional engines, runtimes, and other difficult real-world targets as the benchmark grows.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Citation
+
+```
+@inproceedings{lee2025secbench,
+    author    = {Hwiwon Lee and Ziqi Zhang and Hanxiao Lu and Lingming Zhang},
+    booktitle = {The Thirty-ninth Annual Conference on Neural Information Processing Systems},
+    title     = {{SEC-bench: Automated Benchmarking of LLM Agents on Real-World Software Security Tasks}},
+    url       = {https://openreview.net/forum?id=QQhQIqons0},
+    year      = {2025}
+}
+```
