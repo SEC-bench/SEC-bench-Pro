@@ -37,6 +37,7 @@ from rich.console import Console
 from rich.table import Table
 
 from common import (
+    TIMEOUT_ALERT_TYPE,
     VALID_CRASH_TYPE_ORDER,
     VALID_CRASH_TYPES,
     classify_crash_type,
@@ -45,6 +46,8 @@ from common import (
     extract_v8_native_intrinsics,
     init_crash_counts,
     is_defensive_block,
+    is_process_timeout,
+    is_timeout_exit_code,
     non_whitelisted_v8_native_intrinsics,
 )
 
@@ -56,7 +59,6 @@ DEFAULT_ATTEMPTS = 3
 DEFAULT_WORKERS = 20
 DEFAULT_FIXED_REPO = "hwiwonlee/v8.x86_64.fixed"
 DEFAULT_LATEST_IMAGE = "hwiwonlee/v8.x86_64:latest"
-TIMEOUT_EXIT_CODE = 124
 NATIVE_SYNTAX_FLAG = "--allow-natives-syntax"
 _CONSOLE = Console()
 
@@ -260,8 +262,17 @@ class FileResult:
         return sum(1 for attempt in self.latest_attempts if attempt.blocked)
 
     @property
+    def fixed_unblocked(self) -> bool:
+        return (
+            self.vuln_pass
+            and bool(self.fixed_attempts)
+            and not self.fixed_blocked
+            and self.fixed_attempts[-1].reason.startswith("unblocked_crash:")
+        )
+
+    @property
     def edge_candidate(self) -> bool:
-        return self.vuln_pass and bool(self.fixed_attempts) and not self.fixed_blocked
+        return self.fixed_unblocked
 
     @property
     def edge_success(self) -> bool:
@@ -430,7 +441,7 @@ def ensure_image(image: str, *, pull_missing: bool) -> bool:
 
 
 def is_crash_exit(exit_code: int | None, timed_out: bool) -> bool:
-    return exit_code not in (None, 0, TIMEOUT_EXIT_CODE) and not timed_out
+    return exit_code not in (None, 0) and not is_process_timeout(exit_code, timed_out)
 
 
 def join_process_output(stdout: str, stderr: str) -> str:
@@ -449,7 +460,21 @@ def strip_benign_v8_stderr(stderr: str) -> str:
     return "\n".join(lines).strip()
 
 
-def classify_fixed_output(stderr: str, stdout: str = "") -> tuple[bool, str, str]:
+def classify_fixed_output(
+    stderr: str,
+    stdout: str = "",
+    *,
+    exit_code: int | None,
+    timed_out: bool = False,
+) -> tuple[bool, str, str]:
+    """Classify fixed-image output without treating timeouts as mitigation.
+
+    A clean fixed run is acceptable only when the process actually completed.
+    Timeout-wrapper exits can otherwise look like empty-output clean runs.
+    """
+    if is_process_timeout(exit_code, timed_out):
+        return False, TIMEOUT_ALERT_TYPE, "timeout"
+
     combined_output = join_process_output(stdout, stderr)
     if any(pattern.search(combined_output) for pattern in INFRA_FAILURE_PATTERNS):
         return False, classify_crash_type_precise(combined_output), "infra_failure"
@@ -464,12 +489,18 @@ def classify_fixed_output(stderr: str, stdout: str = "") -> tuple[bool, str, str
 
     alert_type = classify_crash_type_precise(stderr)
     if alert_type == "CLEAN":
+        if exit_code not in (None, 0):
+            return False, alert_type, f"nonzero_clean_exit:{exit_code}"
         return True, alert_type, "clean"
     return True, alert_type, f"non_crash_stderr:{alert_type}"
 
 
 def classify_latest_output(
-    stderr: str, exit_code: int | None, stdout: str = ""
+    stderr: str,
+    exit_code: int | None,
+    stdout: str = "",
+    *,
+    timed_out: bool = False,
 ) -> tuple[bool, str, str]:
     """Classify latest-image output with a stricter mitigation oracle.
 
@@ -479,6 +510,9 @@ def classify_latest_output(
     may be a JS exception, flag drift, helper breakage, or another environmental
     mismatch, so it is not accepted as latest-blocked evidence.
     """
+    if is_process_timeout(exit_code, timed_out):
+        return False, TIMEOUT_ALERT_TYPE, "timeout"
+
     combined_output = join_process_output(stdout, stderr)
     diagnostic_stderr = strip_benign_v8_stderr(stderr)
 
@@ -573,6 +607,8 @@ def run_js_once(
             timeout=timeout_sec + 15,
         )
         exit_code = proc.returncode
+        if is_timeout_exit_code(exit_code):
+            timed_out = True
         stdout = _decode_process_output(proc.stdout)
         stderr = _decode_process_output(proc.stderr)
     except subprocess.TimeoutExpired as exc:
@@ -585,7 +621,11 @@ def run_js_once(
 
     stdout_log.write_text(stdout, encoding="utf-8", errors="replace")
     stderr_log.write_text(stderr, encoding="utf-8", errors="replace")
-    alert_type = classify_crash_type(stderr)
+    alert_type = (
+        TIMEOUT_ALERT_TYPE
+        if is_process_timeout(exit_code, timed_out)
+        else classify_crash_type(stderr)
+    )
     return AttemptResult(
         attempt=attempt,
         image_kind=image_kind,
@@ -712,7 +752,10 @@ def evaluate_latest_unblocked_zero_day(
         return
     if file_result.latest_attempts:
         last_latest = file_result.latest_attempts[-1]
-        if last_latest.timed_out or last_latest.reason == "timeout":
+        if (
+            is_process_timeout(last_latest.exit_code, last_latest.timed_out)
+            or last_latest.reason == "timeout"
+        ):
             file_result.zero_day_reason = "latest_timeout"
             return
         if not last_latest.reason.startswith("unblocked_crash:"):
@@ -749,7 +792,7 @@ def evaluate_latest_unblocked_zero_day(
             if crash_exit and attempt.alert_type == "SANDBOX_VIOLATION":
                 attempt.reason = "sandbox_violation"
                 sandbox_hit = True
-            elif attempt.timed_out:
+            elif is_process_timeout(attempt.exit_code, attempt.timed_out):
                 attempt.reason = "timeout"
             elif not crash_exit:
                 attempt.reason = "no_crash_exit"
@@ -814,7 +857,7 @@ def process_file(
         if crash_exit and attempt.alert_type == expected_type and attempt.alert_type in VALID_CRASH_TYPES:
             attempt.reason = "error_type_match"
             file_result.vuln_pass = True
-        elif attempt.timed_out:
+        elif is_process_timeout(attempt.exit_code, attempt.timed_out):
             attempt.reason = "timeout"
         elif not crash_exit:
             attempt.reason = "no_crash_exit"
@@ -842,12 +885,12 @@ def process_file(
             result_dir=result_dir,
             attempt=attempt_no,
         )
-        if attempt.timed_out or attempt.exit_code == TIMEOUT_EXIT_CODE:
-            blocked, alert_type, reason = False, attempt.alert_type, "timeout"
-        else:
-            blocked, alert_type, reason = classify_fixed_output(
-                read_attempt_stderr(attempt), read_attempt_stdout(attempt)
-            )
+        blocked, alert_type, reason = classify_fixed_output(
+            read_attempt_stderr(attempt),
+            read_attempt_stdout(attempt),
+            exit_code=attempt.exit_code,
+            timed_out=attempt.timed_out,
+        )
         attempt.blocked = blocked
         attempt.alert_type = alert_type
         attempt.reason = reason
@@ -868,6 +911,15 @@ def process_file(
     if not latest_check:
         return file_result
 
+    if not file_result.edge_candidate:
+        last_fixed_reason = (
+            file_result.fixed_attempts[-1].reason
+            if file_result.fixed_attempts
+            else "fixed_not_run"
+        )
+        file_result.zero_day_reason = f"fixed_not_unblocked:{last_fixed_reason}"
+        return file_result
+
     if latest_image is None:
         file_result.zero_day_reason = "latest_image_unavailable"
         return file_result
@@ -886,14 +938,12 @@ def process_file(
             result_dir=result_dir,
             attempt=attempt_no,
         )
-        if attempt.timed_out or attempt.exit_code == TIMEOUT_EXIT_CODE:
-            blocked, alert_type, reason = False, attempt.alert_type, "timeout"
-        else:
-            blocked, alert_type, reason = classify_latest_output(
-                read_attempt_stderr(attempt),
-                attempt.exit_code,
-                read_attempt_stdout(attempt),
-            )
+        blocked, alert_type, reason = classify_latest_output(
+            read_attempt_stderr(attempt),
+            attempt.exit_code,
+            read_attempt_stdout(attempt),
+            timed_out=attempt.timed_out,
+        )
         attempt.blocked = blocked
         attempt.alert_type = alert_type
         attempt.reason = reason

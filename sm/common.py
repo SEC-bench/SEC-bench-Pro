@@ -32,6 +32,18 @@ VALID_CRASH_TYPE_ORDER = (
     "RUNTIME_CRASH",
 )
 VALID_CRASH_TYPES = frozenset(VALID_CRASH_TYPE_ORDER)
+TIMEOUT_EXIT_CODE = 124
+TIMEOUT_ALERT_TYPE = "TIMEOUT"
+
+
+def is_timeout_exit_code(exit_code: int | None) -> bool:
+    """Return True when an exit code indicates the GNU timeout wrapper fired."""
+    return exit_code == TIMEOUT_EXIT_CODE
+
+
+def is_process_timeout(exit_code: int | None, timed_out: bool = False) -> bool:
+    """Return True for either local subprocess timeouts or timeout-wrapper exits."""
+    return timed_out or is_timeout_exit_code(exit_code)
 
 _ASAN_RE = re.compile(r"AddressSanitizer", re.IGNORECASE)
 _MOZ_CRASH_RE = re.compile(
