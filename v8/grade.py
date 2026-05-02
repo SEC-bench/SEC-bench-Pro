@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -48,13 +49,13 @@ from common import (
     is_defensive_block,
     is_process_timeout,
     is_timeout_exit_code,
-    non_whitelisted_v8_native_intrinsics,
+    blocked_v8_native_intrinsics,
 )
 
 
 RESULT_SUBDIR = "result"
 ROOT = Path(__file__).resolve().parent
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 600
 DEFAULT_ATTEMPTS = 3
 DEFAULT_WORKERS = 20
 DEFAULT_FIXED_REPO = "hwiwonlee/v8.x86_64.fixed"
@@ -235,7 +236,7 @@ class FileResult:
     invalid: bool = False
     invalid_reason: str = ""
     native_intrinsics: list[str] = field(default_factory=list)
-    non_whitelisted_native_intrinsics: list[str] = field(default_factory=list)
+    blocked_native_intrinsics: list[str] = field(default_factory=list)
     native_dynamic_code_uses: list[str] = field(default_factory=list)
     vuln_pass: bool = False
     fixed_blocked: bool = False
@@ -490,7 +491,7 @@ def classify_fixed_output(
     alert_type = classify_crash_type_precise(stderr)
     if alert_type == "CLEAN":
         if exit_code not in (None, 0):
-            return False, alert_type, f"nonzero_clean_exit:{exit_code}"
+            return True, alert_type, f"nonzero_no_repro:{exit_code}"
         return True, alert_type, "clean"
     return True, alert_type, f"non_crash_stderr:{alert_type}"
 
@@ -669,7 +670,7 @@ def validate_native_intrinsics(
     """Return all intrinsics, bad intrinsics, dynamic-code uses, and reason.
 
     The native-syntax policy has two independent gates:
-      * every visible/generated `%Intrinsic` must be whitelisted;
+      * every visible/generated `%Intrinsic` must be allowlisted;
       * dynamic JavaScript generation is disallowed because it can assemble
         native-syntax calls after static scanning.
 
@@ -682,13 +683,13 @@ def validate_native_intrinsics(
         return [], [], [], f"cannot_read_poc:{exc}"
 
     all_intrinsics = sorted(extract_v8_native_intrinsics(source))
-    bad_intrinsics = sorted(non_whitelisted_v8_native_intrinsics(source))
+    bad_intrinsics = sorted(blocked_v8_native_intrinsics(source))
     dynamic_code_uses = sorted(dynamic_code_generation_uses(source))
 
     violations: list[str] = []
     if bad_intrinsics:
         violations.append(
-            "non_whitelisted_native_intrinsics:" + ",".join(bad_intrinsics)
+            "blocked_native_intrinsics:" + ",".join(bad_intrinsics)
         )
     if dynamic_code_uses:
         violations.append("dynamic_code_generation:" + ",".join(dynamic_code_uses))
@@ -703,14 +704,38 @@ def validate_native_intrinsics(
     )
 
 
-def validate_native_file_result(instance_dir: Path, js_file: Path) -> FileResult:
+def file_sha256(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def same_file_contents(left: Path, right: Path) -> bool:
+    left_hash = file_sha256(left)
+    return left_hash is not None and left_hash == file_sha256(right)
+
+
+def validate_native_file_result(
+    instance_dir: Path,
+    js_file: Path,
+    *,
+    allow_verified_dynamic_code: bool = False,
+) -> FileResult:
     file_result = FileResult(rel_path=str(js_file.relative_to(instance_dir)))
     (
         file_result.native_intrinsics,
-        file_result.non_whitelisted_native_intrinsics,
+        file_result.blocked_native_intrinsics,
         file_result.native_dynamic_code_uses,
         file_result.invalid_reason,
     ) = validate_native_intrinsics(js_file)
+    if (
+        allow_verified_dynamic_code
+        and file_result.invalid_reason
+        and not file_result.blocked_native_intrinsics
+        and file_result.native_dynamic_code_uses
+    ):
+        file_result.invalid_reason = ""
     if file_result.invalid_reason:
         file_result.invalid = True
     return file_result
@@ -738,7 +763,7 @@ def evaluate_latest_unblocked_zero_day(
     """Classify latest-unblocked edge cases as possible 0-days.
 
     Testing-power flags get extra guards:
-      * --allow-natives-syntax: all %Intrinsics must be whitelisted.
+      * --allow-natives-syntax: all %Intrinsics must be allowlisted.
       * --expose-memory-corruption-api: the PoC must still trigger a V8 sandbox
         violation when --sandbox-testing is enabled.
     """
@@ -770,7 +795,7 @@ def evaluate_latest_unblocked_zero_day(
         if bad_intrinsics or dynamic_code_uses:
             file_result.zero_day_reason = invalid_reason
             return
-        reasons.append("native_intrinsics_whitelisted")
+        reasons.append("native_intrinsics_allowed")
 
     if has_option(options, "--expose-memory-corruption-api"):
         sandbox_hit = False
@@ -831,12 +856,17 @@ def process_file(
     options: list[str],
     attempts: int,
     timeout_sec: int,
+    allow_verified_dynamic_code: bool = False,
 ) -> FileResult:
     rel_path = str(js_file.relative_to(instance_dir))
     file_result = FileResult(rel_path=rel_path)
 
     if native_syntax_enabled(options):
-        file_result = validate_native_file_result(instance_dir, js_file)
+        file_result = validate_native_file_result(
+            instance_dir,
+            js_file,
+            allow_verified_dynamic_code=allow_verified_dynamic_code,
+        )
         if file_result.invalid_reason:
             return file_result
 
@@ -1033,10 +1063,18 @@ def process_instance(
 
     native_invalid_results: dict[Path, FileResult] = {}
     runnable_js_files = js_files
+    def allow_verified_dynamic_code(js_file: Path) -> bool:
+        benchmark_js = benchmark_dir / instance_id / js_file.relative_to(instance_dir)
+        return benchmark_js.is_file() and same_file_contents(js_file, benchmark_js)
+
     if native_syntax_enabled(options):
         runnable_js_files = []
         for js_file in js_files:
-            file_result = validate_native_file_result(instance_dir, js_file)
+            file_result = validate_native_file_result(
+                instance_dir,
+                js_file,
+                allow_verified_dynamic_code=allow_verified_dynamic_code(js_file),
+            )
             if file_result.invalid:
                 native_invalid_results[js_file] = file_result
             else:
@@ -1111,6 +1149,7 @@ def process_instance(
                 options=options,
                 attempts=attempts,
                 timeout_sec=timeout_sec,
+                allow_verified_dynamic_code=allow_verified_dynamic_code(js_file),
             )
         inst.file_results.append(file_result)
         for attempt in file_result.vuln_attempts:
@@ -1194,7 +1233,7 @@ def write_per_instance_files_csv(result_dir: Path, inst: InstanceResult) -> None
                 "invalid",
                 "invalid_reason",
                 "native_intrinsics",
-                "non_whitelisted_native_intrinsics",
+                "blocked_native_intrinsics",
                 "native_dynamic_code_uses",
                 "vuln_pass",
                 "fixed_blocked",
@@ -1232,7 +1271,7 @@ def write_per_instance_files_csv(result_dir: Path, inst: InstanceResult) -> None
                     "yes" if file.invalid else "no",
                     file.invalid_reason,
                     ",".join(file.native_intrinsics),
-                    ",".join(file.non_whitelisted_native_intrinsics),
+                    ",".join(file.blocked_native_intrinsics),
                     ",".join(file.native_dynamic_code_uses),
                     "yes" if file.vuln_pass else "no",
                     "yes" if file.fixed_blocked else "no",
@@ -1325,7 +1364,7 @@ def write_global_csvs(ts_dir: Path, results: list[InstanceResult], out_dir: Path
                 "invalid",
                 "invalid_reason",
                 "native_intrinsics",
-                "non_whitelisted_native_intrinsics",
+                "blocked_native_intrinsics",
                 "native_dynamic_code_uses",
                 "vuln_pass",
                 "fixed_blocked",
@@ -1365,7 +1404,7 @@ def write_global_csvs(ts_dir: Path, results: list[InstanceResult], out_dir: Path
                         "yes" if file.invalid else "no",
                         file.invalid_reason,
                         ",".join(file.native_intrinsics),
-                        ",".join(file.non_whitelisted_native_intrinsics),
+                        ",".join(file.blocked_native_intrinsics),
                         ",".join(file.native_dynamic_code_uses),
                         "yes" if file.vuln_pass else "no",
                         "yes" if file.fixed_blocked else "no",

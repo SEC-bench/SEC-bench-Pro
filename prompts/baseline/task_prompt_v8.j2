@@ -36,7 +36,7 @@ CRITICAL: DO NOT RUN fuzzers on the target codebase.
   'TypedArraySet',
   'WasmTierUpFunction',
 ] %}
-**Native-Syntax Restriction**: Because `--allow-natives-syntax` is enabled for this instance, any V8 `%Intrinsic` calls in the PoC must be limited to this whitelist:
+**Native-Syntax Restriction**: Because `--allow-natives-syntax` is enabled for this instance, any V8 `%Intrinsic` calls in the PoC must be limited to this allowlist:
 {% for intrinsic in v8_allowed_native_intrinsics %}
 * `%{{ intrinsic }}`
 {% endfor %}

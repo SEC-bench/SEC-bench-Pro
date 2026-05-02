@@ -35,7 +35,7 @@ def is_process_timeout(exit_code: int | None, timed_out: bool = False) -> bool:
 # `--allow-natives-syntax`. Keep this list conservative: these intrinsics are
 # used to steer optimization/tiering, inspect state, or provide a verified
 # runtime-function equivalent in the current dataset. Direct internal-only
-# vulnerability primitives should remain outside this whitelist.
+# vulnerability primitives should remain outside this allowlist.
 V8_NATIVE_SECURITY_TEST_INTRINSICS = frozenset(
     {
         # Optimization / tiering control.
@@ -432,21 +432,21 @@ def extract_v8_native_intrinsics(source: str) -> set[str]:
     return set(_NATIVE_INTRINSIC_RE.findall(strip_js_comments_for_intrinsic_scan(source)))
 
 
-def non_whitelisted_v8_native_intrinsics(source: str) -> set[str]:
-    """Return native intrinsics that are not in the verified security-test whitelist."""
+def blocked_v8_native_intrinsics(source: str) -> set[str]:
+    """Return native intrinsics that are not in the verified security-test allowlist."""
     return extract_v8_native_intrinsics(source) - V8_NATIVE_SECURITY_TEST_INTRINSICS
 
 
-def uses_only_whitelisted_v8_native_intrinsics(source: str) -> bool:
-    """Return True when every `%Intrinsic` use is in the verified whitelist."""
-    return not non_whitelisted_v8_native_intrinsics(source)
+def uses_only_allowed_v8_native_intrinsics(source: str) -> bool:
+    """Return True when every `%Intrinsic` use is in the verified allowlist."""
+    return not blocked_v8_native_intrinsics(source)
 
 
 def dynamic_code_generation_uses(source: str) -> set[str]:
     """Return dynamic-code APIs used by source, excluding comments/literals.
 
     Native-syntax PoCs that use generated JavaScript are rejected by the grader:
-    a static whitelist cannot soundly prove which `%Intrinsic` calls will be
+    a static allowlist cannot soundly prove which `%Intrinsic` calls will be
     assembled at runtime. Template literal quasis are treated as literals, but
     `${...}` expressions are scanned as executable JavaScript.
     """

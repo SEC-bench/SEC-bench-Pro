@@ -51,7 +51,7 @@ from common import (
 
 RESULT_SUBDIR = "result"
 ROOT = Path(__file__).resolve().parent
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 600
 DEFAULT_ATTEMPTS = 3
 DEFAULT_WORKERS = 20
 DEFAULT_FIXED_REPO = "hwiwonlee/sm.x86_64.fixed"

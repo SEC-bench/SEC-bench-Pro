@@ -266,7 +266,7 @@ def compute_match(
 # SpiderMonkey doesn't have V8's ``%Intrinsic`` syntax restricted by
 # ``--allow-natives-syntax``. SpiderMonkey's testing functions
 # (``oomTest``, ``newGlobal``, ``gczeal``, …) are exposed via ``--fuzzing-safe``
-# and are part of the JS shell binary. There is no whitelist gating to apply
+# and are part of the JS shell binary. There is no allowlist gating to apply
 # to PoCs.
 #
 # These no-op shims exist so grade.py / patch_check.py imports remain
@@ -278,10 +278,10 @@ def extract_js_native_intrinsics(source: str) -> set[str]:
     return set()
 
 
-def non_whitelisted_v8_native_intrinsics(source: str) -> set[str]:
+def blocked_v8_native_intrinsics(source: str) -> set[str]:
     """No-op for SpiderMonkey; kept for source-level parity with grade.py."""
     return set()
 
 
-def uses_only_whitelisted_v8_native_intrinsics(source: str) -> bool:
+def uses_only_allowed_v8_native_intrinsics(source: str) -> bool:
     return True
