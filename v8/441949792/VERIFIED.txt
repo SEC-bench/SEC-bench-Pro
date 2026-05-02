@@ -1,0 +1,3 @@
+Verified with `out/x64.release/d8 --sandbox-testing poc.js` in `hwiwonlee/v8.x86_64:441949792`.
+
+The report explicitly says the PoC does not surface as a normal sandbox violation and instead exits with `Caught harmless memory access violation (memory permission violation). Exiting process...`. Re-running the standalone release binary reproduces that exact signal consistently, so `output.txt` is refreshed to the report-aligned release output.

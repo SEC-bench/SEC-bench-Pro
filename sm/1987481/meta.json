@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1987481",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MIROps.yaml"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--baseline-warmup-threshold=10 --ion-warmup-threshold=100 --gc-zeal=15",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "JIT typed-array element pointer use-after-free - ArrayBufferViewElementsWithOffset was treated as movable/congruent even though its result depends on mutable typed-array backing storage. The fix in js/src/jit/MIROps.yaml removes the movable/congruent/clone declarations for this MIR node. Before the fix, Ion could hoist or reuse a Float16Array subarray data pointer across a re-entrant call and nursery GC; after the buffer moved, the optimized store used the stale pointer and ASAN reported a crash in Nursery::forwardBufferPointer or the typed-array write path.",
+    "fix_commits": [
+        "4e0b3249af9b343c82cb8bd1f5f2db3ed5f6ef0b"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-adjust-arraybufferviewelementswithoffset.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1987481: Adjust ArrayBufferViewElementsWithOffset. r=iain",
+            "source_commit": "4e0b3249af9b343c82cb8bd1f5f2db3ed5f6ef0b",
+            "commit": "4e0b3249af9b343c82cb8bd1f5f2db3ed5f6ef0b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/4e0b3249af9b343c82cb8bd1f5f2db3ed5f6ef0b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/4e0b3249af9b343c82cb8bd1f5f2db3ed5f6ef0b",
+            "phabricator": "D264542"
+        }
+    ],
+    "vrp": null
+}

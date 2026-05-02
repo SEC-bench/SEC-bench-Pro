@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:325878101",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--wasm-wrapper-tiering-budget=1",
+  "target_source_files": [
+    "src/runtime/runtime-wasm.cc"
+  ],
+  "target_subdir": [
+    "src/runtime"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "In Runtime_TierUpWasmToJSWrapper (src/runtime/runtime-wasm.cc), when tiering up a wasm-to-JS wrapper triggered by a call_indirect instruction, the code iterates over all entries in the instance's dispatch_tables array to locate the table containing the function reference. However, the dispatch_tables ProtectedFixedArray is indexed by table index and is initialized to Smi::zero() for all slots; only funcref-type table slots are assigned actual WasmDispatchTable objects (non-funcref tables such as kWasmArrayRef are skipped during instantiation in module-instantiate.cc). When the loop calls trusted_data->dispatch_table(table_index) for a non-funcref table index, the accessor asserts IsWasmDispatchTable(table), which fails because the slot still holds Smi(0). In debug builds this causes a fatal DCHECK crash; in release builds the subsequent WasmDispatchTable::cast on Smi(0) produces a type-confused pointer, leading to an arbitrary out-of-bounds read/write when the code accesses ref, sig, or SetTarget fields of the fake object. The vulnerability is triggered by instantiating a module that contains at least one non-funcref table (e.g. kWasmArrayRef) before a funcref table, and executing a call_indirect that targets the funcref table while wrapper tiering fires (e.g. with --wasm-wrapper-tiering-budget=1).",
+  "vrp": 12000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "target-image-cherry-pick-diff",
+      "evidence_lineno": 337,
+      "evidence_text": "Fixed: 325878101; Reviewed-on: CL 5314660",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5314660",
+      "cl": 5314660,
+      "commit": "ca1b752554f3426afbc7d8b48f9260c2a433266d",
+      "description": "Target-image diff generated after cherry-picking the validated review CL into the vulnerable image checkout.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5314660",
+      "source_cl": 5314660,
+      "source_commit": "ca1b752554f3426afbc7d8b48f9260c2a433266d",
+      "source_ref": "refs/changes/60/5314660/2",
+      "source_patchset": 2
+    }
+  ]
+}

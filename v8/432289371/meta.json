@@ -1,0 +1,61 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:432289371",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--expose-memory-corruption-api --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/wasm/module-instantiate.cc",
+    "src/wasm/wasm-objects.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type confusion (signature confusion) vulnerability in V8's WebAssembly module instantiation allows bypassing the V8 sandbox. The root cause is in `ProcessImportedFunction` and `ResolvedWasmImport::ComputeKind` in `src/wasm/module-instantiate.cc`. When a `WasmSuspendingObject` whose inner `.callable` is a wasm function from another module (module1) is imported into a consuming module (module2), the import processing unwraps the `WasmSuspendingObject` to reach the inner wasm function and sets up a direct wasm-to-wasm call (`kWasmToWasm`). However, `ProcessImportedFunction` only stores the funcref in `func_refs[]` if the import value itself is a `WasmExternalFunction`; since the value is a `WasmSuspendingObject`, the funcref slot for that import index in module2 is never populated. When module2 subsequently re-exports that function, `WasmTrustedInstanceData::GetOrCreateFuncRef` creates a new funcref using module2's local `sig_index` for the import slot. This sig_index belongs to module2's type section and may correspond to a different signature than the actual call target (module1's function). The resulting funcref has a mismatched RTT (runtime type), causing signature confusion: the funcref's declared type does not match its actual call target's signature. An attacker can exploit this by calling the re-exported function through the type-confused funcref, passing arguments according to the fake signature, which the actual function interprets differently, enabling arbitrary memory writes outside the V8 sandbox.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6781095 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "49e49f879a604b7f11ed32b0579231e8a139d623 [wasm] Fix sandbox escape via manipulated WasmSuspendingObject",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6781095",
+      "source_cl": 6781095,
+      "source_commit": "49e49f879a604b7f11ed32b0579231e8a139d623"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6812255 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "aedcea406cd3c0ce1e2ea5fd77b2c08edd912b34 [wasm] Forbid recreating WasmInternalFunction for Wasm imports",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6812255",
+      "source_cl": 6812255,
+      "source_commit": "aedcea406cd3c0ce1e2ea5fd77b2c08edd912b34"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0003-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 3,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6818338 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "9c89058f3c979a063f84e8f7e1d89ce638929c4d [wasm][sandbox] Check sandbox-safety of WasmSuspendingObject",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6818338",
+      "source_cl": 6818338,
+      "source_commit": "9c89058f3c979a063f84e8f7e1d89ce638929c4d"
+    }
+  ]
+}

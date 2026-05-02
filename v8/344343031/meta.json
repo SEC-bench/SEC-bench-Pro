@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:344343031",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing --allow-natives-syntax --expose-gc --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/objects/shared-function-info.h",
+    "src/objects/shared-function-info.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A sandbox escape vulnerability exists because V8 trusts `SharedFunctionInfo::formal_parameter_count` even though the value resides in attacker-corruptible sandbox memory. By combining a function's code with a mismatched `SharedFunctionInfo` parameter count, V8 can push and pop the wrong number of arguments, creating stack imbalance and stack corruption. The root-cause context is in `src/objects/shared-function-info.{h,cc}`, where the formal parameter count is stored and exposed independently from the actual code object and calling convention.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream final fix patch exported from commit 4065564213f5c18c15c6bfa72d735e9050004be8; fixed image checks out the final fix parent so prerequisite CLs are present.",
+      "context": "explicit-fix",
+      "source_commit": "4065564213f5c18c15c6bfa72d735e9050004be8",
+      "commit": "4065564213f5c18c15c6bfa72d735e9050004be8",
+      "evidence_lineno": 164,
+      "evidence_text": "This should now be fixed with [https://chromium-review.googlesource.com/c/v8/v8/+/5832362](<https://chromium-review.googlesource.com/c/v8/v8/+/5832362>) (with [https://chromium-review.googlesource.com/c/v8/v8/+/5844709](<https://chromium-review.googlesource.com/c/v8/v8/+/5844709>) and [https://chromium-review.googlesource.com/c/v8/v8/+/5906113](<https://chromium-review.googlesource.com/c/v8/v8/+/5906113>) fixing direct variants). We now store the parameter count (~= the signature) in the JSDispatchTable and can therefore make sure that callee and caller always agree on the signature. Other problems related to SFI::formal_parameter_count will be addressed as part of [issue 40931165](<https://issues.chromium.org/issues/40931165>).",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5906113",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5906113",
+      "source_cl": 5906113,
+      "cl": 5906113,
+      "source_ref": "refs/changes/13/5906113/12",
+      "source_patchset": 12,
+      "patchset": 12
+    }
+  ]
+}

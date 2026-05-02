@@ -1,0 +1,67 @@
+From a334c67b34d158501e072910310a63db72a94401 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Thu, 4 Apr 2024 13:31:40 +0000
+Subject: [PATCH] Bug 1888892 - Trace all fields in TraceWeakCacheIRStub.
+ r=jonco
+
+Differential Revision: https://phabricator.services.mozilla.com/D206481
+---
+ js/src/jit/CacheIRCompiler.cpp | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/js/src/jit/CacheIRCompiler.cpp b/js/src/jit/CacheIRCompiler.cpp
+index 8aeae3c50fc92..9ebd6de8a16eb 100644
+--- a/js/src/jit/CacheIRCompiler.cpp
++++ b/js/src/jit/CacheIRCompiler.cpp
+@@ -1364,6 +1364,8 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+                                const CacheIRStubInfo* stubInfo) {
+   using Type = StubField::Type;
+ 
++  bool isDead = false;
++
+   uint32_t field = 0;
+   size_t offset = 0;
+   while (true) {
+@@ -1374,7 +1376,7 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+             stubInfo->getStubField<T, Type::WeakShape>(stub, offset);
+         auto r = TraceWeakEdge(trc, &shapeField, "cacheir-weak-shape");
+         if (r.isDead()) {
+-          return false;
++          isDead = true;
+         }
+         break;
+       }
+@@ -1383,7 +1385,7 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+             stubInfo->getStubField<T, Type::WeakObject>(stub, offset);
+         auto r = TraceWeakEdge(trc, &objectField, "cacheir-weak-object");
+         if (r.isDead()) {
+-          return false;
++          isDead = true;
+         }
+         break;
+       }
+@@ -1392,7 +1394,7 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+             stubInfo->getStubField<T, Type::WeakBaseScript>(stub, offset);
+         auto r = TraceWeakEdge(trc, &scriptField, "cacheir-weak-script");
+         if (r.isDead()) {
+-          return false;
++          isDead = true;
+         }
+         break;
+       }
+@@ -1402,12 +1404,13 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+         auto r = TraceWeakEdge(trc, &getterSetterField,
+                                "cacheir-weak-getter-setter");
+         if (r.isDead()) {
+-          return false;
++          isDead = true;
+         }
+         break;
+       }
+       case Type::Limit:
+-        return true;  // Done.
++        // Done.
++        return !isDead;
+       case Type::RawInt32:
+       case Type::RawPointer:
+       case Type::Shape:

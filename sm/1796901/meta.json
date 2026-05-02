@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1796901",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/gc/GC.cpp"
+    ],
+    "target_subdir": [
+        "js/src/gc"
+    ],
+    "command_options": "--fuzzing-safe --no-threads --no-baseline --no-ion",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Realm incremental-marking state cleared at the end of GC instead of the start, leaving stale realm allocation state visible to the next collection. CVE-2022-45409 (sec-high, MFSA 2022-47, Firefox 107). GCRuntime stored per-realm flags such as wasAllocatedDuringGC to protect realms created during an incremental collection, but the vulnerable js/src/gc/GC.cpp code cleared that state only from finishCollection. If an incremental GC was aborted or ended early, the cleanup did not run; the next GC then swept zones using stale realm/zone state and could walk a dead zone or poisoned realm list during sweepZones, producing a debug zoneIsDead crash or ASAN null/poisoned-pointer fault. The fix moves the reset into the begin-mark/begin-collection path so every GC starts from clean realm incremental-marking state, including after abortgc or zero-budget slices.",
+    "fix_commits": [
+        "041774db08880cca1ab10e807d0d71718964dffe"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-clear-realm-incremental-marking-state-at-the.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1796901 - Clear realm incremental marking state at the",
+            "source_commit": "041774db08880cca1ab10e807d0d71718964dffe",
+            "commit": "041774db08880cca1ab10e807d0d71718964dffe",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/041774db08880cca1ab10e807d0d71718964dffe",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/041774db08880cca1ab10e807d0d71718964dffe",
+            "phabricator": "D160056"
+        }
+    ],
+    "vrp": null
+}

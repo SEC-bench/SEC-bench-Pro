@@ -1,0 +1,20 @@
+
+
+#
+# Fatal error in ../../src/wasm/wasm-objects-inl.h, line 335
+# Debug check failed: index < length() (2 vs. 1).
+#
+#
+#
+#FailureMessage Object: 0x7fff4a9a3a70
+==== C stack trace ===============================
+
+    /src/v8/out/x64.debug/d8(+0x3763753) [0x55f19fa66753]
+    /src/v8/out/x64.debug/d8(+0x3762b9d) [0x55f19fa65b9d]
+    /src/v8/out/x64.debug/d8(+0x374767e) [0x55f19fa4a67e]
+    /src/v8/out/x64.debug/d8(+0x37470d5) [0x55f19fa4a0d5]
+    /src/v8/out/x64.debug/d8(+0xc19ec4) [0x55f19cf1cec4]
+    /src/v8/out/x64.debug/d8(+0x1b80eab) [0x55f19de83eab]
+    /src/v8/out/x64.debug/d8(+0x1b80240) [0x55f19de83240]
+    /src/v8/out/x64.debug/d8(+0x2efa32e) [0x55f19f1fd32e]
+Trace/breakpoint trap (core dumped)

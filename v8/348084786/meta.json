@@ -1,0 +1,43 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:348084786",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--expose-gc --allow-natives-syntax --sandbox-testing --experimental-wasm-memory64",
+  "target_source_files": [
+    "src/builtins/js-to-wasm.tq"
+  ],
+  "target_subdir": [
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability exists in the JSToWasmWrapperHelper builtin (src/builtins/js-to-wasm.tq). When a JavaScript-to-WebAssembly call wrapper returns, it must pop all arguments from the stack. To calculate the pop count, it reads `target.shared_function_info.length` (an int16 field on the SharedFunctionInfo heap object) and uses this as the number of arguments to pop via `PopAndReturn(popCount + 1, result)`. Because SharedFunctionInfo is a heap object residing inside the V8 sandbox, an attacker who has already gained sandbox-level write access can corrupt the `length` field to an arbitrarily large value. This causes `PopAndReturn` to advance the stack pointer far beyond the current frame boundary, redirecting execution to attacker-controlled memory and enabling a full sandbox escape (RIP hijacking).",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Minimal compatibility fix for this checkout: use the trusted Wasm signature parameter count for JSToWasmWrapper stack popping instead of mutable SharedFunctionInfo::length.",
+      "context": "minimal-compatible-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "Report identifies JSToWasmWrapper reading target.shared_function_info.length for PopAndReturn as the exploitable mutable field.",
+      "source_commits": [
+        "b4e2df91ba38537c97b6257f931ad6f8b0dd9989",
+        "081a631e8f1dc140d48fcce617c1ca2d87e25db4"
+      ],
+      "source_cls": [
+        5956412,
+        5965733
+      ],
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/v8/v8/+/5956412",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/5965733"
+      ],
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5965733",
+      "source_commit": "081a631e8f1dc140d48fcce617c1ca2d87e25db4"
+    }
+  ]
+}

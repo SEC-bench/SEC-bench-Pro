@@ -1,0 +1,27 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000004 (pc 0x64b86859417e bp 0x7ffff2937750 sp 0x7ffff29376c0 T0)
+==12==The signal is caused by a READ memory access.
+==12==Hint: address points to the zero page.
+    #0 0x64b86859417e in js::gc::HeaderWord::getAtomic() const /src/gecko-dev/js/src/gc/Cell.h:101:12
+    #1 0x64b86859417e in js::gc::HeaderWord::flags() const /src/gecko-dev/js/src/gc/Cell.h:117:36
+    #2 0x64b86859417e in js::gc::Cell::flags() const /src/gecko-dev/js/src/gc/Cell.h:156:44
+    #3 0x64b86859417e in js::gc::CellWithTenuredGCPointer<js::gc::Cell, js::Shape>::headerPtr() const /src/gecko-dev/js/src/gc/Cell.h:801:5
+    #4 0x64b86859417e in JSObject::shape() const /src/gecko-dev/js/src/vm/JSObject.h:94:37
+    #5 0x64b86859417e in JSObject::getClass() const /src/gecko-dev/js/src/vm/JSObject.h:115:44
+    #6 0x64b86859417e in bool JSObject::is<WasmValueBox>() const /src/gecko-dev/js/src/vm/JSObject.h:512:12
+    #7 0x64b86859417e in js::wasm::AnyRef::toJSValue() const /src/gecko-dev/js/src/wasm/WasmAnyRef.cpp:121:13
+    #8 0x64b868acc495 in bool ToJSValue_externref<js::wasm::NoDebug>(JSContext*, void*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/wasm/WasmValue.cpp:794:41
+    #9 0x64b868acbaff in bool js::wasm::ToJSValue<js::wasm::NoDebug>(JSContext*, void const*, js::wasm::PackedType<js::wasm::StorageTypeTraits>, JS::MutableHandle<JS::Value>, js::wasm::CoercionLevel) /src/gecko-dev/js/src/wasm/WasmValue.cpp:860:18
+    #10 0x64b86880f545 in js::wasm::Instance::callImport(JSContext*, unsigned int, unsigned int, unsigned long*) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:312:12
+    #11 0x64b8688113d7 in js::wasm::Instance::callImport_general(js::wasm::Instance*, int, int, unsigned long*) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:414:20
+    #12 0x7596c3749123  (<unknown module>)
+
+==12==Register values:
+rax = 0x0000000000000000  rbx = 0x0000000000000004  rcx = 0x0000000000000004  rdx = 0x000064b863c66ee8  
+rdi = 0x00007597446053a0  rsi = 0x000064b866acb75a  rbp = 0x00007ffff2937750  rsp = 0x00007ffff29376c0  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007ffff2937b01  r11 = 0x00000ffffe526f79  
+r12 = 0x00000ffffe526ed8  r13 = 0x00000eb2e88c0a74  r14 = 0x00007ffff29376e0  r15 = 0x0000000000000001  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Cell.h:101:12 in js::gc::HeaderWord::getAtomic() const
+==12==ABORTING

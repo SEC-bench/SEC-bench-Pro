@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:386565139",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing --allow-natives-syntax",
+  "target_source_files": [
+    "src/runtime/runtime-typedarray.cc",
+    "src/objects/elements.cc"
+  ],
+  "target_subdir": [
+    "src/runtime",
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Integer overflow",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "An integer overflow vulnerability in V8's TypedArray bounds checking allows bypassing the V8 sandbox. In CopyElementsHandleImpl (src/objects/elements.cc), the bounds check `CHECK_LE(offset + length, destination_ta->GetLengthOrOutOfBounds(...))` does not guard against integer overflow of the `size_t` addition `offset + length`. When called via Runtime_TypedArraySet (src/runtime/runtime-typedarray.cc) with attacker-controlled `length` and `offset` values that are individually valid but together overflow a size_t, the wrapped-around sum bypasses the CHECK_LE guard. This allows the subsequent data pointer arithmetic (`destination->DataPtr() + offset * element_size`) to reference memory outside the V8 sandbox address space, resulting in an out-of-sandbox write. The vulnerability is triggered through TypedArray.prototype.set() (or directly via %TypedArraySet with patched argument count) by supplying a large offset and length whose sum overflows.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "report-comment-fix",
+      "evidence_lineno": 0,
+      "evidence_text": "ec48078aaeaef623314ed1dddc3a4b3967e8eb82 [sandbox] limit TryNumberToSize to kMaxSafeBufferSizeForSandbox",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6285402",
+      "cl": 6285402,
+      "source_commit": "ec48078aaeaef623314ed1dddc3a4b3967e8eb82",
+      "commit": "ec48078aaeaef623314ed1dddc3a4b3967e8eb82",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6285402 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6285402",
+      "source_cl": 6285402,
+      "source_ref": "refs/changes/02/6285402/6",
+      "source_patchset": 6
+    }
+  ]
+}

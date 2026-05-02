@@ -1,0 +1,69 @@
+From 2120c788217455ea67c1b6f31f084b51e6d17fdf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Tue, 22 Oct 2024 15:11:44 +0000
+Subject: [PATCH] Bug 1926235: Add missing argument length checks. r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D226481
+---
+ .../jit-test/tests/cacheir/date-args-length.js  | 11 +++++++++++
+ js/src/jit/CacheIR.cpp                          | 17 ++++++++++++++---
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+ create mode 100644 js/src/jit-test/tests/cacheir/date-args-length.js
+
+diff --git a/js/src/jit-test/tests/cacheir/date-args-length.js b/js/src/jit-test/tests/cacheir/date-args-length.js
+new file mode 100644
+index 0000000000000..2b2dfdced5583
+--- /dev/null
++++ b/js/src/jit-test/tests/cacheir/date-args-length.js
+@@ -0,0 +1,11 @@
++var args = new Array(1000).fill(0).join(",");
++
++eval(`new Date().getTime(${args})`);
++eval(`new Date().valueOf(${args})`);
++eval(`new Date().getFullYear(${args})`);
++eval(`new Date().getMonth(${args})`);
++eval(`new Date().getDate(${args})`);
++eval(`new Date().getDay(${args})`);
++eval(`new Date().getHours(${args})`);
++eval(`new Date().getMinutes(${args})`);
++eval(`new Date().getSeconds(${args})`);
+diff --git a/js/src/jit/CacheIR.cpp b/js/src/jit/CacheIR.cpp
+index 56da8b16d54fa..df1a1f6955225 100644
+--- a/js/src/jit/CacheIR.cpp
++++ b/js/src/jit/CacheIR.cpp
+@@ -10428,14 +10428,20 @@ AttachDecision InlinableNativeIRGenerator::tryAttachMapGet() {
+ 
+ AttachDecision InlinableNativeIRGenerator::tryAttachDateGetTime(
+     InlinableNative native) {
+-  MOZ_ASSERT_IF(native == InlinableNative::IntrinsicThisTimeValue,
+-                argc_ == 1 && args_[0].isInt32());
+-
+   // Ensure |this| is a DateObject.
+   if (!thisval_.isObject() || !thisval_.toObject().is<DateObject>()) {
+     return AttachDecision::NoAction;
+   }
+ 
++  if (native == InlinableNative::DateGetTime) {
++    // Expecting no arguments.
++    if (argc_ != 0) {
++      return AttachDecision::NoAction;
++    }
++  } else {
++    MOZ_ASSERT(argc_ == 1 && args_[0].isInt32());
++  }
++
+   // Initialize the input operand.
+   initializeInputOperand();
+ 
+@@ -10470,6 +10476,11 @@ AttachDecision InlinableNativeIRGenerator::tryAttachDateGet(
+     return AttachDecision::NoAction;
+   }
+ 
++  // Expecting no arguments.
++  if (argc_ != 0) {
++    return AttachDecision::NoAction;
++  }
++
+   // Can't check DateTime cache when time zone is forced to UTC.
+   if (cx_->realm()->creationOptions().forceUTC()) {
+     return AttachDecision::NoAction;

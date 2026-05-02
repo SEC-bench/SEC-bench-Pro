@@ -1,0 +1,4 @@
+Verified with ../../v8/crash_check.sh 384186547.
+
+Checked against the original collector report and PoC under `../../collector/output/general/Blink/Bindings/384186547`.
+`output.txt` retains the stronger report-aligned sandbox-violation capture; current reruns are flaky and often stop earlier in an unrelated `munmap` fatal.

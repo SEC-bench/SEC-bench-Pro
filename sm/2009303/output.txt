@@ -1,0 +1,57 @@
+[13] Assertion failure: p, at /src/gecko-dev/js/src/debugger/DebugScript.cpp:116
+#01: ???[/out/js +0x34ea5aa]
+#02: ???[/out/js +0x34eb853]
+#03: ???[/out/js +0x3533774]
+#04: ???[/out/js +0x359c9ac]
+#05: ???[/out/js +0x4f3c5e3]
+#06: ???[/out/js +0x4f01826]
+#07: ???[/out/js +0x4f1cebe]
+#08: ???[/out/js +0x4f00254]
+#09: ???[/out/js +0x4f05f3d]
+#10: ???[/out/js +0x4f06777]
+#11: ???[/out/js +0x5429fe5]
+#12: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x542a333]
+#13: ???[/out/js +0x2f438f0]
+#14: ???[/out/js +0x2f425cd]
+#15: ???[/out/js +0x2ecfdd0]
+#16: ???[/out/js +0x2ebf836]
+#17: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#18: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#19: _start[/out/js +0x2dc3585]
+#20: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x591fc117d5d6 bp 0x7ffeb5e7f410 sp 0x7ffeb5e7f3c0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x591fc117d5d6 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x591fc117d5d6 in js::DebugScript::getUnbarriered(JSScript*) /src/gecko-dev/js/src/debugger/DebugScript.cpp:116:3
+    #2 0x591fc117e852 in js::DebugScript::destroyBreakpointSite(JS::GCContext*, JSScript*, unsigned char*) /src/gecko-dev/js/src/debugger/DebugScript.cpp:229:24
+    #3 0x591fc11c6773 in js::Debugger::CallData::clearAllBreakpoints() /src/gecko-dev/js/src/debugger/Debugger.cpp:4889:9
+    #4 0x591fc122f9ab in bool js::Debugger::CallData::ToNative<&js::Debugger::CallData::clearAllBreakpoints()>(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/debugger/Debugger.cpp:4318:10
+    #5 0x591fc2bcf5e2 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #6 0x591fc2b94825 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #7 0x591fc2bafebd in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #8 0x591fc2bafebd in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #9 0x591fc2b93253 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #10 0x591fc2b98f3c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #11 0x591fc2b99776 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #12 0x591fc30bcfe4 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #13 0x591fc30bd332 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #14 0x591fc0bd68ef in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1388:10
+    #15 0x591fc0bd55cc in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #16 0x591fc0b62dcf in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12215:10
+    #17 0x591fc0b62dcf in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12468:12
+    #18 0x591fc0b52835 in main /src/gecko-dev/js/src/shell/js.cpp:12874:12
+    #19 0x73a83b71f1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x73a83b71f28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x591fc0a56584 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2dc3584) (BuildId: edf68bb315b320ac9d2c521b0a73bd17)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x000070783abe2870  rcx = 0x0000000000000074  rdx = 0x0000000000000000  
+rdi = 0x0000591fc4c40110  rsi = 0x00007ffeb5e7f378  rbp = 0x00007ffeb5e7f410  rsp = 0x00007ffeb5e7f3c0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000e0f0757c50e  r13 = 0x00007ffeb5e7f4e0  r14 = 0x000070783abe2810  r15 = 0x0000000000000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

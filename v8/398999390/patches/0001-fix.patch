@@ -1,0 +1,604 @@
+From 8db16e651ff456e0eea6e576045623d2039a1d34 Mon Sep 17 00:00:00 2001
+From: pthier <pthier@chromium.org>
+Date: Wed, 26 Feb 2025 14:11:04 +0100
+Subject: [PATCH] Revert "[string] Remove
+ String::IsOneByteRepresentationUnderneath"
+
+This reverts commit e3f33e99674eab3881d2d65b82dfe436829bb831.
+
+Reason for revert: https://crbug.com/398999390
+
+This only reverts the fist part of the CL (Removing IsOneByteRepresentation).
+Using static roots to determine one-byte representation from the map word alone is kept.
+
+Original change's description:
+> [string] Remove String::IsOneByteRepresentationUnderneath
+>
+> All string maps are split into one- and two-byte versions, and enforce
+> that their underlying string must have the same byte width (e.g. we
+> can't change byteness when externalizing). This means that the old
+> IsOneByteRepresentationUnderneath loop is no longer needed, as we
+> already know the byteness from the top.
+>
+> Remove this function, replacing with calls to IsOneByteRepresentation.
+> Additionally, we have some static roots hacks to determine one-byte
+> representation from the map word alone (without needing to dereference
+> the instance type), so use that too where possible.
+>
+> Change-Id: I662daa3cb217d04cbfd717da53ae1238a0bcddd0
+> Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6011010
+> Commit-Queue: Leszek Swirski <leszeks@chromium.org>
+> Reviewed-by: Patrick Thier <pthier@chromium.org>
+> Cr-Commit-Position: refs/heads/main@{#97099}
+
+DISABLE_SPELLCHECKER
+
+Fixed: 398999390
+Change-Id: Iee7e88257cb0d23669bcd7571d57b613a413bc29
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6304799
+Commit-Queue: Patrick Thier <pthier@chromium.org>
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98942}
+---
+ src/builtins/builtins-json.cc                 |  2 +-
+ src/builtins/builtins-string.cc               |  2 +-
+ src/builtins/string-iswellformed.tq           |  2 +-
+ src/builtins/string-towellformed.tq           |  2 +-
+ src/json/json-stringifier.cc                  | 38 +++++++++++--------
+ src/numbers/conversions.cc                    |  4 +-
+ src/objects/instance-type-inl.h               |  1 +
+ src/objects/js-raw-json.cc                    |  2 +-
+ src/objects/js-regexp.cc                      |  2 +-
+ src/objects/map-inl.h                         | 11 ++++++
+ src/objects/map.h                             | 14 -------
+ src/objects/string-inl.h                      | 20 +++++++++-
+ src/objects/string.h                          | 11 +++++-
+ src/objects/string.tq                         | 27 +++++++++++++
+ src/objects/templates-inl.h                   |  1 +
+ .../experimental/experimental-interpreter.cc  | 10 ++++-
+ src/regexp/regexp-interpreter.cc              |  7 ++--
+ src/regexp/regexp-macro-assembler.cc          |  7 ++--
+ src/regexp/regexp.cc                          |  8 ++--
+ src/runtime/runtime-strings.cc                |  2 +-
+ src/strings/string-builder.cc                 |  2 +-
+ src/strings/uri.cc                            |  4 +-
+ 22 files changed, 123 insertions(+), 56 deletions(-)
+
+diff --git a/src/builtins/builtins-json.cc b/src/builtins/builtins-json.cc
+index 6773cc1a462..3cee2e7b6cf 100644
+--- a/src/builtins/builtins-json.cc
++++ b/src/builtins/builtins-json.cc
+@@ -23,7 +23,7 @@ BUILTIN(JsonParse) {
+                                      Object::ToString(isolate, source));
+   string = String::Flatten(isolate, string);
+   RETURN_RESULT_OR_FAILURE(
+-      isolate, string->IsOneByteRepresentation()
++      isolate, String::IsOneByteRepresentationUnderneath(*string)
+                    ? JsonParser<uint8_t>::Parse(isolate, string, reviver)
+                    : JsonParser<uint16_t>::Parse(isolate, string, reviver));
+ }
+diff --git a/src/builtins/builtins-string.cc b/src/builtins/builtins-string.cc
+index 0eb19b36354..6c6fa833f24 100644
+--- a/src/builtins/builtins-string.cc
++++ b/src/builtins/builtins-string.cc
+@@ -344,7 +344,7 @@ V8_WARN_UNUSED_RESULT static Tagged<Object> ConvertCase(
+   // character is also ASCII.  This is currently the case, but it
+   // might break in the future if we implement more context and locale
+   // dependent upper/lower conversions.
+-  if (s->IsOneByteRepresentation()) {
++  if (String::IsOneByteRepresentationUnderneath(*s)) {
+     // Same length as input.
+     DirectHandle<SeqOneByteString> result =
+         isolate->factory()->NewRawOneByteString(length).ToHandleChecked();
+diff --git a/src/builtins/string-iswellformed.tq b/src/builtins/string-iswellformed.tq
+index 2041efb2aba..d0ff40637aa 100644
+--- a/src/builtins/string-iswellformed.tq
++++ b/src/builtins/string-iswellformed.tq
+@@ -35,7 +35,7 @@ transitioning javascript builtin StringPrototypeIsWellFormed(
+   // InstanceType. See
+   // https://docs.google.com/document/d/15f-1c_Ysw3lvjy_Gx0SmmD9qeO8UuXuAbWIpWCnTDO8/
+   const flat = Flatten(s);
+-  if (flat.IsOneByteRepresentation()) return True;
++  if (flat.IsOneByteRepresentationUnderneath()) return True;
+   try {
+     const illFormed = HasUnpairedSurrogate(flat) otherwise Indirect;
+     return illFormed ? False : True;
+diff --git a/src/builtins/string-towellformed.tq b/src/builtins/string-towellformed.tq
+index e00abc4d7f7..e47876e913e 100644
+--- a/src/builtins/string-towellformed.tq
++++ b/src/builtins/string-towellformed.tq
+@@ -33,7 +33,7 @@ transitioning javascript builtin StringPrototypeToWellFormed(
+   // 4. Let k be 0.
+   // 5. Let result be the empty String.
+   const flat = Flatten(s);
+-  if (flat.IsOneByteRepresentation()) return flat;
++  if (flat.IsOneByteRepresentationUnderneath()) return flat;
+   let result = flat;
+ 
+   // 6. Repeat, while k < strLen,
+diff --git a/src/json/json-stringifier.cc b/src/json/json-stringifier.cc
+index b1c0bfc58ee..099981ee968 100644
+--- a/src/json/json-stringifier.cc
++++ b/src/json/json-stringifier.cc
+@@ -155,25 +155,29 @@ class JsonStringifier {
+                           const DisallowGarbageCollection& no_gc) {
+     DCHECK_EQ(length, string->length());
+     DCHECK(encoding_ == String::TWO_BYTE_ENCODING ||
+-           (string->IsFlat() && string->IsOneByteRepresentation()));
++           (string->IsFlat() &&
++            String::IsOneByteRepresentationUnderneath(string)));
+     DCHECK(CurrentPartCanFit(length + 1));
+-    String::FlatContent flat = string->GetFlatContent(no_gc);
+     if (encoding_ == String::ONE_BYTE_ENCODING) {
+-      if (flat.IsOneByte()) {
+-        CopyChars<uint8_t, uint8_t>(one_byte_ptr_ + current_index_,
+-                                    flat.ToOneByteVector().begin(), length);
++      if (String::IsOneByteRepresentationUnderneath(string)) {
++        CopyChars<uint8_t, uint8_t>(
++            one_byte_ptr_ + current_index_,
++            string->GetCharVector<uint8_t>(no_gc).begin(), length);
+       } else {
+         ChangeEncoding();
+-        CopyChars<uint16_t, uint16_t>(two_byte_ptr_ + current_index_,
+-                                      flat.ToUC16Vector().begin(), length);
++        CopyChars<uint16_t, uint16_t>(
++            two_byte_ptr_ + current_index_,
++            string->GetCharVector<uint16_t>(no_gc).begin(), length);
+       }
+     } else {
+-      if (flat.IsOneByte()) {
+-        CopyChars<uint8_t, uint16_t>(two_byte_ptr_ + current_index_,
+-                                     flat.ToOneByteVector().begin(), length);
++      if (String::IsOneByteRepresentationUnderneath(string)) {
++        CopyChars<uint8_t, uint16_t>(
++            two_byte_ptr_ + current_index_,
++            string->GetCharVector<uint8_t>(no_gc).begin(), length);
+       } else {
+-        CopyChars<uint16_t, uint16_t>(two_byte_ptr_ + current_index_,
+-                                      flat.ToUC16Vector().begin(), length);
++        CopyChars<uint16_t, uint16_t>(
++            two_byte_ptr_ + current_index_,
++            string->GetCharVector<uint16_t>(no_gc).begin(), length);
+       }
+     }
+     current_index_ += length;
+@@ -186,7 +190,8 @@ class JsonStringifier {
+       Tagged<String> string = *string_handle;
+       const bool representation_ok =
+           encoding_ == String::TWO_BYTE_ENCODING ||
+-          (string->IsFlat() && string->IsOneByteRepresentation());
++          (string->IsFlat() &&
++           String::IsOneByteRepresentationUnderneath(string));
+       if (representation_ok) {
+         size_t length = string->length();
+         while (!CurrentPartCanFit(length + 1)) {
+@@ -1529,7 +1534,8 @@ bool JsonStringifier::SerializeString_(Tagged<String> string,
+         vector, &no_extend);
+   } else {
+     DCHECK(encoding_ == String::TWO_BYTE_ENCODING ||
+-           (string->IsFlat() && string->IsOneByteRepresentation()));
++           (string->IsFlat() &&
++            String::IsOneByteRepresentationUnderneath(string)));
+     size_t uncopied_src_index = 0;  // Index of first char not copied yet.
+     for (size_t i = 0; i < vector.size(); i++) {
+       SrcChar c = vector.at(i);
+@@ -1690,14 +1696,14 @@ bool JsonStringifier::SerializeString(Handle<String> object) {
+   DisallowGarbageCollection no_gc;
+   auto string = *object;
+   if (encoding_ == String::ONE_BYTE_ENCODING) {
+-    if (string->IsOneByteRepresentation()) {
++    if (String::IsOneByteRepresentationUnderneath(string)) {
+       return SerializeString_<uint8_t, uint8_t, raw_json>(string, no_gc);
+     } else {
+       ChangeEncoding();
+     }
+   }
+   DCHECK_EQ(encoding_, String::TWO_BYTE_ENCODING);
+-  if (string->IsOneByteRepresentation()) {
++  if (String::IsOneByteRepresentationUnderneath(string)) {
+     return SerializeString_<uint8_t, base::uc16, raw_json>(string, no_gc);
+   } else {
+     return SerializeString_<base::uc16, base::uc16, raw_json>(string, no_gc);
+diff --git a/src/numbers/conversions.cc b/src/numbers/conversions.cc
+index 0e9646aadd1..3a9a1efbea9 100644
+--- a/src/numbers/conversions.cc
++++ b/src/numbers/conversions.cc
+@@ -343,7 +343,7 @@ class StringToIntHelper {
+   bool IsOneByte() const {
+     if (raw_two_byte_subject_ != nullptr) return false;
+     return raw_one_byte_subject_ != nullptr ||
+-           subject_->IsOneByteRepresentation();
++           String::IsOneByteRepresentationUnderneath(*subject_);
+   }
+ 
+   base::Vector<const uint8_t> GetOneByteVector(
+@@ -1365,7 +1365,7 @@ std::optional<double> TryStringToInt(LocalIsolate* isolate,
+     return std::nullopt;
+   }
+ 
+-  if (object->IsOneByteRepresentation()) {
++  if (String::IsOneByteRepresentationUnderneath(*object)) {
+     uint8_t buffer[kMaxLengthForConversion];
+     SharedStringAccessGuardIfNeeded access_guard(isolate);
+     String::WriteToFlat(*object, buffer, 0, length, access_guard);
+diff --git a/src/objects/instance-type-inl.h b/src/objects/instance-type-inl.h
+index 50e60eb84c4..7eb127be12d 100644
+--- a/src/objects/instance-type-inl.h
++++ b/src/objects/instance-type-inl.h
+@@ -13,6 +13,7 @@
+ #include "src/base/bounds.h"
+ #include "src/execution/isolate-utils-inl.h"
+ #include "src/objects/instance-type-checker.h"
++#include "src/objects/map-inl.h"
+ 
+ // Has to be the last include (doesn't have include guards):
+ #include "src/objects/object-macros.h"
+diff --git a/src/objects/js-raw-json.cc b/src/objects/js-raw-json.cc
+index 810dbc72f64..f7623f76dc3 100644
+--- a/src/objects/js-raw-json.cc
++++ b/src/objects/js-raw-json.cc
+@@ -20,7 +20,7 @@ MaybeDirectHandle<JSRawJson> JSRawJson::Create(Isolate* isolate,
+   ASSIGN_RETURN_ON_EXCEPTION(isolate, json_string,
+                              Object::ToString(isolate, text));
+   Handle<String> flat = String::Flatten(isolate, json_string);
+-  if (flat->IsOneByteRepresentation()) {
++  if (String::IsOneByteRepresentationUnderneath(*flat)) {
+     if (!JsonParser<uint8_t>::CheckRawJson(isolate, flat)) {
+       DCHECK(isolate->has_exception());
+       return MaybeDirectHandle<JSRawJson>();
+diff --git a/src/objects/js-regexp.cc b/src/objects/js-regexp.cc
+index ed468214796..624d2adec0a 100644
+--- a/src/objects/js-regexp.cc
++++ b/src/objects/js-regexp.cc
+@@ -302,7 +302,7 @@ MaybeDirectHandle<String> EscapeRegExpSource(Isolate* isolate,
+                                              DirectHandle<String> source) {
+   DCHECK(source->IsFlat());
+   if (source->length() == 0) return isolate->factory()->query_colon_string();
+-  bool one_byte = source->IsOneByteRepresentation();
++  bool one_byte = String::IsOneByteRepresentationUnderneath(*source);
+   bool needs_escapes = false;
+   int additional_escape_chars =
+       one_byte ? CountAdditionalEscapeChars<uint8_t>(source, &needs_escapes)
+diff --git a/src/objects/map-inl.h b/src/objects/map-inl.h
+index 1a0f6f60de0..3689a1d6a46 100644
+--- a/src/objects/map-inl.h
++++ b/src/objects/map-inl.h
+@@ -363,6 +363,17 @@ DirectHandle<Map> Map::AddMissingTransitionsForTesting(
+   return AddMissingTransitions(isolate, split_map, descriptors);
+ }
+ 
++InstanceType Map::instance_type() const {
++  // TODO(solanes, v8:7790, v8:11353, v8:11945): Make this and the setter
++  // non-atomic when TSAN sees the map's store synchronization.
++  return static_cast<InstanceType>(
++      RELAXED_READ_UINT16_FIELD(*this, kInstanceTypeOffset));
++}
++
++void Map::set_instance_type(InstanceType value) {
++  RELAXED_WRITE_UINT16_FIELD(*this, kInstanceTypeOffset, value);
++}
++
+ int Map::UnusedPropertyFields() const {
+ #if V8_ENABLE_WEBASSEMBLY
+   DCHECK(!IsWasmObjectMap(*this));
+diff --git a/src/objects/map.h b/src/objects/map.h
+index a36cf903020..bd88404e227 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -1109,20 +1109,6 @@ inline bool IsPrimitiveMap(Tagged<Map> map);
+ inline bool IsSpecialReceiverMap(Tagged<Map> map);
+ inline bool IsCustomElementsReceiverMap(Tagged<Map> map);
+ 
+-// Define the instance type accessors in the `.h` instead of `-inl.h` to avoid
+-// a circular dependency with the instance-type-inl.h header.
+-
+-InstanceType Map::instance_type() const {
+-  // TODO(solanes, v8:7790, v8:11353, v8:11945): Make this and the setter
+-  // non-atomic when TSAN sees the map's store synchronization.
+-  return static_cast<InstanceType>(
+-      RELAXED_READ_UINT16_FIELD(*this, kInstanceTypeOffset));
+-}
+-
+-void Map::set_instance_type(InstanceType value) {
+-  RELAXED_WRITE_UINT16_FIELD(*this, kInstanceTypeOffset, value);
+-}
+-
+ }  // namespace v8::internal
+ 
+ #include "src/objects/object-macros-undef.h"
+diff --git a/src/objects/string-inl.h b/src/objects/string-inl.h
+index e484c1a38ad..7ef6664781a 100644
+--- a/src/objects/string-inl.h
++++ b/src/objects/string-inl.h
+@@ -368,6 +368,24 @@ bool String::IsTwoByteRepresentation() const {
+   return InstanceTypeChecker::IsTwoByteString(map());
+ }
+ 
++// static
++bool String::IsOneByteRepresentationUnderneath(Tagged<String> string) {
++  while (true) {
++    uint32_t type = string->map()->instance_type();
++    static_assert(kIsIndirectStringTag != 0);
++    static_assert((kIsIndirectStringMask & kStringEncodingMask) == 0);
++    DCHECK(string->IsFlat());
++    switch (type & (kIsIndirectStringMask | kStringEncodingMask)) {
++      case kOneByteStringTag:
++        return true;
++      case kTwoByteStringTag:
++        return false;
++      default:  // Cons, sliced, thin, strings need to go deeper.
++        string = string->GetUnderlying();
++    }
++  }
++}
++
+ base::uc32 FlatStringReader::Get(uint32_t index) const {
+   if (is_one_byte_) {
+     return Get<uint8_t>(index);
+@@ -1102,7 +1120,7 @@ bool String::IsWellFormedUnicode(Isolate* isolate,
+   // InstanceType. See
+   // https://docs.google.com/document/d/15f-1c_Ysw3lvjy_Gx0SmmD9qeO8UuXuAbWIpWCnTDO8/
+   string = Flatten(isolate, string);
+-  if (string->IsOneByteRepresentation()) return true;
++  if (String::IsOneByteRepresentationUnderneath(*string)) return true;
+   DisallowGarbageCollection no_gc;
+   String::FlatContent flat = string->GetFlatContent(no_gc);
+   DCHECK(flat.IsFlat());
+diff --git a/src/objects/string.h b/src/objects/string.h
+index 31fc11420ec..3a4d45102ba 100644
+--- a/src/objects/string.h
++++ b/src/objects/string.h
+@@ -234,10 +234,19 @@ V8_OBJECT class String : public Name {
+   inline void set_length(uint32_t hash);
+   inline void set_length(uint32_t hash, ReleaseStoreTag);
+ 
+-  // Returns whether this string is stored with one-byte chars.
++  // Returns whether this string has only one-byte chars, i.e. all of them can
++  // be one-byte encoded.  This might be the case even if the string is
++  // two-byte.  Such strings may appear when the embedder prefers
++  // two-byte external representations even for one-byte data.
+   inline bool IsOneByteRepresentation() const;
+   inline bool IsTwoByteRepresentation() const;
+ 
++  // Cons and slices have an encoding flag that may not represent the actual
++  // encoding of the underlying string.  This is taken into account here.
++  // This function is static because that helps it get inlined.
++  // Requires: string.IsFlat()
++  static inline bool IsOneByteRepresentationUnderneath(Tagged<String> string);
++
+   // Get and set individual two byte chars in the string.
+   inline void Set(uint32_t index, uint16_t value);
+   // Get individual two byte char in the string.  Repeated calls
+diff --git a/src/objects/string.tq b/src/objects/string.tq
+index 7b4dcabc695..0165da42e98 100644
+--- a/src/objects/string.tq
++++ b/src/objects/string.tq
+@@ -21,6 +21,33 @@ extern class String extends Name {
+     return IsOneByteStringMap(this.map);
+   }
+ 
++  // Keep this in sync with the C++ String::IsOneByteRepresentationUnderneath.
++  macro IsOneByteRepresentationUnderneath(): bool {
++    let string = this;
++    while (true) {
++      typeswitch (string) {
++        case (cons: ConsString): {
++          dcheck(cons.IsFlat());
++          string = cons.first;
++        }
++        case (thin: ThinString): {
++          // Internalized strings can't change representation.
++          dcheck(
++              thin.IsOneByteRepresentation() ==
++              thin.actual.IsOneByteRepresentation());
++          return thin.IsOneByteRepresentation();
++        }
++        case (slice: SlicedString): {
++          string = slice.parent;
++        }
++        case (str: String): {
++          return str.IsOneByteRepresentation();
++        }
++      }
++    }
++    VerifiedUnreachable();
++  }
++
+   const length: int32;
+ }
+ 
+diff --git a/src/objects/templates-inl.h b/src/objects/templates-inl.h
+index dfbe43ea633..b111c75e051 100644
+--- a/src/objects/templates-inl.h
++++ b/src/objects/templates-inl.h
+@@ -6,6 +6,7 @@
+ #define V8_OBJECTS_TEMPLATES_INL_H_
+ 
+ #include "src/heap/heap-write-barrier-inl.h"
++#include "src/objects/dictionary.h"
+ #include "src/objects/objects-inl.h"
+ #include "src/objects/oddball.h"
+ #include "src/objects/shared-function-info.h"
+diff --git a/src/regexp/experimental/experimental-interpreter.cc b/src/regexp/experimental/experimental-interpreter.cc
+index fa6a7efa357..375f94aa415 100644
+--- a/src/regexp/experimental/experimental-interpreter.cc
++++ b/src/regexp/experimental/experimental-interpreter.cc
+@@ -760,7 +760,12 @@ class NfaInterpreter {
+         isolate_->StackOverflow();
+         return RegExp::kInternalRegExpException;
+       } else if (check.InterruptRequested()) {
+-        const bool was_one_byte = input_object_->IsOneByteRepresentation();
++        // TODO(mbid): Is this really equivalent to whether the string is
++        // one-byte or two-byte? A comment at the declaration of
++        // IsOneByteRepresentationUnderneath says that this might fail for
++        // external strings.
++        const bool was_one_byte =
++            String::IsOneByteRepresentationUnderneath(input_object_);
+ 
+         Tagged<Object> result;
+         {
+@@ -774,7 +779,8 @@ class NfaInterpreter {
+         // If we changed between a LATIN1 and a UC16 string, we need to restart
+         // regexp matching with the appropriate template instantiation of
+         // RawMatch.
+-        if (input_handle->IsOneByteRepresentation() != was_one_byte) {
++        if (String::IsOneByteRepresentationUnderneath(*input_handle) !=
++            was_one_byte) {
+           return RegExp::kInternalRegExpRetry;
+         }
+ 
+diff --git a/src/regexp/regexp-interpreter.cc b/src/regexp/regexp-interpreter.cc
+index e1c1363737b..655f0cf0b0c 100644
+--- a/src/regexp/regexp-interpreter.cc
++++ b/src/regexp/regexp-interpreter.cc
+@@ -294,7 +294,7 @@ IrregexpInterpreter::Result HandleInterrupts(
+       return ThrowStackOverflow(isolate, call_origin);
+     } else if (check.InterruptRequested()) {
+       const bool was_one_byte =
+-          (*subject_string_out)->IsOneByteRepresentation();
++          String::IsOneByteRepresentationUnderneath(*subject_string_out);
+       Tagged<Object> result;
+       {
+         AllowGarbageCollection yes_gc;
+@@ -307,7 +307,8 @@ IrregexpInterpreter::Result HandleInterrupts(
+       // If we changed between a LATIN1 and a UC16 string, we need to
+       // restart regexp matching with the appropriate template instantiation of
+       // RawMatch.
+-      if (subject_handle->IsOneByteRepresentation() != was_one_byte) {
++      if (String::IsOneByteRepresentationUnderneath(*subject_handle) !=
++          was_one_byte) {
+         return IrregexpInterpreter::RETRY;
+       }
+ 
+@@ -1074,7 +1075,7 @@ int IrregexpInterpreter::Match(Isolate* isolate,
+ 
+   bool is_any_unicode =
+       IsEitherUnicode(JSRegExp::AsRegExpFlags(regexp_data->flags()));
+-  bool is_one_byte = subject_string->IsOneByteRepresentation();
++  bool is_one_byte = String::IsOneByteRepresentationUnderneath(subject_string);
+   Tagged<TrustedByteArray> code_array = regexp_data->bytecode(is_one_byte);
+   int total_register_count = regexp_data->max_register_count();
+ 
+diff --git a/src/regexp/regexp-macro-assembler.cc b/src/regexp/regexp-macro-assembler.cc
+index 76797e36c7a..b2fad77628d 100644
+--- a/src/regexp/regexp-macro-assembler.cc
++++ b/src/regexp/regexp-macro-assembler.cc
+@@ -319,7 +319,7 @@ int NativeRegExpMacroAssembler::CheckStackGuardState(
+   DirectHandle<InstructionStream> code_handle(re_code, isolate);
+   DirectHandle<String> subject_handle(Cast<String>(Tagged<Object>(*subject)),
+                                       isolate);
+-  bool is_one_byte = subject_handle->IsOneByteRepresentation();
++  bool is_one_byte = String::IsOneByteRepresentationUnderneath(*subject_handle);
+   int return_value = 0;
+ 
+   {
+@@ -349,7 +349,8 @@ int NativeRegExpMacroAssembler::CheckStackGuardState(
+   // If we continue, we need to update the subject string addresses.
+   if (return_value == 0) {
+     // String encoding might have changed.
+-    if (subject_handle->IsOneByteRepresentation() != is_one_byte) {
++    if (String::IsOneByteRepresentationUnderneath(*subject_handle) !=
++        is_one_byte) {
+       // If we changed between an LATIN1 and an UC16 string, the specialized
+       // code cannot be used, and we need to restart regexp matching from
+       // scratch (including, potentially, compiling a new version of the code).
+@@ -430,7 +431,7 @@ int NativeRegExpMacroAssembler::Execute(
+     int start_offset, const uint8_t* input_start, const uint8_t* input_end,
+     int* output, int output_size, Isolate* isolate,
+     Tagged<IrRegExpData> regexp_data) {
+-  bool is_one_byte = input->IsOneByteRepresentation();
++  bool is_one_byte = String::IsOneByteRepresentationUnderneath(input);
+   Tagged<Code> code = regexp_data->code(isolate, is_one_byte);
+   RegExp::CallOrigin call_origin = RegExp::CallOrigin::kFromRuntime;
+ 
+diff --git a/src/regexp/regexp.cc b/src/regexp/regexp.cc
+index 9204f8739db..1cac70798d8 100644
+--- a/src/regexp/regexp.cc
++++ b/src/regexp/regexp.cc
+@@ -700,7 +700,7 @@ int RegExpImpl::IrregexpPrepare(Isolate* isolate,
+   DCHECK(subject->IsFlat());
+ 
+   // Check representation of the underlying storage.
+-  bool is_one_byte = subject->IsOneByteRepresentation();
++  bool is_one_byte = String::IsOneByteRepresentationUnderneath(*subject);
+   if (!RegExpImpl::EnsureCompiledIrregexp(isolate, re_data, subject,
+                                           is_one_byte)) {
+     return -1;
+@@ -721,7 +721,7 @@ int RegExpImpl::IrregexpExecRaw(Isolate* isolate,
+   DCHECK_GE(output_size,
+             JSRegExp::RegistersForCaptureCount(regexp_data->capture_count()));
+ 
+-  bool is_one_byte = subject->IsOneByteRepresentation();
++  bool is_one_byte = String::IsOneByteRepresentationUnderneath(*subject);
+ 
+   if (!regexp_data->ShouldProduceBytecode()) {
+     do {
+@@ -749,7 +749,7 @@ int RegExpImpl::IrregexpExecRaw(Isolate* isolate,
+       // the, potentially, different subject (the string can switch between
+       // being internal and external, and even between being Latin1 and
+       // UC16, but the characters are always the same).
+-      is_one_byte = subject->IsOneByteRepresentation();
++      is_one_byte = String::IsOneByteRepresentationUnderneath(*subject);
+     } while (true);
+     UNREACHABLE();
+   } else {
+@@ -774,7 +774,7 @@ int RegExpImpl::IrregexpExecRaw(Isolate* isolate,
+         // The string has changed representation, and we must restart the
+         // match. We need to reset the tier up to start over with compilation.
+         if (v8_flags.regexp_tier_up) regexp_data->ResetLastTierUpTick();
+-        is_one_byte = subject->IsOneByteRepresentation();
++        is_one_byte = String::IsOneByteRepresentationUnderneath(*subject);
+         EnsureCompiledIrregexp(isolate, regexp_data, subject, is_one_byte);
+       } else {
+         DCHECK(result == IrregexpInterpreter::EXCEPTION ||
+diff --git a/src/runtime/runtime-strings.cc b/src/runtime/runtime-strings.cc
+index a41269cc90a..af5e10c04f5 100644
+--- a/src/runtime/runtime-strings.cc
++++ b/src/runtime/runtime-strings.cc
+@@ -481,7 +481,7 @@ RUNTIME_FUNCTION(Runtime_StringToWellFormed) {
+   DirectHandle<String> source = args.at<String>(0);
+   if (String::IsWellFormedUnicode(isolate, source)) return *source;
+   // String::IsWellFormedUnicode would have returned true above otherwise.
+-  DCHECK(!source->IsOneByteRepresentation());
++  DCHECK(!String::IsOneByteRepresentationUnderneath(*source));
+   const int length = source->length();
+   DirectHandle<SeqTwoByteString> dest =
+       isolate->factory()->NewRawTwoByteString(length).ToHandleChecked();
+diff --git a/src/strings/string-builder.cc b/src/strings/string-builder.cc
+index e4ffaecdd8a..13b49d63641 100644
+--- a/src/strings/string-builder.cc
++++ b/src/strings/string-builder.cc
+@@ -315,7 +315,7 @@ MaybeDirectHandle<String> IncrementalStringBuilder::Finish() {
+ bool IncrementalStringBuilder::CanAppendByCopy(DirectHandle<String> string) {
+   const bool representation_ok =
+       encoding_ == String::TWO_BYTE_ENCODING ||
+-      (string->IsFlat() && string->IsOneByteRepresentation());
++      (string->IsFlat() && String::IsOneByteRepresentationUnderneath(*string));
+ 
+   return representation_ok && CurrentPartCanFit(string->length());
+ }
+diff --git a/src/strings/uri.cc b/src/strings/uri.cc
+index 4d095205e9d..dce8f84f087 100644
+--- a/src/strings/uri.cc
++++ b/src/strings/uri.cc
+@@ -506,7 +506,7 @@ static MaybeHandle<String> EscapePrivate(Isolate* isolate,
+ 
+ MaybeDirectHandle<String> Uri::Escape(Isolate* isolate, Handle<String> string) {
+   string = String::Flatten(isolate, string);
+-  return string->IsOneByteRepresentation()
++  return String::IsOneByteRepresentationUnderneath(*string)
+              ? EscapePrivate<uint8_t>(isolate, string)
+              : EscapePrivate<base::uc16>(isolate, string);
+ }
+@@ -514,7 +514,7 @@ MaybeDirectHandle<String> Uri::Escape(Isolate* isolate, Handle<String> string) {
+ MaybeDirectHandle<String> Uri::Unescape(Isolate* isolate,
+                                         Handle<String> string) {
+   string = String::Flatten(isolate, string);
+-  return string->IsOneByteRepresentation()
++  return String::IsOneByteRepresentationUnderneath(*string)
+              ? UnescapePrivate<uint8_t>(isolate, string)
+              : UnescapePrivate<base::uc16>(isolate, string);
+ }
+-- 
+2.43.0
+

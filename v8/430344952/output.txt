@@ -1,0 +1,23 @@
+
+
+#
+# Fatal error in ../../src/objects/fixed-array-inl.h, line 116
+# Debug check failed: IsInBounds(index).
+#
+#
+#
+#FailureMessage Object: 0x7fff5b960d00
+==== C stack trace ===============================
+
+    /src/v8/out/x64.debug/d8(+0x4544523) [0x55b85704f523]
+    /src/v8/out/x64.debug/d8(+0x454368d) [0x55b85704e68d]
+    /src/v8/out/x64.debug/d8(+0x4529df4) [0x55b857034df4]
+    /src/v8/out/x64.debug/d8(+0x45297e5) [0x55b8570347e5]
+    /src/v8/out/x64.debug/d8(+0xdb4130) [0x55b8538bf130]
+    /src/v8/out/x64.debug/d8(+0xeba1cf) [0x55b8539c51cf]
+    /src/v8/out/x64.debug/d8(+0xeb979f) [0x55b8539c479f]
+    /src/v8/out/x64.debug/d8(+0xebaa94) [0x55b8539c5a94]
+    /src/v8/out/x64.debug/d8(+0x1ba6fc4) [0x55b8546b1fc4]
+    /src/v8/out/x64.debug/d8(+0x1ba6a80) [0x55b8546b1a80]
+    /src/v8/out/x64.debug/d8(+0x3bd287d) [0x55b8566dd87d]
+Trace/breakpoint trap (core dumped)

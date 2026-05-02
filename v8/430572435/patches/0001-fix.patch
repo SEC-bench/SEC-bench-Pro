@@ -1,0 +1,54 @@
+From f22ca7b61a92d3cd2b856485a55a1519cb11b627 Mon Sep 17 00:00:00 2001
+From: Toon Verwaest <verwaest@chromium.org>
+Date: Mon, 14 Jul 2025 17:01:40 +0200
+Subject: [PATCH] [maglev] Cap inlining at MaxInliningId
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Bug: 430572435
+Change-Id: I4f20bad6c99e9d3d5a959cb801485dfb117e9884
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6732846
+Commit-Queue: Toon Verwaest <verwaest@chromium.org>
+Auto-Submit: Toon Verwaest <verwaest@chromium.org>
+Reviewed-by: Olivier Flückiger <olivf@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#101423}
+---
+ src/codegen/source-position.h      | 2 ++
+ src/maglev/maglev-graph-builder.cc | 7 +++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/src/codegen/source-position.h b/src/codegen/source-position.h
+index 85dcd964b22..3b0ff0e4ebf 100644
+--- a/src/codegen/source-position.h
++++ b/src/codegen/source-position.h
+@@ -116,6 +116,8 @@ class SourcePosition final {
+     value_ = InliningIdField::update(value_, inlining_id + 1);
+   }
+ 
++  static constexpr int MaxInliningId() { return InliningIdField::kMax; }
++
+   static const int kNotInlined = -1;
+   static_assert(kNoSourcePosition == -1);
+ 
+diff --git a/src/maglev/maglev-graph-builder.cc b/src/maglev/maglev-graph-builder.cc
+index 861d64b6c06..3d5a3a3944b 100644
+--- a/src/maglev/maglev-graph-builder.cc
++++ b/src/maglev/maglev-graph-builder.cc
+@@ -8002,6 +8002,13 @@ ReduceResult MaglevGraphBuilder::BuildInlineFunction(
+ 
+ bool MaglevGraphBuilder::CanInlineCall(compiler::SharedFunctionInfoRef shared,
+                                        float call_frequency) {
++  if (static_cast<int>(graph()->inlined_functions().size()) >=
++      SourcePosition::MaxInliningId()) {
++    compilation_unit_->info()->set_could_not_inline_all_candidates();
++    TRACE_CANNOT_INLINE("maximum inlining ids");
++    return false;
++  }
++
+   if (graph()->total_inlined_bytecode_size() >
+       max_inlined_bytecode_size_cumulative()) {
+     compilation_unit_->info()->set_could_not_inline_all_candidates();
+-- 
+2.43.0
+

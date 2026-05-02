@@ -1,0 +1,48 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1885775",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/gc/WeakMap-inl.h"
+    ],
+    "target_subdir": [
+        "js/src/gc"
+    ],
+    "command_options": "--enable-symbols-as-weakmap-keys --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "WeakMap+Symbol cross-zone use-after-free. sec-high (csectype-uaf). When a JS::Symbol is used as a WeakMap key, WeakMap::addImplicitEdges failed to add a sweep-group edge from the symbol's zone to the WeakMap's zone — the same handling already applied for JSObject keys was missing for symbols. Across multiple zones the two could end up in different sweep groups, so GC could collect the symbol while the WeakMap entry was still considered live, causing a UAF on the freed JS::Symbol cell during GCMarker::processMarkStackTop. Fix (commit 26125066c9f657eae22718920085779bb586b72b 'addSweepGroupEdgeTo Weakmap's zone if the key is of a JS::Symbol' by Yoshi Cheng-Hao Huang, 2024-03-26, r=jonco) adds the symbol-key branch in addImplicitEdges. Test commit 836a941b54f44446fb75d9b3412fff630a433b25 ships js/src/jit-test/tests/collections/bug-1885775.js (and bug-1884927.js). Reporter: Christian Holler (:decoder).",
+    "fix_commits": [
+        "26125066c9f657eae22718920085779bb586b72b",
+        "836a941b54f44446fb75d9b3412fff630a433b25"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-addsweepgroupedgeto-weakmap-s-zone-if-the-key.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1885775 - addSweepGroupEdgeTo Weakmap's zone if the key",
+            "source_commit": "26125066c9f657eae22718920085779bb586b72b",
+            "commit": "26125066c9f657eae22718920085779bb586b72b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/26125066c9f657eae22718920085779bb586b72b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/26125066c9f657eae22718920085779bb586b72b",
+            "phabricator": "D205674"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-tests.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1885775 - tests. r=jonco",
+            "source_commit": "836a941b54f44446fb75d9b3412fff630a433b25",
+            "commit": "836a941b54f44446fb75d9b3412fff630a433b25",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/836a941b54f44446fb75d9b3412fff630a433b25",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/836a941b54f44446fb75d9b3412fff630a433b25",
+            "phabricator": "D205675"
+        }
+    ],
+    "vrp": null
+}

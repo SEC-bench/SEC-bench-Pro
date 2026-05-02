@@ -1,0 +1,99 @@
+From de42e588f4f7bafc773e630f937407924528cb36 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marja=20H=C3=B6ltt=C3=A4?= <marja@chromium.org>
+Date: Fri, 21 Feb 2025 10:33:22 +0100
+Subject: [PATCH] [typed arrays] Implement GetVariableLengthOrOutOfBounds in
+ terms of GetVariableByteLengthOrOutOfBounds
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This gets rid of one usage of TypedArray length in code where
+performance won't be significantly affected by the extra division.
+
+Bug: 388844115, 390201806
+Fixed: 390201806
+Change-Id: I6829f3119cac1e91d69133af6f849599405d7803
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6289045
+Commit-Queue: Marja Hölttä <marja@chromium.org>
+Reviewed-by: Stephen Röttger <sroettger@google.com>
+Cr-Commit-Position: refs/heads/main@{#98854}
+---
+ src/objects/js-array-buffer.cc | 37 ++++++++++++++++++----------------
+ src/objects/js-array-buffer.h  |  1 +
+ 2 files changed, 21 insertions(+), 17 deletions(-)
+
+diff --git a/src/objects/js-array-buffer.cc b/src/objects/js-array-buffer.cc
+index 5a5d41b509b..73e7b5a0b8c 100644
+--- a/src/objects/js-array-buffer.cc
++++ b/src/objects/js-array-buffer.cc
+@@ -455,35 +455,38 @@ size_t JSTypedArray::LengthTrackingGsabBackedTypedArrayLength(
+   return (backing_byte_length - array->byte_offset()) / element_byte_size;
+ }
+ 
+-size_t JSTypedArray::GetVariableLengthOrOutOfBounds(bool& out_of_bounds) const {
++size_t JSTypedArray::GetVariableByteLengthOrOutOfBounds(
++    bool& out_of_bounds) const {
+   DCHECK(!WasDetached());
++  size_t own_byte_offset = byte_offset();
+   if (is_length_tracking()) {
+     if (is_backed_by_rab()) {
+-      if (byte_offset() > buffer()->byte_length()) {
++      size_t buffer_byte_length = buffer()->byte_length();
++      if (own_byte_offset > buffer_byte_length) {
+         out_of_bounds = true;
+         return 0;
+       }
+-      return (buffer()->byte_length() - byte_offset()) / element_size();
+-    }
+-    if (byte_offset() >
+-        buffer()->GetBackingStore()->byte_length(std::memory_order_seq_cst)) {
+-      out_of_bounds = true;
+-      return 0;
++      return (buffer_byte_length - own_byte_offset);
+     }
+-    return (buffer()->GetBackingStore()->byte_length(
+-                std::memory_order_seq_cst) -
+-            byte_offset()) /
+-           element_size();
++    // GSAB-backed TypedArrays can't be out of bounds.
++    size_t buffer_byte_length =
++        buffer()->GetBackingStore()->byte_length(std::memory_order_seq_cst);
++    SBXCHECK(own_byte_offset <= buffer_byte_length);
++    return buffer_byte_length - own_byte_offset;
+   }
+   DCHECK(is_backed_by_rab());
+-  size_t array_length = LengthUnchecked();
+-  // The sum can't overflow, since we have managed to allocate the
+-  // JSTypedArray.
+-  if (byte_offset() + array_length * element_size() > buffer()->byte_length()) {
++  size_t own_byte_length = byte_length();
++  size_t buffer_byte_length = buffer()->byte_length();
++  if (own_byte_length > buffer_byte_length ||
++      own_byte_offset > buffer_byte_length - own_byte_length) {
+     out_of_bounds = true;
+     return 0;
+   }
+-  return array_length;
++  return own_byte_length;
++}
++
++size_t JSTypedArray::GetVariableLengthOrOutOfBounds(bool& out_of_bounds) const {
++  return GetVariableByteLengthOrOutOfBounds(out_of_bounds) / element_size();
+ }
+ 
+ }  // namespace internal
+diff --git a/src/objects/js-array-buffer.h b/src/objects/js-array-buffer.h
+index b93ea33260e..ec0a80f5591 100644
+--- a/src/objects/js-array-buffer.h
++++ b/src/objects/js-array-buffer.h
+@@ -360,6 +360,7 @@ class JSTypedArray
+   inline bool is_on_heap(AcquireLoadTag tag) const;
+ 
+   // Only valid to call when IsVariableLength() is true.
++  size_t GetVariableByteLengthOrOutOfBounds(bool& out_of_bounds) const;
+   size_t GetVariableLengthOrOutOfBounds(bool& out_of_bounds) const;
+ 
+   inline size_t GetLengthOrOutOfBounds(bool& out_of_bounds) const;
+-- 
+2.43.0
+

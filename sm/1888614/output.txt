@@ -1,0 +1,68 @@
+[12] Assertion failure: cx->realm() == oldRealm, at /src/gecko-dev/js/src/vm/Realm.h:819
+#01: ???[/out/js +0x4a54390]
+#02: ???[/out/js +0x2eaec62]
+#03: ???[/out/js +0x2e59ea8]
+#04: ???[/out/js +0x2e0c0ff]
+#05: ???[/out/js +0x2e29b0b]
+#06: ???[/out/js +0x2e0a7ca]
+#07: ???[/out/js +0x2e0bfa0]
+#08: ???[/out/js +0x2e0e0c1]
+#09: ???[/out/js +0x33606a8]
+#10: ???[/out/js +0x2e59ea8]
+#11: ???[/out/js +0x2e0c0ff]
+#12: ???[/out/js +0x2e29b0b]
+#13: ???[/out/js +0x2e0a7ca]
+#14: ???[/out/js +0x2e11245]
+#15: ???[/out/js +0x2e11bfa]
+#16: ???[/out/js +0x31aa49b]
+#17: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x31aa920]
+#18: ???[/out/js +0x2c852bb]
+#19: ???[/out/js +0x2c83ae1]
+#20: ???[/out/js +0x2c02c4d]
+#21: ???[/out/js +0x2bf53d9]
+#22: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#23: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#24: _start[/out/js +0x2af84a5]
+#25: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5f91a0eb83c5 bp 0x7ffff5f09c90 sp 0x7ffff5f09800 T0)
+==12==The signal is caused by a WRITE memory access.
+==12==Hint: address points to the zero page.
+    #0 0x5f91a0eb83c5 in js::AssertRealmUnchanged::~AssertRealmUnchanged() /src/gecko-dev/js/src/vm/Realm.h:819:29
+    #1 0x5f91a0eb83c5 in js::jit::CallTrampolineNativeJitCode(JSContext*, js::jit::TrampolineNative, JS::CallArgs&) /src/gecko-dev/js/src/jit/TrampolineNatives.cpp:265:1
+    #2 0x5f919f312c61 in js::array_sort(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/Array.cpp:2597:12
+    #3 0x5f919f2bdea7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:479:13
+    #4 0x5f919f2700fe in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:573:12
+    #5 0x5f919f28db0a in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:645:10
+    #6 0x5f919f28db0a in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3060:16
+    #7 0x5f919f26e7c9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:451:13
+    #8 0x5f919f26ff9f in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #9 0x5f919f2720c0 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #10 0x5f919f7c46a7 in js::fun_call(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/JSFunction.cpp:1053:10
+    #11 0x5f919f2bdea7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:479:13
+    #12 0x5f919f2700fe in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:573:12
+    #13 0x5f919f28db0a in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:645:10
+    #14 0x5f919f28db0a in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3060:16
+    #15 0x5f919f26e7c9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:451:13
+    #16 0x5f919f275244 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:838:13
+    #17 0x5f919f275bf9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:870:10
+    #18 0x5f919f60e49a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #19 0x5f919f60e91f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #20 0x5f919f0e92ba in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1196:10
+    #21 0x5f919f0e7ae0 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #22 0x5f919f066c4c in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11124:10
+    #23 0x5f919f066c4c in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11383:12
+    #24 0x5f919f0593d8 in main /src/gecko-dev/js/src/shell/js.cpp:11891:12
+    #25 0x784f2ede61c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x784f2ede628a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #27 0x5f919ef5c4a4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2af84a4) (BuildId: d03656a8d00d12259e70abc339843d42)
+
+==12==Register values:
+rax = 0x0000000000000000  rbx = 0x0000000000000000  rcx = 0x00005f919d4e5280  rdx = 0x0000000000000000  
+rdi = 0x00005f91a306ae90  rsi = 0x00007ffff5f097b8  rbp = 0x00007ffff5f09c90  rsp = 0x00007ffff5f09800  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000763f2e2e0280  r13 = 0x000010007ebd9310  r14 = 0x0000763f2e2e01e0  r15 = 0x00000ec7e5c5c000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/vm/Realm.h:819:29 in js::AssertRealmUnchanged::~AssertRealmUnchanged()
+==12==ABORTING

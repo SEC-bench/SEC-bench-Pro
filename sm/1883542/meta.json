@@ -1,0 +1,48 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1883542",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CacheIR.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Baseline CacheIR GetBoundName IC returned the wrong `this` object across a security boundary. CVE-2024-3852 (sec-high, MFSA 2024-18, Firefox 125). When a getter was installed on the global-lexical binding and invoked through the Baseline GetBoundName inline cache, the IC exposed the bare inner global object as `this` instead of the WindowProxy. Regression from Bug 1805199 (getters on global). Calling a receiver-sensitive method (e.g., the JS shell builtin `newString`) on the bare global then segfaults because the IC trusted the wrong receiver shape. The fix (commit 86083f35c4dc832565464cca79f6224821a985e0 by Iain Ireland, 2024-03-21, r=jandem, Phabricator D204130) simplifies GetBoundName ICs: IsCacheableGetPropCall now gains an op parameter and returns NativeGetPropKind::None for JSOp::GetBoundName, preventing the IC from attaching a cached getter path that can smuggle the bare global. Follow-up commit 83c1f27889e88fb90d6eb60846f7c57820519529 adds js/src/jit-test/tests/cacheir/bug1883542.js and a MOZ_ASSERT(!IsWindow(nobj)). Reporter: Logan Stratton (co-credit: Andrew Kramer).",
+    "fix_commits": [
+        "86083f35c4dc832565464cca79f6224821a985e0",
+        "83c1f27889e88fb90d6eb60846f7c57820519529"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-simplify-getboundname-ics.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1883542: Simplify GetBoundName ICs r=jandem",
+            "source_commit": "86083f35c4dc832565464cca79f6224821a985e0",
+            "commit": "86083f35c4dc832565464cca79f6224821a985e0",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/86083f35c4dc832565464cca79f6224821a985e0",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/86083f35c4dc832565464cca79f6224821a985e0",
+            "phabricator": "D204130"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-and-assertion.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1883542: Add test and assertion r=jandem",
+            "source_commit": "83c1f27889e88fb90d6eb60846f7c57820519529",
+            "commit": "83c1f27889e88fb90d6eb60846f7c57820519529",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/83c1f27889e88fb90d6eb60846f7c57820519529",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/83c1f27889e88fb90d6eb60846f7c57820519529",
+            "phabricator": "D204131"
+        }
+    ],
+    "vrp": null
+}

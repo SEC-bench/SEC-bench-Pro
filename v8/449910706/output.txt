@@ -1,0 +1,21 @@
+
+
+#
+# Fatal error in ../../src/api/api.cc, line 831
+# Debug check failed: !IsTheHole(heap_object).
+#
+#
+#
+#FailureMessage Object: 0x7bc966d49c60
+==== C stack trace ===============================
+
+    out/x64.asan/d8(___interceptor_backtrace+0x46) [0x5582eed1fd26]
+    out/x64.asan/d8(+0x8a468c3) [0x5582f52768c3]
+    out/x64.asan/d8(+0x8a4464a) [0x5582f527464a]
+    out/x64.asan/d8(+0x8a18050) [0x5582f5248050]
+    out/x64.asan/d8(+0x8a175ff) [0x5582f52475ff]
+    out/x64.asan/d8(+0x28b8372) [0x5582ef0e8372]
+    out/x64.asan/d8(+0x293409e) [0x5582ef16409e]
+    out/x64.asan/d8(+0x25e7899) [0x5582eee17899]
+    out/x64.asan/d8(+0x830acd0) [0x5582f4b3acd0]
+Trace/breakpoint trap

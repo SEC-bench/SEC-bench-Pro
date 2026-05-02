@@ -1,0 +1,71 @@
+From 955d1972ef0a32cf44fc27cd32d055a7ddc30fcf Mon Sep 17 00:00:00 2001
+From: Clemens Backes <clemensb@chromium.org>
+Date: Wed, 21 Feb 2024 15:14:49 +0100
+Subject: [PATCH] [wasm] Ensure empty safepoints for protected instructions
+
+Protected instructions do not emit a safepoint, except in debug code.
+Hence we should not use a previously defined safepoint which might have
+tagged spill slots which are not valid any more at the protected
+instruction.
+
+R=ahaas@chromium.org
+
+Fixed: 325866363
+Change-Id: I2f301def79a4532738b45ee08596f71d2f8cd499
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5309911
+Reviewed-by: Andreas Haas <ahaas@chromium.org>
+Commit-Queue: Clemens Backes <clemensb@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#92453}
+---
+ src/wasm/wasm-code-manager.cc | 34 ++++++++++++++++++++--------------
+ 1 file changed, 20 insertions(+), 14 deletions(-)
+
+diff --git a/src/wasm/wasm-code-manager.cc b/src/wasm/wasm-code-manager.cc
+index 4f8aa671786..a30f2d2b0c6 100644
+--- a/src/wasm/wasm-code-manager.cc
++++ b/src/wasm/wasm-code-manager.cc
+@@ -2537,21 +2537,27 @@ std::pair<WasmCode*, SafepointEntry> WasmCodeManager::LookupCodeAndSafepoint(
+     Isolate* isolate, Address pc) {
+   auto* entry = isolate->wasm_code_look_up_cache()->GetCacheEntry(pc);
+   WasmCode* code = entry->code;
+-  DCHECK(code);
+-  if (!entry->safepoint_entry.is_initialized()) {
+-    SafepointTable table(code);
+-    entry->safepoint_entry = table.TryFindEntry(pc);
+-    if (!entry->safepoint_entry.is_initialized()) {
+-      // Only for protected instructions the safepoint entry is not mandatory.
+-      // This is rare, so we don't bother caching the result in this case.
+-      CHECK(code->IsProtectedInstruction(
+-          pc - WasmFrameConstants::kProtectedInstructionReturnAddressOffset));
+-    }
++  DCHECK_NOT_NULL(code);
++  // For protected instructions we usually do not emit a safepoint because the
++  // frame will be unwound anyway. The exception is debugging code, where the
++  // frame might be inspected if "pause on exception" is set.
++  // For those instructions, we thus need to explicitly return an empty
++  // safepoint; using any previously registered safepoint can lead to crashes
++  // when we try to visit spill slots that do not hold tagged values at this
++  // point.
++  // Evaluate this condition only on demand (the fast path does not need it).
++  auto expect_safepoint = [code, pc]() {
++    const bool is_protected_instruction = code->IsProtectedInstruction(
++        pc - WasmFrameConstants::kProtectedInstructionReturnAddressOffset);
++    return !is_protected_instruction || code->for_debugging();
++  };
++  if (!entry->safepoint_entry.is_initialized() && expect_safepoint()) {
++    entry->safepoint_entry = SafepointTable{code}.TryFindEntry(pc);
++    CHECK(entry->safepoint_entry.is_initialized());
++  } else if (expect_safepoint()) {
++    DCHECK_EQ(entry->safepoint_entry, SafepointTable{code}.TryFindEntry(pc));
+   } else {
+-#ifdef DEBUG
+-    SafepointTable table(code);
+-    DCHECK_EQ(entry->safepoint_entry, table.TryFindEntry(pc));
+-#endif  // DEBUG
++    DCHECK(!entry->safepoint_entry.is_initialized());
+   }
+   return std::make_pair(code, entry->safepoint_entry);
+ }
+-- 
+2.43.0
+

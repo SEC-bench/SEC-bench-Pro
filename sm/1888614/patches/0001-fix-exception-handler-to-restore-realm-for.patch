@@ -1,0 +1,106 @@
+From 7a6d8fd713576aafe1923dbec51a46a42fb60fdf Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 3 Apr 2024 09:27:15 +0000
+Subject: [PATCH] Bug 1888614 - Fix exception handler to restore realm for
+ trampoline native frames too. r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D206330
+---
+ js/src/jit-test/tests/arrays/sort-trampoline.js | 16 ++++++++++++++++
+ js/src/jit/JSJitFrameIter.cpp                   |  2 +-
+ js/src/jit/JSJitFrameIter.h                     |  3 +++
+ js/src/jit/JitFrames.cpp                        |  4 ++--
+ js/src/vm/FrameIter.cpp                         |  7 ++++++-
+ 5 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/js/src/jit-test/tests/arrays/sort-trampoline.js b/js/src/jit-test/tests/arrays/sort-trampoline.js
+index 14fbe3d1826df..b81d4628b0093 100644
+--- a/js/src/jit-test/tests/arrays/sort-trampoline.js
++++ b/js/src/jit-test/tests/arrays/sort-trampoline.js
+@@ -135,3 +135,19 @@ function testBailout() {
+   assertEq(arr.map(x => x.n).join(""), "0135");
+ }
+ testBailout();
++
++function testExceptionHandlerSwitchRealm() {
++  var g = newGlobal({sameCompartmentAs: this});
++  for (var i = 0; i < 25; i++) {
++    var ex = null;
++    try {
++      g.Array.prototype.toSorted.call([2, 3], () => {
++        throw "fit";
++      });
++    } catch (e) {
++      ex = e;
++    }
++    assertEq(ex, "fit");
++  }
++}
++testExceptionHandlerSwitchRealm();
+diff --git a/js/src/jit/JSJitFrameIter.cpp b/js/src/jit/JSJitFrameIter.cpp
+index e6674bfebae3a..0f7dfe46e5461 100644
+--- a/js/src/jit/JSJitFrameIter.cpp
++++ b/js/src/jit/JSJitFrameIter.cpp
+@@ -78,7 +78,7 @@ CalleeToken JSJitFrameIter::calleeToken() const {
+ }
+ 
+ JSFunction* JSJitFrameIter::callee() const {
+-  MOZ_ASSERT(isScripted());
++  MOZ_ASSERT(isScripted() || isTrampolineNative());
+   MOZ_ASSERT(isFunctionFrame());
+   return CalleeTokenToFunction(calleeToken());
+ }
+diff --git a/js/src/jit/JSJitFrameIter.h b/js/src/jit/JSJitFrameIter.h
+index e6d370dae3e3f..bdb28dc930de8 100644
+--- a/js/src/jit/JSJitFrameIter.h
++++ b/js/src/jit/JSJitFrameIter.h
+@@ -177,6 +177,9 @@ class JSJitFrameIter {
+     return type_ == FrameType::BaselineInterpreterEntry;
+   }
+   bool isRectifier() const { return type_ == FrameType::Rectifier; }
++  bool isTrampolineNative() const {
++    return type_ == FrameType::TrampolineNative;
++  }
+   bool isBareExit() const;
+   bool isUnwoundJitExit() const;
+   template <typename T>
+diff --git a/js/src/jit/JitFrames.cpp b/js/src/jit/JitFrames.cpp
+index c7a8152e13338..45ac1f5defccf 100644
+--- a/js/src/jit/JitFrames.cpp
++++ b/js/src/jit/JitFrames.cpp
+@@ -760,7 +760,7 @@ void HandleException(ResumeFromException* rfe) {
+ 
+     // JIT code can enter same-compartment realms, so reset cx->realm to
+     // this frame's realm.
+-    if (frame.isScripted()) {
++    if (frame.isScripted() || frame.isTrampolineNative()) {
+       cx->setRealmForJitExceptionHandler(iter.realm());
+     }
+ 
+@@ -830,7 +830,7 @@ void HandleException(ResumeFromException* rfe) {
+       if (rfe->kind == ExceptionResumeKind::ForcedReturnBaseline) {
+         return;
+       }
+-    } else if (frame.type() == FrameType::TrampolineNative) {
++    } else if (frame.isTrampolineNative()) {
+       UnwindTrampolineNativeFrame(cx->runtime(), frame);
+     }
+ 
+diff --git a/js/src/vm/FrameIter.cpp b/js/src/vm/FrameIter.cpp
+index 3dd50c2fcf0e4..9a665e6b9d251 100644
+--- a/js/src/vm/FrameIter.cpp
++++ b/js/src/vm/FrameIter.cpp
+@@ -124,7 +124,12 @@ JS::Realm* JitFrameIter::realm() const {
+     return asWasm().instance()->realm();
+   }
+ 
+-  return asJSJit().script()->realm();
++  if (asJSJit().isScripted()) {
++    return asJSJit().script()->realm();
++  }
++
++  MOZ_RELEASE_ASSERT(asJSJit().isTrampolineNative());
++  return asJSJit().callee()->realm();
+ }
+ 
+ uint8_t* JitFrameIter::resumePCinCurrentFrame() const {

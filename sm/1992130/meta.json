@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1992130",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmGcObject.h"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Stack buffer overflow",
+    "error_type": "ASAN_CRASH",
+    "description": "Stack buffer overflow in SpiderMonkey's WebAssembly GC fromCharCodeArray path. CVE-2025-13016 (sec-high, MFSA 2025-87, Firefox 145). StableWasmArrayObjectElements::StableWasmArrayObjectElements() in js/src/wasm/WasmGcObject.h used std::copy(array->inlineStorage(), array->inlineStorage() + array->numElements_ * sizeof(T), ownElements_->begin()). The source iterator is uint8_t* (byte-typed) while the destination iterator is T* (e.g., uint16_t* for i16 arrays). std::copy deduces the element count from the source iterator range: numElements * sizeof(T) iterations of destination-sized writes, meaning for i16 arrays the copy writes numElements * sizeof(T) = 2N elements of uint16_t (4N bytes) into an ownElements_ inline stack buffer sized for N elements (2N bytes) — classic stack-buffer-overflow. The fix (commit 75ef3f79aae344c1d0398787cab666a6a73176c7 by Yury Delendik, 2025-10-15, r=rhunt; Phabricator D267284) introduces a typed inlineArrayElements<T>() accessor and restricts the copy to numElements elements of the correct type. Triggered by wasm:js-string builtin fromCharCodeArray on an array-of-i16 under oomTest. Reporter: Igor Morgenstern (Aisle).",
+    "fix_commits": [
+        "75ef3f79aae344c1d0398787cab666a6a73176c7"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-arguments-types-for-std-copy.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1992130 - Fix arguments types for std::copy. r=rhunt",
+            "source_commit": "75ef3f79aae344c1d0398787cab666a6a73176c7",
+            "commit": "75ef3f79aae344c1d0398787cab666a6a73176c7",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/75ef3f79aae344c1d0398787cab666a6a73176c7",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/75ef3f79aae344c1d0398787cab666a6a73176c7",
+            "phabricator": "D267284"
+        }
+    ],
+    "vrp": null
+}

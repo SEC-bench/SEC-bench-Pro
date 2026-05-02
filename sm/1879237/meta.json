@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1879237",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmBaselineCompile.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--wasm-memory-control --wasm-compiler=baseline --wasm-exnref",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Incorrect code generation",
+    "error_type": "ASAN_CRASH",
+    "description": "WASM Baseline br_on_cast Block Params — Spurious needResultRegs Spill After Shuffle Breaks isMem==onStack Invariant. CVE-2024-2606 (sec-high). In the WebAssembly baseline compiler, the br_on_cast instruction with block parameters triggers incorrect register allocation in js::wasm::BaseCompiler::shuffleStackResultsBeforeBranch (WasmBaselineCompile.cpp). When extra parameters are passed alongside the cast value, the compiler first moves all params to the correct registers/stack slots, then erroneously calls needResultRegs which spills register params to the stack before performing the branch. This violates the assertion MOZ_ASSERT(v.isMem() == result.onStack()) and causes the stack shuffle to operate on unexpected state. An attacker could potentially construct wasm modules that pass invalid values to block parameters, leading to type confusion or memory corruption. The fix (rev d20d0f5e7849) consolidates the wasm cast code to centralize register allocation logic, preventing the spurious spill. Introduced by bug 1817782 as an incomplete fix, exposed when wasm-GC shipped in Fx120.",
+    "fix_commits": [
+        "9a3cef41437423bf9e833e1e127349080e27945c"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-consolidate-wasm-cast-code.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1879237: Consolidate wasm cast code. r=rhunt",
+            "source_commit": "9a3cef41437423bf9e833e1e127349080e27945c",
+            "commit": "9a3cef41437423bf9e833e1e127349080e27945c",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/9a3cef41437423bf9e833e1e127349080e27945c",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/9a3cef41437423bf9e833e1e127349080e27945c",
+            "phabricator": "D201734"
+        }
+    ],
+    "vrp": null
+}

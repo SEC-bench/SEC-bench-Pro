@@ -1,0 +1,24 @@
+Sandbox testing mode is enabled. Write to the page starting at 0x1282900f000 (available from JavaScript as `Sandbox.targetPage`) to demonstrate a sandbox bypass.
+target_page @ 0x1282900f000
+js_heap_base @ 0x3cbb00000000
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_ACCERR 01282900f000
+func_addr: 0x19a990
+shared_addr: 0x19a960
+function_data: 0x19a934
+func_ref: 0x19a92c
+func_addr: 0x19a890
+shared_addr: 0x19a860
+function_data: 0x19a834
+func_ref: 0x19a82c
+func_addr: 0x19a910
+shared_addr: 0x19a8e0
+function_data: 0x19a8b4
+func_ref: 0x19a8ac
+func_addr: 0x19a810
+shared_addr: 0x19a7e0
+function_data: 0x19a7b4
+func_ref: 0x19a7ac
+Segmentation fault (core dumped)

@@ -1,0 +1,31 @@
+From 23cf0b3985c329aae2898bae518a7f5813c132ae Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 9 Feb 2026 21:40:57 +0000
+Subject: [PATCH] Bug 2013562: Enter correct realm before resolving same-thread
+ waitAsync promise r=arai
+
+Differential Revision: https://phabricator.services.mozilla.com/D281314
+---
+ js/src/builtin/AtomicsObject.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/js/src/builtin/AtomicsObject.cpp b/js/src/builtin/AtomicsObject.cpp
+index 2af47ca92bf2e..f000d614820db 100644
+--- a/js/src/builtin/AtomicsObject.cpp
++++ b/js/src/builtin/AtomicsObject.cpp
+@@ -35,6 +35,7 @@
+ 
+ #include "vm/Compartment-inl.h"
+ #include "vm/JSObject-inl.h"
++#include "vm/Realm-inl.h"
+ 
+ using namespace js;
+ 
+@@ -1521,6 +1522,7 @@ bool js::atomics_notify_impl(JSContext* cx, SharedArrayRawBuffer* sarb,
+   // avoid mutex ordering problems.
+   RootedValue resultMsg(cx, StringValue(cx->names().ok));
+   for (uint32_t i = 0; i < promisesToResolve.length(); i++) {
++    AutoRealm ar(cx, promisesToResolve[i]);
+     if (!PromiseObject::resolve(cx, promisesToResolve[i], resultMsg)) {
+       MOZ_ASSERT(cx->isThrowingOutOfMemory() || cx->isThrowingOverRecursed());
+       return false;

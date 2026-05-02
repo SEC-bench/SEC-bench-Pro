@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:390639820",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "third_party/v8/builtins/array-sort.tq",
+    "src/torque/csa-generator.cc"
+  ],
+  "target_subdir": [
+    "third_party/v8/builtins",
+    "src/torque"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The SortState class defined in array-sort.tq stores five function pointer fields (sortComparePtr, loadFn, storeFn, deleteFn, canUseSameAccessorFn) as BuiltinPtr values, which are Smi integers representing raw indices into V8's internal builtin entry table (IsolateData::builtin_entry_table). Because SortState is a HeapObject allocated inside the V8 sandbox, an attacker with an in-sandbox write primitive can corrupt these Smi fields to arbitrary values. When Array.prototype.sort() is called, the corrupted index is passed directly to EntryFromBuiltinIndexAsOperand() in the macro assembler, which multiplies it by the system pointer size and adds it to the base of the builtins table without any bounds checking. This allows an out-of-bounds read of a function pointer from attacker-controlled memory (e.g., a heap spray region), resulting in an arbitrary control flow hijack and full sandbox escape. The vulnerability is triggered by sorting an array whose element getter corrupts the sortComparePtr field of the in-flight SortState object before the comparator is invoked.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit 02d0fc9fbda0c8a06f2e71ab2bacaa85560510a9 for CL 6189989.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6189989",
+      "cl": 6189989,
+      "source_commit": "02d0fc9fbda0c8a06f2e71ab2bacaa85560510a9",
+      "commit": "02d0fc9fbda0c8a06f2e71ab2bacaa85560510a9",
+      "source_cl": 6189989,
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6189989"
+    }
+  ]
+}

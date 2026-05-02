@@ -1,0 +1,99 @@
+#!/bin/bash
+set -euo pipefail
+
+repo="${1:-.}"
+
+if [ ! -d "$repo" ]; then
+  exit 0
+fi
+
+repo="$(cd "$repo" && pwd -P)"
+
+tracked="$(mktemp)"
+nested="$(mktemp)"
+message="$(mktemp)"
+gitdir=""
+original_head=""
+original_author_name=""
+original_author_email=""
+original_author_date=""
+original_committer_name=""
+original_committer_email=""
+original_committer_date=""
+trap 'rm -f "$tracked" "$nested" "$message"' EXIT
+
+if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  gitdir="$(git -C "$repo" rev-parse --absolute-git-dir)"
+  if original_head="$(git -C "$repo" config --get secb.originalHead 2>/dev/null)" && [ -n "$original_head" ]; then
+    :
+  else
+    original_head=""
+  fi
+  if git -C "$repo" rev-parse --verify HEAD >/dev/null 2>&1; then
+    if [ -z "$original_head" ]; then
+      original_head="$(git -C "$repo" rev-parse HEAD)"
+    fi
+    git -C "$repo" log -1 --format=%B > "$message"
+    original_author_name="$(git -C "$repo" log -1 --format=%an)"
+    original_author_email="$(git -C "$repo" log -1 --format=%ae)"
+    original_author_date="$(git -C "$repo" log -1 --format=%aI)"
+    original_committer_name="$(git -C "$repo" log -1 --format=%cn)"
+    original_committer_email="$(git -C "$repo" log -1 --format=%ce)"
+    original_committer_date="$(git -C "$repo" log -1 --format=%cI)"
+    git -C "$repo" ls-files -z > "$tracked"
+  fi
+  if [ -f "$gitdir/info/exclude" ]; then
+    cat "$gitdir/info/exclude" >> "$nested"
+  fi
+fi
+
+find "$repo" -mindepth 2 -name .git -print0 | while IFS= read -r -d '' gitpath; do
+  dir="${gitpath%/.git}"
+  rel="${dir#"$repo"/}"
+  if [ "$rel" != "$dir" ]; then
+    printf '/%s/\n' "$rel"
+  fi
+done >> "$nested"
+
+remove_path() {
+  case "${1:-}" in
+    ""|"/")
+      return
+      ;;
+  esac
+  rm -rf -- "$1"
+}
+
+remove_path "$gitdir"
+remove_path "$repo/.git"
+find "$repo" -mindepth 2 -name .git -prune -exec rm -rf -- {} +
+
+git -C "$repo" init -q
+git -C "$repo" config user.email secbench@example.com
+git -C "$repo" config user.name SEC-bench
+git -C "$repo" config gc.auto 0
+if [ -n "$original_head" ]; then
+  git -C "$repo" config secb.originalHead "$original_head"
+fi
+
+if [ -s "$nested" ]; then
+  cat "$nested" >> "$repo/.git/info/exclude"
+fi
+
+if [ -s "$tracked" ]; then
+  git -C "$repo" add -f --pathspec-from-file="$tracked" --pathspec-file-nul
+else
+  git -C "$repo" add -A
+fi
+
+if [ -n "$original_head" ]; then
+  GIT_AUTHOR_NAME="$original_author_name" \
+  GIT_AUTHOR_EMAIL="$original_author_email" \
+  GIT_AUTHOR_DATE="$original_author_date" \
+  GIT_COMMITTER_NAME="$original_committer_name" \
+  GIT_COMMITTER_EMAIL="$original_committer_email" \
+  GIT_COMMITTER_DATE="$original_committer_date" \
+    git -C "$repo" commit -q -F "$message" --allow-empty --allow-empty-message
+else
+  git -C "$repo" commit -q -m "Benchmark snapshot" --allow-empty
+fi

@@ -1,0 +1,21 @@
+[13] Assertion failure: iter->done(), at /src/gecko-dev/js/src/jit/JitFrames.cpp:695
+#01: ???[/out/js +0x55641ca]
+#02: ???[/out/js +0x5564ccd]
+#03: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6251bb2c41fb bp 0x7ffcae5f0bf0 sp 0x7ffcae5f0bd0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6251bb2c41fb in js::jit::HandleExceptionWasm(JSContext*, js::wasm::WasmFrameIter*, js::jit::ResumeFromException*) /src/gecko-dev/js/src/jit/JitFrames.cpp:695:3
+    #1 0x6251bb2c4ccc in js::jit::HandleException(js::jit::ResumeFromException*) /src/gecko-dev/js/src/jit/JitFrames.cpp:745:7
+    #2 0x1871ff87d005  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffcae5f16c8  rcx = 0x00006251b6fa3300  rdx = 0x0000000000000000  
+rdi = 0x00006251bcaf9490  rsi = 0x00007ffcae5f0b88  rbp = 0x00007ffcae5f0bf0  rsp = 0x00007ffcae5f0bd0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00006e22d4ce0a90  r13 = 0x00006e22d4ce0080  r14 = 0x00006e22d4ce0080  r15 = 0x00007ffcae5f19d0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/JitFrames.cpp:695:3 in js::jit::HandleExceptionWasm(JSContext*, js::wasm::WasmFrameIter*, js::jit::ResumeFromException*)
+==13==ABORTING

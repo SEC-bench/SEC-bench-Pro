@@ -1,0 +1,51 @@
+From d867a6f69b9f026674f2e846572748818a61a41b Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Mon, 9 Feb 2026 16:45:43 +0000
+Subject: [PATCH] Bug 2013741: Clean up misleading comments in array.fill.
+ r=rhunt
+
+The comments were pulled from a different array method and were slightly
+misleading about how the assembly was generated.
+
+Differential Revision: https://phabricator.services.mozilla.com/D281627
+---
+ js/src/wasm/WasmBaselineCompile.cpp | 12 +++++-------
+ 1 file changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index dc5950441acf8..d13ade0c2bc5e 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -8801,27 +8801,25 @@ bool BaseCompiler::emitArrayFill() {
+     freePtr(RegPtr(PreBarrierReg));
+   }
+ 
+-  // Perform an initialization loop using `numElements` as the loop variable,
+-  // starting at `numElements` and counting down to zero.
++  // Perform the fill loop using `numElements` as the loop variable, counting
++  // down to zero.
+   Label done;
+   Label loop;
+-  // Skip initialization if numElements = 0
+   masm.branch32(Assembler::Equal, numElements, Imm32(0), &done);
+-  masm.bind(&loop);
+ 
+-  // Move to the next element
++  masm.bind(&loop);
+   masm.sub32(Imm32(1), numElements);
+ 
+   // Assign value to rdata[numElements]. All registers are preserved.
+   if (!emitGcArraySet(rp, rdata, numElements, arrayType, value,
+-                      PreBarrierKind::None, PostBarrierKind::Imprecise)) {
++                      PreBarrierKind::Normal, PostBarrierKind::Imprecise)) {
+     return false;
+   }
+ 
+-  // Loop back if there are still elements to initialize
+   masm.branch32(Assembler::NotEqual, numElements, Imm32(0), &loop);
+   masm.bind(&done);
+ 
++  // Clean up
+   freePtr(rdata);
+   freeRef(rp);
+   freeI32(numElements);

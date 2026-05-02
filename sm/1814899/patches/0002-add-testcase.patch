@@ -1,0 +1,41 @@
+From 5ba1f3caa6dd855ad9703944c4887069db5078aa Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 25 Apr 2023 16:15:35 +0000
+Subject: [PATCH] Bug 1814899: Add testcase r=jandem
+
+Depends on D169274
+
+Differential Revision: https://phabricator.services.mozilla.com/D169275
+---
+ js/src/jit-test/tests/ion/bug1814899.js | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+ create mode 100644 js/src/jit-test/tests/ion/bug1814899.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1814899.js b/js/src/jit-test/tests/ion/bug1814899.js
+new file mode 100644
+index 0000000000000..43a16de511513
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1814899.js
+@@ -0,0 +1,22 @@
++function bar(x) {
++  with ({}) {}
++  switch (x) {
++  case 1:
++    foo(2);
++    break;
++  case 2:
++    gczeal(14, 1);
++    break;
++  }
++  return "a sufficiently long string";
++}
++
++function foo(x) {
++  for (var s in bar(x)) { gczeal(0); }
++}
++
++with ({}) {}
++for (var i = 0; i < 100; i++) {
++  foo(0);
++}
++foo(1);

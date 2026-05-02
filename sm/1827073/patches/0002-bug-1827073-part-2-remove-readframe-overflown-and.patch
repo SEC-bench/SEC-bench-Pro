@@ -1,0 +1,157 @@
+From 9c190ac9cba9de260ebcc12048ceb00f9370142b Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 12 Apr 2023 04:51:21 +0000
+Subject: [PATCH] Bug 1827073 part 2 - Remove ReadFrame_Overflown and simplify
+ unaliasedForEachActual. r=iain
+
+The only consumer of `ReadFrame_Overflown` is some debug dumping code where we
+want to skip the formal arguments. It's simpler to skip the formals there so
+that we can simplify the `unaliasedForEachActual` method.
+
+Depends on D175112
+
+Differential Revision: https://phabricator.services.mozilla.com/D175113
+---
+ js/src/jit/JSJitFrameIter.h | 27 +++++----------------------
+ js/src/jit/JitFrames.cpp    | 21 ++++++++++++---------
+ js/src/vm/FrameIter-inl.h   |  8 +++-----
+ 3 files changed, 20 insertions(+), 36 deletions(-)
+
+diff --git a/js/src/jit/JSJitFrameIter.h b/js/src/jit/JSJitFrameIter.h
+index f62eb5dbcf0be..3893dda4471cd 100644
+--- a/js/src/jit/JSJitFrameIter.h
++++ b/js/src/jit/JSJitFrameIter.h
+@@ -76,9 +76,6 @@ enum class FrameType {
+ };
+ 
+ enum ReadFrameArgsBehavior {
+-  // Only read overflown args (i.e. [callee()->nargs ... numActuals()]
+-  ReadFrame_Overflown,
+-
+   // Read all args (i.e. [0 ... numActuals()])
+   ReadFrame_Actuals
+ };
+@@ -231,23 +228,12 @@ class JSJitFrameIter {
+   MachineState machineState() const;
+ 
+   template <class Op>
+-  void unaliasedForEachActual(Op op, ReadFrameArgsBehavior behavior) const {
++  void unaliasedForEachActual(Op op) const {
+     MOZ_ASSERT(isBaselineJS());
+ 
+     unsigned nactual = numActualArgs();
+-    unsigned start, end;
+-    switch (behavior) {
+-      case ReadFrame_Overflown:
+-        start = callee()->nargs();
+-        end = nactual;
+-        break;
+-      case ReadFrame_Actuals:
+-        start = 0;
+-        end = nactual;
+-    }
+-
+     Value* argv = actualArgs();
+-    for (unsigned i = start; i < end; i++) {
++    for (unsigned i = 0; i < nactual; i++) {
+       op(argv[i]);
+     }
+   }
+@@ -678,10 +664,8 @@ class InlineFrameIterator {
+       // Get the non overflown arguments, which are taken from the inlined
+       // frame, because it will have the updated value when JSOp::SetArg is
+       // done.
+-      if (behavior != ReadFrame_Overflown) {
+-        s.readFunctionFrameArgs(argOp, argsObj, thisv, 0, nformal, script(),
+-                                fallback);
+-      }
++      s.readFunctionFrameArgs(argOp, argsObj, thisv, 0, nformal, script(),
++                              fallback);
+ 
+       if (nactual > nformal) {
+         if (more()) {
+@@ -735,11 +719,10 @@ class InlineFrameIterator {
+ 
+   template <class Op>
+   void unaliasedForEachActual(JSContext* cx, Op op,
+-                              ReadFrameArgsBehavior behavior,
+                               MaybeReadFallback& fallback) const {
+     Nop nop;
+     readFrameArgsAndLocals(cx, op, nop, nullptr, nullptr, nullptr, nullptr,
+-                           nullptr, behavior, fallback);
++                           nullptr, ReadFrame_Actuals, fallback);
+   }
+ 
+   JSScript* script() const { return script_; }
+diff --git a/js/src/jit/JitFrames.cpp b/js/src/jit/JitFrames.cpp
+index bbb9839bd4229..fd65289e61b52 100644
+--- a/js/src/jit/JitFrames.cpp
++++ b/js/src/jit/JitFrames.cpp
+@@ -2383,17 +2383,21 @@ void SnapshotIterator::warnUnreadableAllocation() {
+           "f.arguments).\n");
+ }
+ 
+-struct DumpOp {
+-  explicit DumpOp(unsigned int i) : i_(i) {}
++struct DumpOverflownOp {
++  const unsigned numFormals_;
++  unsigned i_ = 0;
++
++  explicit DumpOverflownOp(unsigned numFormals) : numFormals_(numFormals) {}
+ 
+-  unsigned int i_;
+   void operator()(const Value& v) {
+-    fprintf(stderr, "  actual (arg %u): ", i_);
++    if (i_ >= numFormals_) {
++      fprintf(stderr, "  actual (arg %u): ", i_);
+ #if defined(DEBUG) || defined(JS_JITSPEW)
+-    DumpValue(v);
++      DumpValue(v);
+ #else
+-    fprintf(stderr, "?\n");
++      fprintf(stderr, "?\n");
+ #endif
++    }
+     i_++;
+   }
+ };
+@@ -2443,9 +2447,8 @@ void InlineFrameIterator::dump() const {
+       } else {
+         if (i - 2 == calleeTemplate()->nargs() &&
+             numActualArgs() > calleeTemplate()->nargs()) {
+-          DumpOp d(calleeTemplate()->nargs());
+-          unaliasedForEachActual(TlsContext.get(), d, ReadFrame_Overflown,
+-                                 fallback);
++          DumpOverflownOp d(calleeTemplate()->nargs());
++          unaliasedForEachActual(TlsContext.get(), d, fallback);
+         }
+ 
+         fprintf(stderr, "  slot %d: ", int(i - 2 - calleeTemplate()->nargs()));
+diff --git a/js/src/vm/FrameIter-inl.h b/js/src/vm/FrameIter-inl.h
+index d576775c3790b..d5c85c416bbf3 100644
+--- a/js/src/vm/FrameIter-inl.h
++++ b/js/src/vm/FrameIter-inl.h
+@@ -30,8 +30,7 @@ inline void FrameIter::unaliasedForEachActual(JSContext* cx, Op op) {
+       if (jsJitFrame().isIonJS()) {
+         jit::MaybeReadFallback recover(cx, activation()->asJit(),
+                                        &jsJitFrame());
+-        ionInlineFrames_.unaliasedForEachActual(cx, op, jit::ReadFrame_Actuals,
+-                                                recover);
++        ionInlineFrames_.unaliasedForEachActual(cx, op, recover);
+       } else if (jsJitFrame().isBailoutJS()) {
+         // :TODO: (Bug 1070962) If we are introspecting the frame which is
+         // being bailed, then we might be in the middle of recovering
+@@ -40,11 +39,10 @@ inline void FrameIter::unaliasedForEachActual(JSContext* cx, Op op) {
+         // that, we just return Undefined values for instruction results
+         // which are not yet recovered.
+         jit::MaybeReadFallback fallback;
+-        ionInlineFrames_.unaliasedForEachActual(cx, op, jit::ReadFrame_Actuals,
+-                                                fallback);
++        ionInlineFrames_.unaliasedForEachActual(cx, op, fallback);
+       } else {
+         MOZ_ASSERT(jsJitFrame().isBaselineJS());
+-        jsJitFrame().unaliasedForEachActual(op, jit::ReadFrame_Actuals);
++        jsJitFrame().unaliasedForEachActual(op);
+       }
+       return;
+   }

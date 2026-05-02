@@ -1,0 +1,92 @@
+abort: CSA_DCHECK failed: Torque assert 'paramKind == ValueKind::kRef || paramKind == ValueKind::kRefNull' failed [src/builtins/js-to-wasm.tq:613] [../../src/builtins/js-to-wasm.tq:732]
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x5555e708e8fd]
+    1: 17 [0x27300029c889] [wasm://wasm/eb46e57e:~1] [pc=0x5555e76517f9](this=0x273000281795 <JSGlobalProxy>#0#)
+    2: /* anonymous */ [0x27300029ac15] [/testcase/poc.js:12] [bytecode=0x1e3c00040065 offset=167](this=0x273000281795 <JSGlobalProxy>#0#)
+    3: InternalFrame [pc: 0x5555e6cb2d9c]
+    4: EntryFrame [pc: 0x5555e6cb2adf]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x5555e708e8fd]
+[1]: 17 [0x27300029c889] [wasm://wasm/eb46e57e:~1] [pc=0x5555e76517f9](this=0x273000281795 <JSGlobalProxy>#0#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[2]: /* anonymous */ [0x27300029ac15] [/testcase/poc.js:12] [bytecode=0x1e3c00040065 offset=167](this=0x273000281795 <JSGlobalProxy>#0#) {
+  // heap-allocated locals
+  var kBuiltins = 0x27300004ab89 <FixedArray[1]>#1#
+  // expression stack (top to bottom)
+  [07] : 0x273000281795 <JSGlobalProxy>#0#
+  [06] : 0x273000000069 <undefined>
+  [05] : 0x273000000069 <undefined>
+  [04] : 0x273000000069 <undefined>
+  [03] : 0x27300029c68d <JSFunction js-to-wasm:sii:i (sfi = 0x27300029c65d)>#2#
+  [02] : 0x2730002926c1 <WebAssembly map = 0x27300029b0cd>#3#
+  [01] : 0x27300029c889 <JSFunction js-to-wasm:sii:i (sfi = 0x27300029c859)>#4#
+  [00] : 0x273000000069 <undefined>
+--------- s o u r c e   c o d e ---------
+if ("d8" in this) {\x0a  d8.test.enableJSPI();\x0a  d8.test.installConditionalFeatures();\x0a}\x0avar wasm_code = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 212, 129, 128, 128, 0, 22, 78, 1, 94, 120, 1, 78, 1, 94, 119, 1, 80, 0, 95, 4, 127, 0, 127, 0, 127, 0, 127, 0, 80, 1, 2, 95, 8, 127, 0, 127, 0, 127, 0...
+
+-----------------------------------------
+}
+
+[3]: InternalFrame [pc: 0x5555e6cb2d9c]
+[4]: EntryFrame [pc: 0x5555e6cb2adf]
+-- ObjectCacheKey --
+
+ #0# 0x273000281795: 0x273000281795 <JSGlobalProxy>
+ #1# 0x27300004ab89: 0x27300004ab89 <FixedArray[1]>
+                 0: 1
+ #2# 0x27300029c68d: 0x27300029c68d <JSFunction js-to-wasm:sii:i (sfi = 0x27300029c65d)>
+ #3# 0x2730002926c1: 0x2730002926c1 <WebAssembly map = 0x27300029b0cd>
+           compile: 0x27300028edb5 <JSFunction compile (sfi = 0x273000147671)>#5#
+          validate: 0x27300028edd1 <JSFunction validate (sfi = 0x2730001476d9)>#6#
+       instantiate: 0x27300028eded <JSFunction instantiate (sfi = 0x273000147741)>#7#
+            Module: 0x27300028eea1 <JSFunction Module (sfi = 0x2730001478e1)>#8#
+          Instance: 0x27300028f031 <JSFunction Instance (sfi = 0x2730001479ad)>#9#
+             Table: 0x27300028f119 <JSFunction Table (sfi = 0x273000147ae1)>#10#
+            Memory: 0x27300028f28d <JSFunction Memory (sfi = 0x273000147d4d)>#11#
+            Global: 0x27300028f39d <JSFunction Global (sfi = 0x273000147ee9)>#12#
+               Tag: 0x27300028f4c9 <JSFunction Tag (sfi = 0x2730001480ed)>#13#
+             JSTag: 0x273000292711 <Tag map = 0x27300028f4e9>#14#
+         Exception: 0x27300028f57d <JSFunction Exception (sfi = 0x2730001481b5)>#15#
+      CompileError: 0x27300029273d <JSFunction CompileError (sfi = 0x273000278a15)>#16#
+         LinkError: 0x27300029286d <JSFunction LinkError (sfi = 0x273000278a45)>#17#
+      RuntimeError: 0x27300029299d <JSFunction RuntimeError (sfi = 0x273000278a75)>#18#
+          Function: 0x273000298cd1 <JSFunction Function (sfi = 0x273000298ca1)>#19#
+         Suspender: 0x27300029ad91 <JSFunction Suspender (sfi = 0x27300029ad61)>#20#
+        Suspending: 0x27300029af45 <JSFunction Suspending (sfi = 0x27300029af15)>#21#
+         promising: 0x27300029b0b1 <JSFunction promising (sfi = 0x27300029b081)>#22#
+ #4# 0x27300029c889: 0x27300029c889 <JSFunction js-to-wasm:sii:i (sfi = 0x27300029c859)>
+ #5# 0x27300028edb5: 0x27300028edb5 <JSFunction compile (sfi = 0x273000147671)>
+ #6# 0x27300028edd1: 0x27300028edd1 <JSFunction validate (sfi = 0x2730001476d9)>
+ #7# 0x27300028eded: 0x27300028eded <JSFunction instantiate (sfi = 0x273000147741)>
+ #8# 0x27300028eea1: 0x27300028eea1 <JSFunction Module (sfi = 0x2730001478e1)>
+           imports: 0x27300028eed5 <JSFunction imports (sfi = 0x2730001477a9)>#23#
+           exports: 0x27300028eef1 <JSFunction exports (sfi = 0x273000147811)>#24#
+    customSections: 0x27300028ef0d <JSFunction customSections (sfi = 0x273000147879)>#25#
+ #9# 0x27300028f031: 0x27300028f031 <JSFunction Instance (sfi = 0x2730001479ad)>
+ #10# 0x27300028f119: 0x27300028f119 <JSFunction Table (sfi = 0x273000147ae1)>
+ #11# 0x27300028f28d: 0x27300028f28d <JSFunction Memory (sfi = 0x273000147d4d)>
+ #12# 0x27300028f39d: 0x27300028f39d <JSFunction Global (sfi = 0x273000147ee9)>
+ #13# 0x27300028f4c9: 0x27300028f4c9 <JSFunction Tag (sfi = 0x2730001480ed)>
+ #14# 0x273000292711: 0x273000292711 <Tag map = 0x27300028f4e9>
+ #15# 0x27300028f57d: 0x27300028f57d <JSFunction Exception (sfi = 0x2730001481b5)>
+ #16# 0x27300029273d: 0x27300029273d <JSFunction CompileError (sfi = 0x273000278a15)>
+ #17# 0x27300029286d: 0x27300029286d <JSFunction LinkError (sfi = 0x273000278a45)>
+ #18# 0x27300029299d: 0x27300029299d <JSFunction RuntimeError (sfi = 0x273000278a75)>
+ #19# 0x273000298cd1: 0x273000298cd1 <JSFunction Function (sfi = 0x273000298ca1)>
+ #20# 0x27300029ad91: 0x27300029ad91 <JSFunction Suspender (sfi = 0x27300029ad61)>
+ #21# 0x27300029af45: 0x27300029af45 <JSFunction Suspending (sfi = 0x27300029af15)>
+ #22# 0x27300029b0b1: 0x27300029b0b1 <JSFunction promising (sfi = 0x27300029b081)>
+ #23# 0x27300028eed5: 0x27300028eed5 <JSFunction imports (sfi = 0x2730001477a9)>
+ #24# 0x27300028eef1: 0x27300028eef1 <JSFunction exports (sfi = 0x273000147811)>
+ #25# 0x27300028ef0d: 0x27300028ef0d <JSFunction customSections (sfi = 0x273000147879)>
+=====================
+
+Trace/breakpoint trap (core dumped)

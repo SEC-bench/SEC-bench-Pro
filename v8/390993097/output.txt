@@ -1,0 +1,57 @@
+[*] worker warm-up done, starting exploit
+[*] exploit try 100
+[*] exploit try 200
+[*] exploit try 300
+[*] exploit try 400
+[*] exploit try 500
+[*] exploit try 600
+[*] exploit try 700
+[*] exploit try 800
+[*] exploit try 900
+[*] exploit try 1000
+[*] exploit try 1100
+[*] exploit try 1200
+[*] exploit try 1300
+[*] exploit try 1400
+[*] exploit try 1500
+[*] exploit try 1600
+[*] exploit try 1700
+[*] exploit try 1800
+[*] exploit try 1900
+[*] exploit try 2000
+[*] exploit try 2100
+[*] exploit try 2200
+[*] exploit try 2300
+[*] exploit try 2400
+[*] exploit try 2500
+[*] exploit try 2600
+[*] exploit try 2700
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 5c1f7738bd28
+
+==== C stack trace ===============================
+
+out/x64.release/d8(+0x1936a97)[0x5c2343d81a97]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x70f8b66ab330]
+out/x64.release/d8(+0x8766f9)[0x5c2342cc16f9]
+out/x64.release/d8(+0x894b83)[0x5c2342cdfb83]
+out/x64.release/d8(+0x8a18ff)[0x5c2342cec8ff]
+out/x64.release/d8(+0x889d02)[0x5c2342cd4d02]
+out/x64.release/d8(+0x88761b)[0x5c2342cd261b]
+out/x64.release/d8(+0x8878e9)[0x5c2342cd28e9]
+out/x64.release/d8(+0x886b2b)[0x5c2342cd1b2b]
+out/x64.release/d8(+0x885fe2)[0x5c2342cd0fe2]
+out/x64.release/d8(+0x8847a7)[0x5c2342ccf7a7]
+out/x64.release/d8(+0x8a7ee8)[0x5c2342cf2ee8]
+out/x64.release/d8(+0x626f1a)[0x5c2342a71f1a]
+out/x64.release/d8(+0xa6d7d7)[0x5c2342eb87d7]
+out/x64.release/d8(+0x6f6aad)[0x5c2342b41aad]
+out/x64.release/d8(+0x6f6558)[0x5c2342b41558]
+out/x64.release/d8(+0x6f75f8)[0x5c2342b425f8]
+out/x64.release/d8(+0xb7ca37)[0x5c2342fc7a37]
+out/x64.release/d8(+0x1793936)[0x5c2343bde936]
+[end of stack trace]
+Segmentation fault (core dumped)

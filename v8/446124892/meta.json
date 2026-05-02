@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446124892",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--experimental-wasm-custom-descriptors",
+  "target_source_files": [
+    "src/wasm/wasm-objects.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists on V8's JS-to-Wasm boundary because `JSToWasmObject` in `src/wasm/wasm-objects.cc` checks only canonical subtyping and ignores exactness for custom descriptors. That allows a descriptor object to cross the boundary as an exact supertype even when it is only a subtype, which in turn permits invalid described-struct instantiation and downcasts between unrelated Wasm types. The resulting type confusion can be exploited for arbitrary caged writes within the sandbox.",
+  "vrp": "55000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "48c3551179299151b044b2c161566465497c0407 [wasm-custom-desc] Fix subtyping",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973586",
+      "cl": 6973586,
+      "commit": "48c3551179299151b044b2c161566465497c0407",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6973586 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973586",
+      "source_cl": 6973586,
+      "source_commit": "48c3551179299151b044b2c161566465497c0407",
+      "source_ref": "refs/changes/86/6973586/5",
+      "source_patchset": 5
+    }
+  ]
+}

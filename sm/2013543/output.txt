@@ -1,0 +1,33 @@
+[13] Assertion failure: op->dominates(ins) (instruction is not dominated by its operands), at /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3577
+#01: ???[/out/js +0x4b96671]
+#02: ???[/out/js +0x4b994b8]
+#03: ???[/out/js +0x4b8aa05]
+#04: ???[/out/js +0x4bab4b0]
+#05: ???[/out/js +0x4baebdf]
+#06: ???[/out/js +0x4bb0272]
+#07: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5f162054869d bp 0x7fffd7eeaea0 sp 0x7fffd7eeae10 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5f162054869d in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x5f162054869d in js::jit::AssertExtendedGraphCoherency(js::jit::MIRGraph&, bool, bool) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3576:9
+    #2 0x5f162054b4b7 in js::jit::AccountForCFGChanges(js::jit::MIRGenerator const*, js::jit::MIRGraph&, bool, bool) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:2991:3
+    #3 0x5f162054b4b7 in js::jit::OptimizeIteratorIndices(js::jit::MIRGenerator const*, js::jit::MIRGraph&) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:5548:19
+    #4 0x5f162053ca04 in js::jit::OptimizeMIR(js::jit::MIRGenerator*) /src/gecko-dev/js/src/jit/Ion.cpp:1103:10
+    #5 0x5f162055d4af in js::jit::CompileBackEnd(js::jit::MIRGenerator*, js::jit::WarpSnapshot*) /src/gecko-dev/js/src/jit/Ion.cpp:1695:8
+    #6 0x5f1620560bde in js::jit::IonCompile(JSContext*, JS::Handle<JSScript*>, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1868:38
+    #7 0x5f1620560bde in js::jit::Compile(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2020:24
+    #8 0x5f1620562271 in BaselineCanEnterAtEntry(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*) /src/gecko-dev/js/src/jit/Ion.cpp:2137:25
+    #9 0x5f1620562271 in IonCompileScriptForBaseline(JSContext*, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2246:12
+    #10 0x2317c00441f5  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x0000794c61946f20  rcx = 0x0000000000000df9  rdx = 0x0000000000000000  
+rdi = 0x00005f1622991b90  rsi = 0x00007fffd7eeadc8  rbp = 0x00007fffd7eeaea0  rsp = 0x00007fffd7eeae10  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000003  r13 = 0x0000000000000000  r14 = 0x0000794c61946ed0  r15 = 0x00000f298c328dda  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

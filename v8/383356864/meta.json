@@ -1,0 +1,56 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:383356864",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--turboshaft-wasm --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc"
+  ],
+  "target_subdir": [
+    "src/compiler/turboshaft"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type confusion vulnerability exists in V8's WasmGCTypeAnalyzer, the Turboshaft analyzer responsible for inferring type information for WasmGC operations to allow WasmGCTypedOptimizationReducer to eliminate redundant type checks at compile time. In WasmGCTypeAnalyzer::Run(), when a loop backedge is encountered and the type feedback has not yet stabilized, the analyzer calls iterator.MarkLoopForRevisitSkipHeader() to schedule the loop body for re-processing while skipping the already-revisited loop header. However, this optimization is incorrect for single-block loops (e.g., infinite loops with no branches), where the loop header IS the entire loop body. In such cases, MarkLoopForRevisitSkipHeader() becomes a no-op because skipping the header leaves no blocks to revisit, causing the fixed-point analysis to terminate prematurely after only two iterations. If the type information does not stabilize within those two iterations (which can happen due to, e.g., a chain of Phi nodes), WasmGCTypeAnalyzer reports incorrect/imprecise type information to WasmGCTypedOptimizationReducer, which may then incorrectly eliminate necessary type checks. This leads to type confusion that can be exploited to dereference fake objects or achieve out-of-sandbox writes.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 162,
+      "evidence_text": "Fix: [https://crrev.com/c/6087921](<https://crrev.com/c/6087921>)",
+      "url": "https://crrev.com/c/6087921",
+      "cl": 6087921,
+      "commit": "f231d83cb3c08754413b3ee1aa249cebd4d5445f",
+      "description": "Local patch exported from https://crrev.com/c/6087921 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6087921",
+      "source_cl": 6087921,
+      "source_commit": "f231d83cb3c08754413b3ee1aa249cebd4d5445f",
+      "source_ref": "refs/changes/21/6087921/2",
+      "source_patchset": 2
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "context": "merge-context",
+      "evidence_lineno": 423,
+      "evidence_text": "[https://crrev.com/c/6087921](<https://crrev.com/c/6087921>) and [https://crrev.com/c/6092870](<https://crrev.com/c/6092870>) approved for merges; please merge asap to be included in next respective updates;",
+      "url": "https://crrev.com/c/6092870",
+      "cl": 6092870,
+      "commit": "c84e01e92bfd61d29541c59e378b9a15ba6fc891",
+      "description": "Local patch exported from https://crrev.com/c/6092870 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6092870",
+      "source_cl": 6092870,
+      "source_commit": "c84e01e92bfd61d29541c59e378b9a15ba6fc891",
+      "source_ref": "refs/changes/70/6092870/3",
+      "source_patchset": 3
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+Verified on 2026-04-16.
+Recovered from failed/451355210 by restoring the report-aligned ASan trap handling in the Docker image.
+Reproduced with ./crash_check.sh 451355210.
+Result: CONFIMRED: ASAN_CRASH.

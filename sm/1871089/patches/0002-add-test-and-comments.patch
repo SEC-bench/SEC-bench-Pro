@@ -1,0 +1,60 @@
+From 1f75ae1cc019051f87d7b45f9aec76ef7c84dfc7 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Sat, 9 Mar 2024 07:06:03 +0000
+Subject: [PATCH] Bug 1871089 - Add test and comments. r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D197609
+---
+ js/src/jit-test/tests/warp/bug1871089.js | 13 +++++++++++++
+ js/src/jit/BaselineCacheIRCompiler.cpp   |  3 +++
+ js/src/jit/JitScript.cpp                 |  3 +++
+ 3 files changed, 19 insertions(+)
+ create mode 100644 js/src/jit-test/tests/warp/bug1871089.js
+
+diff --git a/js/src/jit-test/tests/warp/bug1871089.js b/js/src/jit-test/tests/warp/bug1871089.js
+new file mode 100644
+index 0000000000000..8abddb65744bd
+--- /dev/null
++++ b/js/src/jit-test/tests/warp/bug1871089.js
+@@ -0,0 +1,13 @@
++// |jit-test| --fast-warmup
++var i = 0;
++function a() {
++    if (i++ > 50) {
++        return;
++    }
++    function b() {
++        new a("abcdefghijklm");
++    }
++    [new b];
++}
++gczeal(4);
++a();
+diff --git a/js/src/jit/BaselineCacheIRCompiler.cpp b/js/src/jit/BaselineCacheIRCompiler.cpp
+index 519ecf1937e07..92490ef8b8d50 100644
+--- a/js/src/jit/BaselineCacheIRCompiler.cpp
++++ b/js/src/jit/BaselineCacheIRCompiler.cpp
+@@ -3451,6 +3451,9 @@ void BaselineCacheIRCompiler::createThis(Register argcReg, Register calleeReg,
+ 
+   // Restore saved registers.
+   masm.PopRegsInMask(liveNonGCRegs);
++
++  // Restore ICStubReg. The stub might have been moved if CreateThisFromIC
++  // discarded JIT code.
+   Address stubAddr(FramePointer, BaselineStubFrameLayout::ICStubOffsetFromFP);
+   masm.loadPtr(stubAddr, ICStubReg);
+ 
+diff --git a/js/src/jit/JitScript.cpp b/js/src/jit/JitScript.cpp
+index f2f6ee2c25c35..8d84a6aec27dc 100644
+--- a/js/src/jit/JitScript.cpp
++++ b/js/src/jit/JitScript.cpp
+@@ -718,6 +718,9 @@ static void MarkActiveICScriptsAndCopyStubs(
+           ICCacheIRStub* newStub = stub->clone(cx->runtime(), newStubSpace);
+           layout->setStubPtr(newStub);
+ 
++          // If this is a trial-inlining call site, also preserve the callee
++          // ICScript. Inlined constructor calls invoke CreateThisFromIC (which
++          // can trigger GC) before using the inlined ICScript.
+           JSJitFrameIter parentFrame(frame);
+           ++parentFrame;
+           BaselineFrame* blFrame = parentFrame.baselineFrame();

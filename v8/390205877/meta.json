@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:390205877",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--fuzzing --sandbox-fuzzing --single-threaded --allow-natives-syntax --expose-gc",
+  "target_source_files": [
+    "src/execution/tiering-manager.cc"
+  ],
+  "target_subdir": [
+    "src/execution"
+  ],
+  "target_vulnerability_type": "Undefined Behavior (invalid enum variant)",
+  "error_type": "ASAN_CRASH",
+  "description": "A sandbox bypass vulnerability caused by undefined behavior in ShouldResetInterruptBudgetByICChange (tiering-manager.cc) when processing an out-of-range CachedTieringDecision enum value. The CachedTieringDecision enum has 6 valid variants (kPending=0 through kNormal=5), but the field is stored as a 3-bit value in the flags2 byte of SharedFunctionInfo objects, which live on the V8 sandbox heap and are therefore attacker-controllable. With 3 bits, values 0-7 are representable, meaning values 6 and 7 are invalid enum variants. When an attacker corrupts the cached_tiering_decision bits to an out-of-range value, the switch statement in ShouldResetInterruptBudgetByICChange has no matching case and no default branch, triggering undefined behavior. The compiler generates a ud2 (undefined instruction) for this unreachable path, causing an ILL crash that constitutes a V8 sandbox violation. The trigger path is: IC miss during property load -> LoadIC::UpdateCaches -> IC::OnFeedbackChanged -> TieringManager::NotifyICChanged -> ShouldResetInterruptBudgetByICChange with the corrupted enum.",
+  "vrp": 0,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "3517e6ced4eddbe54c1d468c91622494190984cc [sandbox] fix UB after switch on CachedTieringDecision enum",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6179823",
+      "cl": 6179823,
+      "commit": "3517e6ced4eddbe54c1d468c91622494190984cc",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6179823 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6179823",
+      "source_cl": 6179823,
+      "source_commit": "3517e6ced4eddbe54c1d468c91622494190984cc",
+      "source_ref": "refs/changes/23/6179823/3",
+      "source_patchset": 3
+    }
+  ]
+}

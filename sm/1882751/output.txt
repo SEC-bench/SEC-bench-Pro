@@ -1,0 +1,34 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x76143730092c (pc 0x7612385326b9 bp 0x7ffdd259e430 sp 0x7ffdd259e3c0 T0)
+==13==The signal is caused by a WRITE memory access.
+    #0 0x7612385326b9  (<unknown module>)
+    #1 0x761238533cbe  (<unknown module>)
+    #2 0x5f9e67399ce4 in js::wasm::Instance::callExport(JSContext*, unsigned int, JS::CallArgs, js::wasm::CoercionLevel) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:3199:10
+    #3 0x5f9e673c056f in WasmCall(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1842:19
+    #4 0x5f9e648be6f7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:479:13
+    #5 0x5f9e648743a4 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:573:12
+    #6 0x5f9e648919c5 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:645:10
+    #7 0x5f9e648919c5 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3060:16
+    #8 0x5f9e64872a69 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:451:13
+    #9 0x5f9e6487930e in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:838:13
+    #10 0x5f9e64879ba9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:870:10
+    #11 0x5f9e64bb522a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #12 0x5f9e64bb56a3 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #13 0x5f9e646ed702 in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1200:10
+    #14 0x5f9e646ec1a6 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #15 0x5f9e64674da7 in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10991:10
+    #16 0x5f9e64674da7 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11250:12
+    #17 0x5f9e64667c98 in main /src/gecko-dev/js/src/shell/js.cpp:11758:12
+    #18 0x7a12ba7801c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #19 0x7a12ba78028a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x5f9e6456daf4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2ad3af4) (BuildId: 2d1841e562a21cb918b429c747b1a1ad)
+
+==13==Register values:
+rax = 0x000000000dc6d533  rbx = 0x00000000fffffffe  rcx = 0x0000761237300908  rdx = 0x0000761237300930  
+rdi = 0x00007612373008e8  rsi = 0x000026a7ad86b180  rbp = 0x00007ffdd259e430  rsp = 0x00007ffdd259e3c0  
+ r8 = 0x00000ec246e60119   r9 = 0x00007612373008d7  r10 = 0x00007802b9be0080  r11 = 0x00000ec2c6e58118  
+r12 = 0x000077a2b9c4e580  r13 = 0x0000000000000030  r14 = 0x000077b2b9bf2c80  r15 = 0x0000761134fc6000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==13==ABORTING

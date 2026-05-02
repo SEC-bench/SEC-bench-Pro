@@ -1,0 +1,221 @@
+From 50eba5e6c269c71d6e0e758b84fafe8d5c37d210 Mon Sep 17 00:00:00 2001
+From: pthier <pthier@chromium.org>
+Date: Thu, 16 Oct 2025 15:16:31 +0200
+Subject: [PATCH] [json] Parser: Early return if Expect() fails
+
+Expect()/ExpectNext() used to simply set the cursor to the end of the
+input if the expectation failed.
+The issue is that a failed expectation can trigger a GC due to
+allocation of the Exception object.
+To avoid surprises, Expect() and ExpectNext() now return a bool value
+indicating if the expectation failed. Checking of this value is enforced
+and all current usages are replaced by a Macro that returns early if an
+exception was thrown.
+
+Drive-by: Also force checking the return value of Check().
+
+Fixed: 452296415
+Change-Id: I513955f1ea0eb44cd0a59eb2aa57caee8f3082fb
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/7048404
+Reviewed-by: Igor Sheludko <ishell@chromium.org>
+Commit-Queue: Patrick Thier <pthier@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#103167}
+---
+ src/json/json-parser.cc | 58 +++++++++++++++++++++++++++--------------
+ src/json/json-parser.h  | 21 ++++++++-------
+ 2 files changed, 50 insertions(+), 29 deletions(-)
+
+diff --git a/src/json/json-parser.cc b/src/json/json-parser.cc
+index 12ad63250da..f96fa8e20b4 100644
+--- a/src/json/json-parser.cc
++++ b/src/json/json-parser.cc
+@@ -130,6 +130,15 @@ static const constexpr uint8_t character_json_scan_flags[256] = {
+ #undef CALL_GET_SCAN_FLAGS
+ };
+ 
++#define EXPECT_RETURN_ON_ERROR(token, msg, ret) \
++  if (V8_UNLIKELY(!Expect(token, msg))) {       \
++    return ret;                                 \
++  }
++#define EXPECT_NEXT_RETURN_ON_ERROR(token, msg, ret) \
++  if (V8_UNLIKELY(!ExpectNext(token, msg))) {        \
++    return ret;                                      \
++  }
++
+ }  // namespace
+ 
+ MaybeHandle<Object> JsonParseInternalizer::Internalize(
+@@ -1539,8 +1548,9 @@ bool JsonParser<Char>::FastKeyMatch(const uint8_t* key_chars,
+ 
+ template <typename Char>
+ bool JsonParser<Char>::ParseJsonPropertyValue(const JsonString& key) {
+-  ExpectNext(JsonToken::COLON,
+-             MessageTemplate::kJsonParseExpectedColonAfterPropertyName);
++  EXPECT_NEXT_RETURN_ON_ERROR(
++      JsonToken::COLON,
++      MessageTemplate::kJsonParseExpectedColonAfterPropertyName, false);
+   Handle<Object> value;
+   if (V8_UNLIKELY(!ParseJsonValueRecursive().ToHandle(&value))) return false;
+   property_stack_.emplace_back(key, value);
+@@ -1586,7 +1596,7 @@ bool JsonParser<Char>::ParseJsonObjectProperties(
+   using FastIterableState = DescriptorArray::FastIterableState;
+   if constexpr (fast_iterable_state == FastIterableState::kJsonSlow) {
+     do {
+-      ExpectNext(JsonToken::STRING, first_token_msg);
++      EXPECT_NEXT_RETURN_ON_ERROR(JsonToken::STRING, first_token_msg, false);
+       first_token_msg =
+           MessageTemplate::kJsonParseExpectedDoubleQuotedPropertyName;
+       JsonString key = ScanJsonPropertyKey(cont);
+@@ -1596,7 +1606,7 @@ bool JsonParser<Char>::ParseJsonObjectProperties(
+     DCHECK_GT(descriptors->number_of_descriptors(), 0);
+     InternalIndex idx{0};
+     do {
+-      ExpectNext(JsonToken::STRING, first_token_msg);
++      EXPECT_NEXT_RETURN_ON_ERROR(JsonToken::STRING, first_token_msg, false);
+       first_token_msg =
+           MessageTemplate::kJsonParseExpectedDoubleQuotedPropertyName;
+       bool key_match;
+@@ -1764,7 +1774,8 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonObject(Handle<Map> feedback) {
+     return {};
+   }
+ 
+-  Expect(JsonToken::RBRACE, MessageTemplate::kJsonParseExpectedCommaOrRBrace);
++  EXPECT_RETURN_ON_ERROR(JsonToken::RBRACE,
++                         MessageTemplate::kJsonParseExpectedCommaOrRBrace, {});
+   Handle<Object> result = BuildJsonObject<false>(cont, feedback);
+   property_stack_.resize(cont.index);
+   return cont.scope.CloseAndEscape(result);
+@@ -1810,8 +1821,9 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonArray() {
+       SkipWhitespace();
+       continue;
+     } else {
+-      Expect(JsonToken::RBRACK,
+-             MessageTemplate::kJsonParseExpectedCommaOrRBrack);
++      EXPECT_RETURN_ON_ERROR(JsonToken::RBRACK,
++                             MessageTemplate::kJsonParseExpectedCommaOrRBrack,
++                             {});
+       success = true;
+       break;
+     }
+@@ -1879,7 +1891,8 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonArray() {
+     element_stack_.emplace_back(value);
+   }
+ 
+-  Expect(JsonToken::RBRACK, MessageTemplate::kJsonParseExpectedCommaOrRBrack);
++  EXPECT_RETURN_ON_ERROR(JsonToken::RBRACK,
++                         MessageTemplate::kJsonParseExpectedCommaOrRBrack, {});
+   Handle<Object> result = BuildJsonArray(start);
+   element_stack_.resize(start);
+   return handle_scope.CloseAndEscape(result);
+@@ -1987,15 +2000,17 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
+                                   property_stack_.size());
+ 
+           // Parse the property key.
+-          ExpectNext(JsonToken::STRING,
+-                     MessageTemplate::kJsonParseExpectedPropNameOrRBrace);
++          EXPECT_NEXT_RETURN_ON_ERROR(
++              JsonToken::STRING,
++              MessageTemplate::kJsonParseExpectedPropNameOrRBrace, {});
+           property_stack_.emplace_back(ScanJsonPropertyKey(&cont));
+           if constexpr (should_track_json_source) {
+             property_val_node_stack.emplace_back(Handle<Object>());
+           }
+ 
+-          ExpectNext(JsonToken::COLON,
+-                     MessageTemplate::kJsonParseExpectedColonAfterPropertyName);
++          EXPECT_NEXT_RETURN_ON_ERROR(
++              JsonToken::COLON,
++              MessageTemplate::kJsonParseExpectedColonAfterPropertyName, {});
+ 
+           // Continue to start producing the first property value.
+           continue;
+@@ -2091,17 +2106,18 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
+ 
+           if (V8_LIKELY(Check(JsonToken::COMMA))) {
+             // Parse the property key.
+-            ExpectNext(
++            EXPECT_NEXT_RETURN_ON_ERROR(
+                 JsonToken::STRING,
+-                MessageTemplate::kJsonParseExpectedDoubleQuotedPropertyName);
++                MessageTemplate::kJsonParseExpectedDoubleQuotedPropertyName,
++                {});
+ 
+             property_stack_.emplace_back(ScanJsonPropertyKey(&cont));
+             if constexpr (should_track_json_source) {
+               property_val_node_stack.emplace_back(Handle<Object>());
+             }
+-            ExpectNext(
++            EXPECT_NEXT_RETURN_ON_ERROR(
+                 JsonToken::COLON,
+-                MessageTemplate::kJsonParseExpectedColonAfterPropertyName);
++                MessageTemplate::kJsonParseExpectedColonAfterPropertyName, {});
+ 
+             // Break to start producing the subsequent property value.
+             break;
+@@ -2121,8 +2137,9 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
+             }
+           }
+           value = BuildJsonObject<should_track_json_source>(cont, feedback);
+-          Expect(JsonToken::RBRACE,
+-                 MessageTemplate::kJsonParseExpectedCommaOrRBrace);
++          EXPECT_RETURN_ON_ERROR(
++              JsonToken::RBRACE,
++              MessageTemplate::kJsonParseExpectedCommaOrRBrace, {});
+           // Return the object.
+           if constexpr (should_track_json_source) {
+             size_t start = cont.index;
+@@ -2172,8 +2189,9 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
+           if (V8_LIKELY(Check(JsonToken::COMMA))) break;
+ 
+           value = BuildJsonArray(cont.index);
+-          Expect(JsonToken::RBRACK,
+-                 MessageTemplate::kJsonParseExpectedCommaOrRBrack);
++          EXPECT_RETURN_ON_ERROR(
++              JsonToken::RBRACK,
++              MessageTemplate::kJsonParseExpectedCommaOrRBrack, {});
+           // Return the array.
+           if constexpr (should_track_json_source) {
+             size_t start = cont.index;
+diff --git a/src/json/json-parser.h b/src/json/json-parser.h
+index 988593af7e3..cb55bfb51c3 100644
+--- a/src/json/json-parser.h
++++ b/src/json/json-parser.h
+@@ -244,23 +244,26 @@ class JsonParser final {
+     advance();
+   }
+ 
+-  void Expect(JsonToken token,
+-              std::optional<MessageTemplate> errorMessage = std::nullopt) {
++  V8_WARN_UNUSED_RESULT bool Expect(
++      JsonToken token,
++      std::optional<MessageTemplate> errorMessage = std::nullopt) {
+     if (V8_LIKELY(peek() == token)) {
+       advance();
+-    } else {
+-      errorMessage ? ReportUnexpectedToken(peek(), errorMessage.value())
+-                   : ReportUnexpectedToken(peek());
++      return true;
+     }
++    errorMessage ? ReportUnexpectedToken(peek(), errorMessage.value())
++                 : ReportUnexpectedToken(peek());
++    return false;
+   }
+ 
+-  void ExpectNext(JsonToken token,
+-                  std::optional<MessageTemplate> errorMessage = std::nullopt) {
++  V8_WARN_UNUSED_RESULT bool ExpectNext(
++      JsonToken token,
++      std::optional<MessageTemplate> errorMessage = std::nullopt) {
+     SkipWhitespace();
+-    errorMessage ? Expect(token, errorMessage.value()) : Expect(token);
++    return errorMessage ? Expect(token, errorMessage.value()) : Expect(token);
+   }
+ 
+-  bool Check(JsonToken token) {
++  V8_WARN_UNUSED_RESULT bool Check(JsonToken token) {
+     SkipWhitespace();
+     if (next_ != token) return false;
+     advance();
+-- 
+2.43.0
+

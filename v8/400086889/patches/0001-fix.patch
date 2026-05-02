@@ -1,0 +1,98 @@
+From 700e9d09e4c916e7ea510b85f53e95e1f5ea2f93 Mon Sep 17 00:00:00 2001
+From: Jakob Kummerow <jkummerow@chromium.org>
+Date: Mon, 3 Mar 2025 21:05:35 +0100
+Subject: [PATCH] [wasm] Restore lost CHECK for max canonical type index
+
+Follow-up to crrev.com/c/6288535
+
+Fixed: 400086889
+Change-Id: I6dd74e532419e6b31cbb13d3cfd26deda0f3fe85
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6316677
+Auto-Submit: Jakob Kummerow <jkummerow@chromium.org>
+Reviewed-by: Matthias Liedtke <mliedtke@chromium.org>
+Commit-Queue: Matthias Liedtke <mliedtke@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#99046}
+---
+ src/wasm/canonical-types.cc | 22 ++++++++++++++--------
+ src/wasm/canonical-types.h  | 14 +++-----------
+ src/wasm/value-type.h       |  6 +++++-
+ 3 files changed, 22 insertions(+), 20 deletions(-)
+
+diff --git a/src/wasm/canonical-types.cc b/src/wasm/canonical-types.cc
+index f2a369c62b4..d5b738676fd 100644
+--- a/src/wasm/canonical-types.cc
++++ b/src/wasm/canonical-types.cc
+@@ -296,14 +296,20 @@ TypeCanonicalizer::CanonicalType TypeCanonicalizer::CanonicalizeTypeDef(
+ 
+   auto CanonicalizeTypeIndex = [=](ModuleTypeIndex type_index) {
+     DCHECK(type_index.valid());
+-    return type_index < recgroup_start
+-               // This references a type from an earlier recgroup; use the
+-               // already-canonicalized type index.
+-               ? module->canonical_type_id(type_index)
+-               // For types within the same recgroup, generate indexes assuming
+-               // that this is a new canonical recgroup.
+-               : CanonicalTypeIndex{canonical_recgroup_start.index +
+-                                    (type_index.index - recgroup_start.index)};
++    if (type_index < recgroup_start) {
++      // This references a type from an earlier recgroup; use the
++      // already-canonicalized type index.
++      return module->canonical_type_id(type_index);
++    }
++    // For types within the same recgroup, generate indexes assuming that this
++    // is a new canonical recgroup. To prevent truncation in the
++    // CanonicalValueType's bit field, we must check the range here.
++    uint32_t new_index = canonical_recgroup_start.index +
++                         (type_index.index - recgroup_start.index);
++    if (V8_UNLIKELY(new_index >= kMaxCanonicalTypes)) {
++      V8::FatalProcessOutOfMemory(nullptr, "too many canonicalized types");
++    }
++    return CanonicalTypeIndex{new_index};
+   };
+ 
+   auto CanonicalizeValueType = [=](ValueType type) {
+diff --git a/src/wasm/canonical-types.h b/src/wasm/canonical-types.h
+index 0478e81bdb8..a8c8f1ddcc8 100644
+--- a/src/wasm/canonical-types.h
++++ b/src/wasm/canonical-types.h
+@@ -22,17 +22,9 @@ class CanonicalTypeNamesProvider;
+ 
+ // We use ValueType instances constructed from canonical type indices, so we
+ // can't let them get bigger than what we have storage space for.
+-// TODO(jkummerow): Raise this limit. Possible options:
+-// - increase the size of ValueType::HeapTypeField, using currently-unused bits.
+-// - change the encoding of ValueType: one bit says whether it's a ref type,
+-//   the other bits then encode the index or the kind of non-ref type.
+-// - refactor the TypeCanonicalizer's internals to no longer use ValueTypes
+-//   and related infrastructure, and use a wider encoding of canonicalized
+-//   type indices only here.
+-// - wait for 32-bit platforms to no longer be relevant, and increase the
+-//   size of ValueType to 64 bits.
+-// None of this seems urgent, as we have no evidence of the current limit
+-// being an actual limitation in practice.
++// We could raise this limit using unused bits in the ValueType, but that
++// doesn't seem urgent, as we have no evidence of the current limit being
++// an actual limitation in practice.
+ static constexpr size_t kMaxCanonicalTypes = kV8MaxWasmTypes;
+ // We don't want any valid modules to fail canonicalization.
+ static_assert(kMaxCanonicalTypes >= kV8MaxWasmTypes);
+diff --git a/src/wasm/value-type.h b/src/wasm/value-type.h
+index cd2a1320dfa..ff3ec6ae727 100644
+--- a/src/wasm/value-type.h
++++ b/src/wasm/value-type.h
+@@ -684,7 +684,11 @@ class ValueTypeBase {
+             value_type_impl::IsExactField::encode(exact) |
+             value_type_impl::IsSharedField::encode(shared) |
+             value_type_impl::RefTypeKindField::encode(ref_type_kind) |
+-            value_type_impl::PayloadField::encode(index.index)) {}
++            value_type_impl::PayloadField::encode(index.index)) {
++    // We shouldn't need this, but experience has shown that having an extra
++    // "safety net" here is valuable every now and then.
++    CHECK(value_type_impl::PayloadField::is_valid(index.index));
++  }
+ 
+   constexpr TypeIndex raw_index() const {
+     DCHECK(has_index());
+-- 
+2.43.0
+

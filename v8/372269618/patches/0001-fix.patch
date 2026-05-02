@@ -1,0 +1,42 @@
+From e7ccf0af1bdddd20dc58e1790a94739dba0209a3 Mon Sep 17 00:00:00 2001
+From: Thibaud Michaud <thibaudm@chromium.org>
+Date: Thu, 10 Oct 2024 18:54:04 +0200
+Subject: [PATCH] [wasm] Fix default externref/exnref reference
+
+- The default nullexternref should be null instead of undefined
+- The default exnref/nullexnref should be null instead of wasm_null
+
+R=mliedtke@chromium.org
+
+Fixed: 372285204,372269618
+Change-Id: Id5addce2b196f7ba81aac3c2dd9447a91ed2ce2b
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5922878
+Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+Reviewed-by: Matthias Liedtke <mliedtke@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#96531}
+---
+ src/wasm/wasm-js.cc | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
+index 2e29f3ccd75..efbf51c2443 100644
+--- a/src/wasm/wasm-js.cc
++++ b/src/wasm/wasm-js.cc
+@@ -1385,9 +1385,12 @@ i::Handle<i::HeapObject> DefaultReferenceValue(i::Isolate* isolate,
+   DCHECK(type.is_object_reference());
+   // Use undefined for JS type (externref) but null for wasm types as wasm does
+   // not know undefined.
+-  if (type.heap_representation() == i::wasm::HeapType::kExtern ||
+-      type.heap_representation() == i::wasm::HeapType::kNoExtern) {
++  if (type.heap_representation() == i::wasm::HeapType::kExtern) {
+     return isolate->factory()->undefined_value();
++  } else if (type.heap_representation() == i::wasm::HeapType::kNoExtern ||
++             type.heap_representation() == i::wasm::HeapType::kExn ||
++             type.heap_representation() == i::wasm::HeapType::kNoExn) {
++    return isolate->factory()->null_value();
+   }
+   return isolate->factory()->wasm_null();
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,31 @@
+From 34384ff7e250e7bdf10717337eb689c87138863c Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Thu, 22 Jan 2026 08:52:57 +0000
+Subject: [PATCH] Bug 2011069 - Wait for any background sweeping to finish
+ before marking gray bits invalid r=jandem
+
+Marking gray bits invalid iterates the symbol arenas but this list can also be
+modified by backgroun sweeping. The patch waits for any background sweeping to
+finish first. Marking gray bits invalid only happens when background sweeping
+is running in response to OOM so this is not a problem.
+
+I tried adding an assert to catch this but it turns out it's not
+straightforward to do this.
+
+Differential Revision: https://phabricator.services.mozilla.com/D279831
+---
+ js/src/gc/GC.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/js/src/gc/GC.cpp b/js/src/gc/GC.cpp
+index e77b500ad659c..5f66b5728b905 100644
+--- a/js/src/gc/GC.cpp
++++ b/js/src/gc/GC.cpp
+@@ -3887,6 +3887,7 @@ GCRuntime::IncrementalResult GCRuntime::resetIncrementalGC(
+ }
+ 
+ void GCRuntime::setGrayBitsInvalid() {
++  waitBackgroundSweepEnd();
+   grayBitsValid = false;
+   atomMarking.unmarkAllGrayReferences(this);
+ }

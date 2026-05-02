@@ -1,0 +1,99 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+=================================================================
+==10==ERROR: AddressSanitizer: heap-use-after-free on address 0x6f5d639ef228 at pc 0x643aa7c2aea5 bp 0x7ffd81a52f80 sp 0x7ffd81a52f78
+READ of size 8 at 0x6f5d639ef228 thread T0
+    #0 0x643aa7c2aea4 in get third_party/libc++/src/include/__memory/unique_ptr.h:268:94
+    #1 0x643aa7c2aea4 in IsLargePage src/heap/mutable-page-metadata.h:281:33
+    #2 0x643aa7c2aea4 in v8::internal::MemoryAllocator::DeleteMemoryChunk(v8::internal::MutablePageMetadata*) src/heap/memory-allocator.cc:663:17
+    #3 0x643aa7c72adc in v8::internal::PagePool::ReleaseOnTearDown(v8::internal::Isolate*) src/heap/page-pool.cc:72:11
+    #4 0x643aa7a8a149 in v8::internal::Heap::TearDown() src/heap/heap.cc:6223:31
+    #5 0x643aa78c2cc6 in v8::internal::Isolate::Deinit() src/execution/isolate.cc:4547:9
+    #6 0x643aa78c1ed0 in v8::internal::Isolate::Delete(v8::internal::Isolate*) src/execution/isolate.cc:4137:12
+    #7 0x643aa708093e in v8::Shell::OnExit(v8::Isolate*, bool) src/d8/d8.cc:4471:14
+    #8 0x643aa709829c in v8::Shell::Main(int, char**) src/d8/d8.cc:6874:3
+    #9 0x710d6497e1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #10 0x710d6497e28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x643aa6f57029 in _start (/src/v8/out/x64.asan/d8+0x1143029) (BuildId: 47bbc0a8c91a8f29)
+
+0x6f5d639ef228 is located 296 bytes inside of 8528-byte region [0x6f5d639ef100,0x6f5d639f1250)
+freed by thread T0 here:
+    #0 0x643aa703189d in operator delete(void*) /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_new_delete.cpp:143:3
+    #1 0x643aa7b36015 in v8::internal::LargeObjectSpace::TearDown() src/heap/large-spaces.cc:73:33
+    #2 0x643aa7b39823 in v8::internal::LargeObjectSpace::~LargeObjectSpace() src/heap/large-spaces.h:38:34
+    #3 0x643aa7b3979d in v8::internal::OldLargeObjectSpace::~OldLargeObjectSpace() src/heap/large-spaces.h:144:7
+    #4 0x643aa7a89f70 in operator() third_party/libc++/src/include/__memory/unique_ptr.h:76:5
+    #5 0x643aa7a89f70 in reset third_party/libc++/src/include/__memory/unique_ptr.h:287:7
+    #6 0x643aa7a89f70 in v8::internal::Heap::TearDown() src/heap/heap.cc:6218:15
+    #7 0x643aa78c2cc6 in v8::internal::Isolate::Deinit() src/execution/isolate.cc:4547:9
+    #8 0x643aa78c1ed0 in v8::internal::Isolate::Delete(v8::internal::Isolate*) src/execution/isolate.cc:4137:12
+    #9 0x643aa708093e in v8::Shell::OnExit(v8::Isolate*, bool) src/d8/d8.cc:4471:14
+    #10 0x643aa709829c in v8::Shell::Main(int, char**) src/d8/d8.cc:6874:3
+    #11 0x710d6497e1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x710d6497e28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #13 0x643aa6f57029 in _start (/src/v8/out/x64.asan/d8+0x1143029) (BuildId: 47bbc0a8c91a8f29)
+
+previously allocated by thread T0 here:
+    #0 0x643aa703103d in operator new(unsigned long) /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_new_delete.cpp:86:3
+    #1 0x643aa7c2b73d in v8::internal::MemoryAllocator::AllocatePage(v8::internal::MemoryAllocator::AllocationMode, v8::internal::Space*, v8::internal::Executability) src/heap/memory-allocator.cc:393:16
+    #2 0x643aa7c7c3a6 in v8::internal::PagedSpaceBase::TryExpand(v8::internal::LocalHeap*, v8::internal::AllocationOrigin) src/heap/paged-spaces.cc:305:52
+    #3 0x643aa7b44edf in v8::internal::PagedSpaceAllocatorPolicy::TryExpandAndAllocate(unsigned long, v8::internal::AllocationOrigin) src/heap/main-allocator.cc:775:18
+    #4 0x643aa7b4438c in v8::internal::PagedSpaceAllocatorPolicy::RefillLab(int, v8::internal::AllocationOrigin) src/heap/main-allocator.cc:748:9
+    #5 0x643aa7b3fe9f in v8::internal::MainAllocator::EnsureAllocation(int, v8::internal::AllocationAlignment, v8::internal::AllocationOrigin) src/heap/main-allocator.cc:333:29
+    #6 0x643aa7b3f9a1 in v8::internal::MainAllocator::AllocateRawSlowUnaligned(int, v8::internal::AllocationOrigin) src/heap/main-allocator.cc:212:8
+    #7 0x643aa8b2d06a in AllocateRaw src/heap/main-allocator-inl.h:39:31
+    #8 0x643aa8b2d06a in AllocateRaw<(v8::internal::AllocationType)1> src/heap/heap-allocator-inl.h:130:35
+    #9 0x643aa8b2d06a in AllocateRawWith<(v8::internal::HeapAllocator::AllocationRetryMode)1> src/heap/heap-allocator-inl.h:227:14
+    #10 0x643aa8b2d06a in v8::internal::Heap::AllocateRawOrFail(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) src/heap/heap-inl.h:204:9
+    #11 0x643aa8b26460 in Allocate src/snapshot/deserializer.cc:1665:50
+    #12 0x643aa8b26460 in v8::internal::Deserializer<v8::internal::Isolate>::ReadObject(v8::internal::SnapshotSpace) src/snapshot/deserializer.cc:800:7
+    #13 0x643aa8b3f4ce in int v8::internal::Deserializer<v8::internal::Isolate>::ReadNewObject<v8::internal::SlotAccessorForRootSlots>(unsigned char, v8::internal::SlotAccessorForRootSlots) src/snapshot/deserializer.cc:1098:42
+    #14 0x643aa8b2802e in ReadData src/snapshot/deserializer.cc:975:16
+    #15 0x643aa8b2802e in v8::internal::Deserializer<v8::internal::Isolate>::VisitRootPointers(v8::internal::Root, char const*, v8::internal::FullObjectSlot, v8::internal::FullObjectSlot) src/snapshot/deserializer.cc:381:3
+    #16 0x643aa7a80c1e in v8::internal::Heap::IterateRoots(v8::internal::RootVisitor*, v8::base::EnumSet<v8::internal::SkipRoot, int>, v8::internal::Heap::IterateRootsMode) src/heap/heap.cc:4675:6
+    #17 0x643aa8baaef3 in v8::internal::StartupDeserializer::DeserializeIntoIsolate() src/snapshot/startup-deserializer.cc:42:24
+    #18 0x643aa78d08f8 in v8::internal::Isolate::Init(v8::internal::SnapshotData*, v8::internal::SnapshotData*, v8::internal::SnapshotData*, bool) src/execution/isolate.cc:5791:26
+    #19 0x643aa78d2698 in v8::internal::Isolate::InitWithSnapshot(v8::internal::SnapshotData*, v8::internal::SnapshotData*, v8::internal::SnapshotData*, bool) src/execution/isolate.cc:5245:10
+    #20 0x643aa8b71187 in v8::internal::Snapshot::Initialize(v8::internal::Isolate*) src/snapshot/snapshot.cc:198:19
+    #21 0x643aa74829b5 in v8::Isolate::Initialize(v8::Isolate*, v8::Isolate::CreateParams const&) src/api/api.cc:10088:8
+    #22 0x643aa7482f84 in New src/api/api.cc:10127:3
+    #23 0x643aa7482f84 in v8::Isolate::New(v8::Isolate::CreateParams const&) src/api/api.cc:10121:10
+    #24 0x643aa709765b in v8::Shell::Main(int, char**) src/d8/d8.cc:6684:22
+    #25 0x710d6497e1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x710d6497e28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #27 0x643aa6f57029 in _start (/src/v8/out/x64.asan/d8+0x1143029) (BuildId: 47bbc0a8c91a8f29)
+
+SUMMARY: AddressSanitizer: heap-use-after-free third_party/libc++/src/include/__memory/unique_ptr.h:268:94 in get
+Shadow bytes around the buggy address:
+  0x6f5d639eef80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f5d639ef000: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f5d639ef080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f5d639ef100: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef180: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+=>0x6f5d639ef200: fd fd fd fd fd[fd]fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef280: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef300: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef380: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef400: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f5d639ef480: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==10==ABORTING
+
+## V8 sandbox violation detected!

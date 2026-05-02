@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:371565065",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/runtime/runtime-wasm.cc",
+    "src/wasm/module-instantiate.cc"
+  ],
+  "target_subdir": [
+    "src/runtime",
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type confusion vulnerability exists in V8's WebAssembly wasm-to-JS wrapper tier-up logic in Runtime_TierUpWasmToJSWrapper() (src/runtime/runtime-wasm.cc). The bug is triggered when a cross-module function table import is used: Module A imports a JS function, creates a function table with it as an element, and exports that table; Module B imports the table from A. When InitializeImportedIndirectFunctionTable() (src/wasm/module-instantiate.cc) creates the WasmImportData for Module B's dispatch table, it copies Module A's serialized FunctionSig via NewWasmImportData(orig_import_data) and sets the call origin to Module B's instance+table-index (SetCrossInstanceTableIndexAsCallOrigin). During tier-up, Runtime_TierUpWasmToJSWrapper() deserializes `sig` from import_data (carrying Module A's module-specific ValueType encodings, including type indices relative to Module A's type section), but resolves `trusted_data` and `module` from Module B (via the Tuple2 call origin). CompileWasmImportCallWrapper is then invoked with a CompilationEnv from Module B's NativeModule but a FunctionSig containing Module A's type indices. Because reference-typed parameters encode module-local type indices, the mismatch allows the wrapper to be miscompiled against the wrong type table, producing arbitrary WASM type confusion exploitable for memory corruption and sandbox bypass.",
+  "vrp": 11000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Backport/adaptation of CL 5921410 for the serialized-signature version in this vulnerable image. Test-only/status hunks omitted.",
+      "context": "adapted-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "5fcbf3954eb9f7f8221f068b5324e5b6f04b5839 [wasm] Don't tier up wrapper if signature depends on other instance",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5921410",
+      "source_cl": 5921410,
+      "source_commit": "5fcbf3954eb9f7f8221f068b5324e5b6f04b5839"
+    }
+  ]
+}

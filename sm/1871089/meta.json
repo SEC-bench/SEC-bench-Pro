@@ -1,0 +1,47 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1871089",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/BaselineCacheIRCompiler.cpp",
+        "js/src/jit/JitScript.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --fast-warmup --gc-zeal=14",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "BaselineCacheIRCompiler Constructor IC \u2014 Stale ICStubReg Reload After GC Active-Stub Cloning Discards Spilled Pointer. CVE-2024-0744 (sec-high). A use-after-free vulnerability exists in SpiderMonkey's baseline JIT IC (Inline Cache) stub handling in js/src/jit/BaselineCacheIRCompiler.cpp. When the baseline IC inlines a constructor call, it spills the ICStubReg to the stack before calling CreateThis. If CreateThis triggers a GC that discards jitcode, the GC's active-stub marking (js/src/jit/JitScript.cpp:715-722, introduced by bug 1867193) clones the active ICStub and updates the stub frame pointer. However, upon return from CreateThis, the code reloads the spilled (stale) ICStubReg from the stack instead of reading the updated pointer from the frame. Later, when the callee's ICScript is read from the stale stub pointer, it dereferences freed LifoAlloc memory. In debug builds, the poisoned memory (0xe5e5e5e5) causes an immediate crash. In release builds, the GC may have reallocated the page for other IC data, creating an exploitable UAF where the attacker can control the ICScript pointer. The fix (changeset 6d17e93756e8) removes the separate ICStubReg spill and instead loads the ICStub directly from the frame, which is always updated by GC.",
+    "fix_commits": [
+        "6d17e93756e8",
+        "1f75ae1cc019"
+    ],
+    "vrp": null,
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-load-icstub-from-the-frame.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1871089 - Load ICStub from the frame instead of storing it separately. r=iain",
+            "source_commit": "6d17e93756e8",
+            "commit": "6d17e93756e8",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/6d17e93756e8",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/6d17e93756e8"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-and-comments.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1871089 - Add test and comments. r=iain",
+            "source_commit": "1f75ae1cc019",
+            "commit": "1f75ae1cc019",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1f75ae1cc019",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/1f75ae1cc019"
+        }
+    ]
+}

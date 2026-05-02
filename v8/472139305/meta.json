@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:472139305",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/objects/js-number-format.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "command_options": "--sandbox-testing --expose-gc",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A use-after-free (UAF) vulnerability exists in V8's JSNumberFormat implementation that allows attackers to execute arbitrary code or cause denial of service. The vulnerability is triggered when calling Intl.NumberFormat.prototype.format(), formatToParts(), formatRange(), or formatRangeToParts() with a malicious object that has a custom valueOf or Symbol.toPrimitive method.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "bdc8f396b7d81e6521ee395970935edede39349a [intl] Fix  Sandbox Bypass: Use-After-Free in ICU NumberFormatter",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/7519173",
+      "cl": 7519173,
+      "commit": "bdc8f396b7d81e6521ee395970935edede39349a",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/7519173 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7519173",
+      "source_cl": 7519173,
+      "source_commit": "bdc8f396b7d81e6521ee395970935edede39349a",
+      "source_ref": "refs/changes/73/7519173/8",
+      "source_patchset": 8
+    }
+  ]
+}

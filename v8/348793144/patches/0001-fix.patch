@@ -1,0 +1,51 @@
+From 96ce32ea56b320a738f82c6ab0bbc75234688aab Mon Sep 17 00:00:00 2001
+From: Thibaud Michaud <thibaudm@chromium.org>
+Date: Fri, 28 Jun 2024 16:28:14 +0200
+Subject: [PATCH] [wasm][jspi] Check JS-compatibility of promising export
+ signatures
+
+R=ahaas@chromium.org
+
+Fixed: 348793144
+Change-Id: I20cd088fc11b94edc23513938e9f5edbcb172bc5
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5666699
+Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+Reviewed-by: Andreas Haas <ahaas@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#94719}
+---
+ src/wasm/wasm-js.cc | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
+index 3c04df0225d..22a1a25cd96 100644
+--- a/src/wasm/wasm-js.cc
++++ b/src/wasm/wasm-js.cc
+@@ -2173,12 +2173,21 @@ i::Handle<i::JSFunction> NewPromisingWasmExportedFunction(
+   i::DirectHandle<i::WasmTrustedInstanceData> trusted_instance_data{
+       data->instance_data(), i_isolate};
+   int func_index = data->function_index();
+-  i::DirectHandle<i::Code> wrapper =
+-      with_suspender_param ? BUILTIN_CODE(i_isolate, WasmPromisingWithSuspender)
+-                           : BUILTIN_CODE(i_isolate, WasmPromising);
+-
+   const i::wasm::WasmModule* module = trusted_instance_data->module();
+   int sig_index = module->functions[func_index].sig_index;
++  const i::wasm::FunctionSig* sig = module->signature(sig_index);
++  i::DirectHandle<i::Code> wrapper;
++  if (!internal::wasm::IsJSCompatibleSignature(sig)) {
++    // If the signature is incompatible with JS, the original export will have
++    // compiled an incompatible signature wrapper, so just reuse that.
++    wrapper =
++        i::DirectHandle<i::Code>(data->wrapper_code(i_isolate), i_isolate);
++  } else {
++    wrapper = with_suspender_param
++                  ? BUILTIN_CODE(i_isolate, WasmPromisingWithSuspender)
++                  : BUILTIN_CODE(i_isolate, WasmPromising);
++  }
++
+   // TODO(14034): Create funcref RTTs lazily?
+   i::DirectHandle<i::Map> rtt{
+       i::Cast<i::Map>(
+-- 
+2.43.0
+

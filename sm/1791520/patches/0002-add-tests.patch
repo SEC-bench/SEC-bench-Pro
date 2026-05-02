@@ -1,0 +1,109 @@
+From 557d0219977ec65dca21449915b1db50e7d85507 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Wed, 18 Jan 2023 13:11:21 +0000
+Subject: [PATCH] Bug 1791520: Add tests. r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D157900
+---
+ js/src/jit-test/tests/ion/bug1791520.js | 92 +++++++++++++++++++++++++
+ 1 file changed, 92 insertions(+)
+ create mode 100644 js/src/jit-test/tests/ion/bug1791520.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1791520.js b/js/src/jit-test/tests/ion/bug1791520.js
+new file mode 100644
+index 0000000000000..aca91c2a7f217
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1791520.js
+@@ -0,0 +1,92 @@
++function testAtomicsAdd() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.add(a, i & 1, 1n);
++  }
++  return x;
++}
++
++function testAtomicsSub() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.sub(a, i & 1, 1n);
++  }
++  return x;
++}
++
++function testAtomicsAnd() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.and(a, i & 1, 1n);
++  }
++  return x;
++}
++
++function testAtomicsOr() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.or(a, i & 1, 1n);
++  }
++  return x;
++}
++
++function testAtomicsXor() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.xor(a, i & 1, 1n);
++  }
++  return x;
++}
++
++function testAtomicsExchange() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.exchange(a, i & 1, 0n);
++  }
++  return x;
++}
++
++function testAtomicsCompareExchange() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.compareExchange(a, i & 1, 0n, 0n);
++  }
++  return x;
++}
++
++function testAtomicsLoad() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = Atomics.load(a, i & 1);
++  }
++  return x;
++}
++
++function testLoadElement() {
++  var x;
++  for (var i = 0; i < 100; ++i) {
++    var a = new BigInt64Array(2);
++    x = a[i & 1];
++  }
++  return x;
++}
++
++gczeal(14);
++
++testAtomicsAdd();
++testAtomicsSub();
++testAtomicsAnd();
++testAtomicsOr();
++testAtomicsXor();
++testAtomicsExchange();
++testAtomicsCompareExchange();
++testAtomicsLoad();
++testLoadElement();

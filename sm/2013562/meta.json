@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:2013562",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/builtin/AtomicsObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/builtin"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Cross-compartment violation",
+    "error_type": "ASAN_CRASH",
+    "description": "Atomics.notify cross-realm promise resolution bug - js::atomics_notify_impl in js/src/builtin/AtomicsObject.cpp walks the waiter list from a SharedArrayBuffer and resolves each waitAsync promise without first entering the promise's realm. Waiter lists can contain promises from multiple realms, so Atomics.notify in one realm can resolve a promise allocated in another realm with the wrong active compartment. ASAN/debug builds crash on a compartment-mismatch check; release builds can mutate PromiseObject state and run write barriers under a foreign realm context, corrupting realm-bound GC state. The fix enters each promise's realm with AutoRealm immediately before PromiseObject::resolve and includes the needed Realm inline header.",
+    "fix_commits": [
+        "23cf0b3985c329aae2898bae518a7f5813c132ae"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-enter-correct-realm-before-resolving-same-thread.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 2013562: Enter correct realm before resolving same-thread",
+            "source_commit": "23cf0b3985c329aae2898bae518a7f5813c132ae",
+            "commit": "23cf0b3985c329aae2898bae518a7f5813c132ae",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/23cf0b3985c329aae2898bae518a7f5813c132ae",
+            "source_url": "https://github.com/mozilla-firefox/firefox/commit/23cf0b3985c329aae2898bae518a7f5813c132ae",
+            "phabricator": "D281314"
+        }
+    ],
+    "vrp": null
+}

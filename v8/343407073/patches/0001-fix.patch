@@ -1,0 +1,1207 @@
+diff --git a/src/builtins/js-to-js.tq b/src/builtins/js-to-js.tq
+index b605d84..e9bea45 100644
+--- a/src/builtins/js-to-js.tq
++++ b/src/builtins/js-to-js.tq
+@@ -72,9 +72,8 @@ transitioning javascript builtin JSToJSWrapper(
+     js-implicit context: NativeContext, receiver: JSAny, target: JSFunction)(
+     ...arguments): JSAny {
+   const functionData =
+-      UnsafeCast<WasmFunctionData>(target.shared_function_info.function_data);
+-  const ref =
+-      UnsafeCast<WasmApiFunctionRef>(functionData.func_ref.internal.ref);
++      UnsafeCast<WasmFunctionData>(target.shared_function_info.data);
++  const ref = UnsafeCast<WasmApiFunctionRef>(functionData.internal.ref);
+ 
+   const signaturePod = &ref.sig.bytes;
+   const serializedSig = torque_internal::unsafe::NewConstSlice<int32>(
+diff --git a/src/builtins/js-to-wasm.tq b/src/builtins/js-to-wasm.tq
+index 2a5a442..5cea4a3 100644
+--- a/src/builtins/js-to-wasm.tq
++++ b/src/builtins/js-to-wasm.tq
+@@ -445,18 +445,20 @@ macro JSToWasmObject(
+ macro JSToWasmWrapperHelper(
+     context: NativeContext, _receiver: JSAny, target: JSFunction,
+     arguments: Arguments, switchStack: constexpr bool): never {
+-  const functionData = UnsafeCast<WasmExportedFunctionData>(
+-      target.shared_function_info.function_data);
++  const functionData =
++      UnsafeCast<WasmExportedFunctionData>(target.shared_function_info.data);
+ 
+   // Trigger a wrapper tier-up when this function got called often enough.
+   if constexpr (!switchStack) {
+-    functionData.wrapper_budget = functionData.wrapper_budget - 1;
+-    if (functionData.wrapper_budget == 0) {
++    const budget: Smi =
++        UnsafeCast<Smi>(functionData.wrapper_budget.value) - SmiConstant(1);
++    functionData.wrapper_budget.value = budget;
++    if (budget == SmiConstant(0)) {
+       runtime::WasmCompileWrapper(kNoContext, functionData);
+     }
+   }
+ 
+-  const sig = functionData.sig_ptr;
++  const sig = functionData.sig;
+   const trustedInstanceData: WasmTrustedInstanceData =
+       LoadTrustedDataFromInstance(functionData.instance);
+ 
+@@ -651,7 +653,7 @@ macro JSToWasmWrapperHelper(
+   const paramStart = paramBuffer.GCUnsafeRawPtr();
+   const paramEnd = locationAllocator.GetStackEnd();
+ 
+-  const callTarget = functionData.func_ref.internal.call_target;
++  const callTarget = functionData.internal.call_target;
+ 
+   // We construct a state that will be passed to `JSToWasmWrapperAsm`
+   // and `JSToWasmHandleReturns`. There are too many parameters to pass
+diff --git a/src/codegen/code-stub-assembler.h b/src/codegen/code-stub-assembler.h
+index d3551cb..8de7362 100644
+--- a/src/codegen/code-stub-assembler.h
++++ b/src/codegen/code-stub-assembler.h
+@@ -1330,19 +1330,18 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+         object, WasmTypeInfo::kNativeTypeOffset, kWasmTypeInfoNativeTypeTag);
+   }
+ 
+-  TNode<RawPtrT> LoadWasmExportedFunctionDataSigPtr(
+-      TNode<WasmExportedFunctionData> object) {
+-    return LoadExternalPointerFromObject(object,
+-                                         WasmExportedFunctionData::kSigOffset,
+-                                         kWasmExportedFunctionDataSignatureTag);
+-  }
+-
+   TNode<WasmInternalFunction> LoadWasmInternalFunctionFromFuncRef(
+       TNode<WasmFuncRef> func_ref) {
+     return CAST(LoadTrustedPointerFromObject(
+         func_ref, WasmFuncRef::kTrustedInternalOffset,
+         kWasmInternalFunctionIndirectPointerTag));
+   }
++
++  TNode<WasmInternalFunction> LoadWasmInternalFunctionFromFunctionData(
++      TNode<WasmFunctionData> data) {
++    return CAST(LoadProtectedPointerField(
++        data, WasmFunctionData::kProtectedInternalOffset));
++  }
+ #endif  // V8_ENABLE_WEBASSEMBLY
+ 
+   TNode<RawPtrT> LoadJSTypedArrayExternalPointerPtr(
+diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
+index b1218a1..1d1739b 100644
+--- a/src/compiler/wasm-compiler.cc
++++ b/src/compiler/wasm-compiler.cc
+@@ -3083,13 +3083,9 @@ Node* WasmGraphBuilder::BuildIndirectCall(uint32_t table_index,
+ 
+ Node* WasmGraphBuilder::BuildLoadCallTargetFromExportedFunctionData(
+     Node* function_data) {
+-  Node* func_ref = gasm_->LoadImmutableFromObject(
+-      MachineType::TaggedPointer(), function_data,
+-      wasm::ObjectAccess::ToTagged(WasmExportedFunctionData::kFuncRefOffset));
+-  Node* internal = gasm_->LoadTrustedPointerFromObject(
+-      func_ref,
+-      wasm::ObjectAccess::ToTagged(WasmFuncRef::kTrustedInternalOffset),
+-      kWasmInternalFunctionIndirectPointerTag);
++  Node* internal = gasm_->LoadProtectedPointerFromObject(
++      function_data, wasm::ObjectAccess::ToTagged(
++                         WasmExportedFunctionData::kProtectedInternalOffset));
+   return gasm_->LoadFromObject(
+       MachineType::Pointer(), internal,
+       wasm::ObjectAccess::ToTagged(WasmInternalFunction::kCallTargetOffset));
+@@ -7508,13 +7504,9 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
+       } else {
+         // Call to a wasm function defined in this module.
+         // The (cached) call target is the jump table slot for that function.
+-        Node* func_ref = gasm_->LoadImmutableFromObject(
+-            MachineType::TaggedPointer(), function_data,
+-            wasm::ObjectAccess::ToTagged(WasmFunctionData::kFuncRefOffset));
+-        Node* internal = gasm_->LoadTrustedPointerFromObject(
+-            func_ref,
+-            wasm::ObjectAccess::ToTagged(WasmFuncRef::kTrustedInternalOffset),
+-            kWasmInternalFunctionIndirectPointerTag);
++        Node* internal = gasm_->LoadProtectedPointerFromObject(
++            function_data, wasm::ObjectAccess::ToTagged(
++                               WasmFunctionData::kProtectedInternalOffset));
+         args[0] =
+             gasm_->LoadFromObject(MachineType::Pointer(), internal,
+                                   wasm::ObjectAccess::ToTagged(
+diff --git a/src/compiler/wasm-graph-assembler.cc b/src/compiler/wasm-graph-assembler.cc
+index 040eda3..10b4290 100644
+--- a/src/compiler/wasm-graph-assembler.cc
++++ b/src/compiler/wasm-graph-assembler.cc
+@@ -452,9 +452,15 @@ Node* WasmGraphAssembler::LoadContextFromJSFunction(Node* js_function) {
+ 
+ Node* WasmGraphAssembler::LoadFunctionDataFromJSFunction(Node* js_function) {
+   Node* shared = LoadSharedFunctionInfo(js_function);
+-  return LoadFromObject(
+-      MachineType::TaggedPointer(), shared,
+-      wasm::ObjectAccess::ToTagged(SharedFunctionInfo::kFunctionDataOffset));
++#if V8_ENABLE_SANDBOX
++    static constexpr int kOffset =
++        SharedFunctionInfo::kTrustedFunctionDataOffset;
++#else
++    static constexpr int kOffset = SharedFunctionInfo::kFunctionDataOffset;
++#endif
++  return LoadTrustedPointerFromObject(shared,
++                                      wasm::ObjectAccess::ToTagged(kOffset),
++                                      kWasmFunctionDataIndirectPointerTag);
+ }
+ 
+ Node* WasmGraphAssembler::LoadExportedFunctionIndexAsSmi(
+diff --git a/src/diagnostics/objects-printer.cc b/src/diagnostics/objects-printer.cc
+index 76ee146..1b02759 100644
+--- a/src/diagnostics/objects-printer.cc
++++ b/src/diagnostics/objects-printer.cc
+@@ -2515,6 +2515,7 @@ void WasmDispatchTable::WasmDispatchTablePrint(std::ostream& os) {
+ void WasmFunctionData::WasmFunctionDataPrint(std::ostream& os) {
+   Isolate* isolate = GetIsolateForSandbox(*this);
+   os << "\n - func_ref: " << Brief(func_ref());
++  os << "\n - internal: " << Brief(internal());
+   os << "\n - wrapper_code: " << Brief(wrapper_code(isolate));
+   os << "\n - js_promise_flags: " << js_promise_flags();
+   // No newline here; the caller prints it after printing additional fields.
+@@ -2523,11 +2524,10 @@ void WasmFunctionData::WasmFunctionDataPrint(std::ostream& os) {
+ void WasmExportedFunctionData::WasmExportedFunctionDataPrint(std::ostream& os) {
+   PrintHeader(os, "WasmExportedFunctionData");
+   WasmFunctionDataPrint(os);
+-  Isolate* isolate = GetIsolateForSandbox(*this);
+   os << "\n - instance: " << Brief(instance());
+   os << "\n - function_index: " << function_index();
+-  os << "\n - signature: " << reinterpret_cast<void*>(sig(isolate));
+-  os << "\n - wrapper_budget: " << wrapper_budget();
++  os << "\n - signature: " << reinterpret_cast<const void*>(sig());
++  os << "\n - wrapper_budget: " << wrapper_budget()->value();
+   os << "\n";
+ }
+ 
+diff --git a/src/heap/factory-base.cc b/src/heap/factory-base.cc
+index d0364f4..0310b65 100644
+--- a/src/heap/factory-base.cc
++++ b/src/heap/factory-base.cc
+@@ -607,8 +607,11 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
+     DCHECK(!Builtins::IsBuiltinId(builtin));
+     DCHECK(!IsInstructionStream(*function_data));
+     DCHECK(!IsCode(*function_data));
+-    raw->SetData(*function_data, kReleaseStore,
+-                 SharedFunctionInfo::DataType::kRegular);
++    SharedFunctionInfo::DataType type =
++        IsExposedTrustedObject(*function_data)
++            ? SharedFunctionInfo::DataType::kTrusted
++            : SharedFunctionInfo::DataType::kRegular;
++    raw->SetData(*function_data, kReleaseStore, type);
+   } else if (Builtins::IsBuiltinId(builtin)) {
+     raw->set_builtin_id(builtin);
+   } else {
+diff --git a/src/heap/factory.cc b/src/heap/factory.cc
+index 3be8c75..b1a5a34 100644
+--- a/src/heap/factory.cc
++++ b/src/heap/factory.cc
+@@ -1734,9 +1734,11 @@ Handle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
+   Tagged<Map> map = *wasm_js_function_data_map();
+   Tagged<WasmJSFunctionData> result =
+       Tagged<WasmJSFunctionData>::cast(AllocateRawWithImmortalMap(
+-          map->instance_size(), AllocationType::kOld, map));
++          map->instance_size(), AllocationType::kTrusted, map));
++  result->init_self_indirect_pointer(isolate());
+   DisallowGarbageCollection no_gc;
+   result->set_func_ref(*func_ref);
++  result->set_internal(*internal);
+   result->set_wrapper_code(*wrapper_code);
+   result->set_serialized_signature(*serialized_sig);
+   result->set_js_promise_flags(WasmFunctionData::SuspendField::encode(suspend) |
+@@ -1759,21 +1761,26 @@ Handle<WasmResumeData> Factory::NewWasmResumeData(
+ Handle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
+     DirectHandle<Code> export_wrapper,
+     DirectHandle<WasmInstanceObject> instance,
+-    DirectHandle<WasmFuncRef> func_ref, int func_index,
++    DirectHandle<WasmFuncRef> func_ref,
++    DirectHandle<WasmInternalFunction> internal_function,
+     const wasm::FunctionSig* sig, uint32_t canonical_type_index,
+     int wrapper_budget, wasm::Promise promise) {
++  int func_index = internal_function->function_index();
++  Handle<Cell> wrapper_budget_cell = NewCell(Smi::FromInt(wrapper_budget));
+   Tagged<Map> map = *wasm_exported_function_data_map();
+   Tagged<WasmExportedFunctionData> result =
+       Tagged<WasmExportedFunctionData>::cast(AllocateRawWithImmortalMap(
+-          map->instance_size(), AllocationType::kOld, map));
++          map->instance_size(), AllocationType::kTrusted, map));
++  result->init_self_indirect_pointer(isolate());
+   DisallowGarbageCollection no_gc;
+   result->set_func_ref(*func_ref);
++  result->set_internal(*internal_function);
+   result->set_wrapper_code(*export_wrapper);
+   result->set_instance(*instance);
+   result->set_function_index(func_index);
+-  result->init_sig(isolate(), sig);
++  result->set_sig(sig);
+   result->set_canonical_type_index(canonical_type_index);
+-  result->set_wrapper_budget(wrapper_budget);
++  result->set_wrapper_budget(*wrapper_budget_cell);
+   // We can't skip the write barrier because Code objects are not immovable.
+   result->set_c_wrapper_code(*BUILTIN_CODE(isolate(), Illegal),
+                              UPDATE_WRITE_BARRIER);
+@@ -1797,9 +1804,11 @@ Handle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
+   Tagged<Map> map = *wasm_capi_function_data_map();
+   Tagged<WasmCapiFunctionData> result =
+       Tagged<WasmCapiFunctionData>::cast(AllocateRawWithImmortalMap(
+-          map->instance_size(), AllocationType::kOld, map));
++          map->instance_size(), AllocationType::kTrusted, map));
++  result->init_self_indirect_pointer(isolate());
+   DisallowGarbageCollection no_gc;
+   result->set_func_ref(*func_ref);
++  result->set_internal(*internal);
+   result->set_wrapper_code(*wrapper_code);
+   result->set_embedder_data(*embedder_data);
+   result->set_serialized_signature(*serialized_sig);
+diff --git a/src/heap/factory.h b/src/heap/factory.h
+index 5f08020..e817eb3 100644
+--- a/src/heap/factory.h
++++ b/src/heap/factory.h
+@@ -710,7 +710,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
+   Handle<WasmExportedFunctionData> NewWasmExportedFunctionData(
+       DirectHandle<Code> export_wrapper,
+       DirectHandle<WasmInstanceObject> instance_object,
+-      DirectHandle<WasmFuncRef> func_ref, int func_index,
++      DirectHandle<WasmFuncRef> func_ref,
++      DirectHandle<WasmInternalFunction> internal_function,
+       const wasm::FunctionSig* sig, uint32_t canonical_type_index,
+       int wrapper_budget, wasm::Promise promise);
+   Handle<WasmApiFunctionRef> NewWasmApiFunctionRef(
+diff --git a/src/heap/objects-visiting.h b/src/heap/objects-visiting.h
+index 770ce20..088522c 100644
+--- a/src/heap/objects-visiting.h
++++ b/src/heap/objects-visiting.h
+@@ -75,13 +75,9 @@ namespace internal {
+   V(TransitionArray)                   \
+   V(WeakCell)                          \
+   IF_WASM(V, WasmArray)                \
+-  IF_WASM(V, WasmCapiFunctionData)     \
+   IF_WASM(V, WasmContinuationObject)   \
+-  IF_WASM(V, WasmExportedFunctionData) \
+-  IF_WASM(V, WasmFunctionData)         \
+   IF_WASM(V, WasmFuncRef)              \
+   IF_WASM(V, WasmInstanceObject)       \
+-  IF_WASM(V, WasmJSFunctionData)       \
+   IF_WASM(V, WasmNull)                 \
+   IF_WASM(V, WasmResumeData)           \
+   IF_WASM(V, WasmStruct)               \
+diff --git a/src/logging/log.cc b/src/logging/log.cc
+index 2c68e6a..0103c6e 100644
+--- a/src/logging/log.cc
++++ b/src/logging/log.cc
+@@ -2104,8 +2104,7 @@ EnumerateCompiledFunctions(Heap* heap) {
+ #if V8_ENABLE_WEBASSEMBLY
+       } else if (WasmJSFunction::IsWasmJSFunction(function)) {
+         Tagged<WasmInternalFunction> internal_function =
+-            function->shared()->wasm_js_function_data()->func_ref()->internal(
+-                isolate);
++            function->shared()->wasm_js_function_data()->internal();
+         Tagged<WasmApiFunctionRef> api_function_ref =
+             WasmApiFunctionRef::cast(internal_function->ref());
+         record(function->shared(),
+diff --git a/src/objects/map.cc b/src/objects/map.cc
+index 1fb1f1b..adc2354 100644
+--- a/src/objects/map.cc
++++ b/src/objects/map.cc
+@@ -398,16 +398,10 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
+       return kVisitWasmContinuationObject;
+     case WASM_TYPE_INFO_TYPE:
+       return kVisitWasmTypeInfo;
+-    case WASM_JS_FUNCTION_DATA_TYPE:
+-      return kVisitWasmJSFunctionData;
+     case WASM_RESUME_DATA_TYPE:
+       return kVisitWasmResumeData;
+-    case WASM_EXPORTED_FUNCTION_DATA_TYPE:
+-      return kVisitWasmExportedFunctionData;
+     case WASM_FUNC_REF_TYPE:
+       return kVisitWasmFuncRef;
+-    case WASM_CAPI_FUNCTION_DATA_TYPE:
+-      return kVisitWasmCapiFunctionData;
+     case WASM_SUSPENDER_OBJECT_TYPE:
+       return kVisitWasmSuspenderObject;
+     case WASM_NULL_TYPE:
+diff --git a/src/objects/map.h b/src/objects/map.h
+index 73b9104..6ce02c9 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -92,13 +92,9 @@ enum InstanceType : uint16_t;
+   V(ThinString)                        \
+   V(TransitionArray)                   \
+   IF_WASM(V, WasmArray)                \
+-  IF_WASM(V, WasmCapiFunctionData)     \
+   IF_WASM(V, WasmContinuationObject)   \
+-  IF_WASM(V, WasmExportedFunctionData) \
+-  IF_WASM(V, WasmFunctionData)         \
+   IF_WASM(V, WasmFuncRef)              \
+   IF_WASM(V, WasmInstanceObject)       \
+-  IF_WASM(V, WasmJSFunctionData)       \
+   IF_WASM(V, WasmResumeData)           \
+   IF_WASM(V, WasmStruct)               \
+   IF_WASM(V, WasmSuspenderObject)      \
+diff --git a/src/objects/object-list-macros.h b/src/objects/object-list-macros.h
+index fc6e1e1..a918ece 100644
+--- a/src/objects/object-list-macros.h
++++ b/src/objects/object-list-macros.h
+@@ -288,15 +288,11 @@ namespace internal {
+   V(Undetectable)                               \
+   V(UniqueName)                                 \
+   IF_WASM(V, WasmArray)                         \
+-  IF_WASM(V, WasmCapiFunctionData)              \
+   IF_WASM(V, WasmContinuationObject)            \
+   IF_WASM(V, WasmExceptionPackage)              \
+-  IF_WASM(V, WasmExportedFunctionData)          \
+-  IF_WASM(V, WasmFunctionData)                  \
+   IF_WASM(V, WasmFuncRef)                       \
+   IF_WASM(V, WasmGlobalObject)                  \
+   IF_WASM(V, WasmInstanceObject)                \
+-  IF_WASM(V, WasmJSFunctionData)                \
+   IF_WASM(V, WasmMemoryObject)                  \
+   IF_WASM(V, WasmModuleObject)                  \
+   IF_WASM(V, WasmNull)                          \
+@@ -344,25 +340,29 @@ namespace internal {
+ 
+ #define ABSTRACT_TRUSTED_OBJECT_LIST_GENERATOR(APPLY, V) \
+   APPLY(V, TrustedObject, TRUSTED_OBJECT)                \
+-  APPLY(V, ExposedTrustedObject, EXPOSED_TRUSTED_OBJECT)
++  APPLY(V, ExposedTrustedObject, EXPOSED_TRUSTED_OBJECT) \
++  IF_WASM(APPLY, V, WasmFunctionData, WASM_FUNCTION_DATA)
+ 
+ // Concrete trusted objects. These must:
+ // - (Transitively) inherit from TrustedObject
+ // - Have a unique instance type
+ // - Define a custom body descriptor
+-#define CONCRETE_TRUSTED_OBJECT_LIST_GENERATOR(APPLY, V)            \
+-  APPLY(V, BytecodeArray, BYTECODE_ARRAY)                           \
+-  APPLY(V, Code, CODE)                                              \
+-  APPLY(V, InstructionStream, INSTRUCTION_STREAM)                   \
+-  APPLY(V, InterpreterData, INTERPRETER_DATA)                       \
+-  APPLY(V, SharedFunctionInfoWrapper, SHARED_FUNCTION_INFO_WRAPPER) \
+-  APPLY(V, ProtectedFixedArray, PROTECTED_FIXED_ARRAY)              \
+-  APPLY(V, TrustedByteArray, TRUSTED_BYTE_ARRAY)                    \
+-  APPLY(V, TrustedFixedArray, TRUSTED_FIXED_ARRAY)                  \
+-  APPLY(V, TrustedWeakFixedArray, TRUSTED_WEAK_FIXED_ARRAY)         \
+-  IF_WASM(APPLY, V, WasmApiFunctionRef, WASM_API_FUNCTION_REF)      \
+-  IF_WASM(APPLY, V, WasmDispatchTable, WASM_DISPATCH_TABLE)         \
+-  IF_WASM(APPLY, V, WasmInternalFunction, WASM_INTERNAL_FUNCTION)   \
++#define CONCRETE_TRUSTED_OBJECT_LIST_GENERATOR(APPLY, V)                   \
++  APPLY(V, BytecodeArray, BYTECODE_ARRAY)                                  \
++  APPLY(V, Code, CODE)                                                     \
++  APPLY(V, InstructionStream, INSTRUCTION_STREAM)                          \
++  APPLY(V, InterpreterData, INTERPRETER_DATA)                              \
++  APPLY(V, SharedFunctionInfoWrapper, SHARED_FUNCTION_INFO_WRAPPER)        \
++  APPLY(V, ProtectedFixedArray, PROTECTED_FIXED_ARRAY)                     \
++  APPLY(V, TrustedByteArray, TRUSTED_BYTE_ARRAY)                           \
++  APPLY(V, TrustedFixedArray, TRUSTED_FIXED_ARRAY)                         \
++  APPLY(V, TrustedWeakFixedArray, TRUSTED_WEAK_FIXED_ARRAY)                \
++  IF_WASM(APPLY, V, WasmApiFunctionRef, WASM_API_FUNCTION_REF)             \
++  IF_WASM(APPLY, V, WasmCapiFunctionData, WASM_CAPI_FUNCTION_DATA)         \
++  IF_WASM(APPLY, V, WasmDispatchTable, WASM_DISPATCH_TABLE)                \
++  IF_WASM(APPLY, V, WasmExportedFunctionData, WASM_EXPORTED_FUNCTION_DATA) \
++  IF_WASM(APPLY, V, WasmJSFunctionData, WASM_JS_FUNCTION_DATA)             \
++  IF_WASM(APPLY, V, WasmInternalFunction, WASM_INTERNAL_FUNCTION)          \
+   IF_WASM(APPLY, V, WasmTrustedInstanceData, WASM_TRUSTED_INSTANCE_DATA)
+ 
+ #define TRUSTED_OBJECT_LIST1_ADAPTER(V, Name, NAME) V(Name)
+diff --git a/src/objects/objects-body-descriptors-inl.h b/src/objects/objects-body-descriptors-inl.h
+index 9823568..5327ad4 100644
+--- a/src/objects/objects-body-descriptors-inl.h
++++ b/src/objects/objects-body-descriptors-inl.h
+@@ -1232,16 +1232,10 @@ auto BodyDescriptorApply(InstanceType type, Args&&... args) {
+ #if V8_ENABLE_WEBASSEMBLY
+     case WASM_ARRAY_TYPE:
+       return CALL_APPLY(WasmArray);
+-    case WASM_CAPI_FUNCTION_DATA_TYPE:
+-      return CALL_APPLY(WasmCapiFunctionData);
+     case WASM_EXCEPTION_PACKAGE_TYPE:
+       return CALL_APPLY(WasmExceptionPackage);
+-    case WASM_EXPORTED_FUNCTION_DATA_TYPE:
+-      return CALL_APPLY(WasmExportedFunctionData);
+     case WASM_FUNC_REF_TYPE:
+       return CALL_APPLY(WasmFuncRef);
+-    case WASM_JS_FUNCTION_DATA_TYPE:
+-      return CALL_APPLY(WasmJSFunctionData);
+     case WASM_RESUME_DATA_TYPE:
+       return CALL_APPLY(WasmResumeData);
+     case WASM_CONTINUATION_OBJECT_TYPE:
+diff --git a/src/objects/shared-function-info-inl.h b/src/objects/shared-function-info-inl.h
+index e932546..0b0c51b 100644
+--- a/src/objects/shared-function-info-inl.h
++++ b/src/objects/shared-function-info-inl.h
+@@ -121,9 +121,6 @@ void SharedFunctionInfo::SetData(Tagged<Object> value, ReleaseStoreTag tag,
+ #ifdef V8_ENABLE_SANDBOX
+   if (type == DataType::kTrusted) {
+     DCHECK(IsExposedTrustedObject(value));
+-    // Currently we only support BytecodeArray, InterpreterData, and Code.
+-    // HasBytecodeArray relies on that.
+-    DCHECK(IsBytecodeArray(value) || IsInterpreterData(value) || IsCode(value));
+     // Only one of trusted_function_data and function_data can be in use.
+     set_trusted_function_data(ExposedTrustedObject::cast(value), tag, mode);
+     clear_function_data(kReleaseStore);
+@@ -694,21 +691,22 @@ DEF_GETTER(SharedFunctionInfo, api_func_data, Tagged<FunctionTemplateInfo>) {
+ 
+ DEF_GETTER(SharedFunctionInfo, HasBytecodeArray, bool) {
+ #ifdef V8_ENABLE_SANDBOX
+-  // The trusted_function_data field contains one of BytecodeArray, Code or
+-  // InterpreterData (there is a DCHECK in SetData that guards this), so if it
+-  // is set, we know that we have bytecode. If this ever changes, we could
+-  // consider introducing a new flag to indicate whether bytecode is available.
+-  return trusted_function_data_handle(kAcquireLoad) !=
+-         kNullIndirectPointerHandle;
++  // For builtin SFIs in read-only space, we cannot get the isolate.
++  // TODO(saelo): Can we find a way around the HasBuiltinId() check?
++  if (HasBuiltinId()) return false;
++  Tagged<Object> data = GetData(GetIsolateForSandbox(*this));
++  if (IsSmi(data)) return false;
++  InstanceType instance_type =
++      HeapObject::cast(data)->map(cage_base)->instance_type();
+ #else
+   Tagged<Object> data = function_data(kAcquireLoad);
+   if (!IsHeapObject(data)) return false;
+   InstanceType instance_type =
+       HeapObject::cast(data)->map(cage_base)->instance_type();
++#endif
+   return InstanceTypeChecker::IsBytecodeArray(instance_type) ||
+          InstanceTypeChecker::IsInterpreterData(instance_type) ||
+          InstanceTypeChecker::IsCode(instance_type);
+-#endif
+ }
+ 
+ template <typename IsolateT>
+@@ -877,19 +875,27 @@ bool SharedFunctionInfo::HasAsmWasmData() const {
+ }
+ 
+ bool SharedFunctionInfo::HasWasmFunctionData() const {
+-  return IsWasmFunctionData(function_data(kAcquireLoad));
++  // For builtin SFIs in read-only space, we cannot get the isolate.
++  if (HasBuiltinId()) return false;
++  return IsWasmFunctionData(GetData(GetIsolateForSandbox(*this)));
+ }
+ 
+ bool SharedFunctionInfo::HasWasmExportedFunctionData() const {
+-  return IsWasmExportedFunctionData(function_data(kAcquireLoad));
++  // For builtin SFIs in read-only space, we cannot get the isolate.
++  if (HasBuiltinId()) return false;
++  return IsWasmExportedFunctionData(GetData(GetIsolateForSandbox(*this)));
+ }
+ 
+ bool SharedFunctionInfo::HasWasmJSFunctionData() const {
+-  return IsWasmJSFunctionData(function_data(kAcquireLoad));
++  // For builtin SFIs in read-only space, we cannot get the isolate.
++  if (HasBuiltinId()) return false;
++  return IsWasmJSFunctionData(GetData(GetIsolateForSandbox(*this)));
+ }
+ 
+ bool SharedFunctionInfo::HasWasmCapiFunctionData() const {
+-  return IsWasmCapiFunctionData(function_data(kAcquireLoad));
++  // For builtin SFIs in read-only space, we cannot get the isolate.
++  if (HasBuiltinId()) return false;
++  return IsWasmCapiFunctionData(GetData(GetIsolateForSandbox(*this)));
+ }
+ 
+ bool SharedFunctionInfo::HasWasmResumeData() const {
+@@ -937,25 +943,46 @@ int SharedFunctionInfo::wasm_function_index() const {
+ 
+ DEF_GETTER(SharedFunctionInfo, wasm_function_data, Tagged<WasmFunctionData>) {
+   DCHECK(HasWasmFunctionData());
++#ifdef V8_ENABLE_SANDBOX
++  // TODO(saelo): It would be nicer if the caller provided an IsolateForSandbox.
++  return WasmFunctionData::cast(
++      trusted_function_data(GetIsolateForSandbox(*this), kAcquireLoad));
++#else
+   return WasmFunctionData::cast(function_data(cage_base, kAcquireLoad));
++#endif
+ }
+ 
+ DEF_GETTER(SharedFunctionInfo, wasm_exported_function_data,
+            Tagged<WasmExportedFunctionData>) {
+   DCHECK(HasWasmExportedFunctionData());
++#ifdef V8_ENABLE_SANDBOX
++  return WasmExportedFunctionData::cast(
++      trusted_function_data(GetIsolateForSandbox(*this), kAcquireLoad));
++#else
+   return WasmExportedFunctionData::cast(function_data(cage_base, kAcquireLoad));
++#endif
+ }
+ 
+ DEF_GETTER(SharedFunctionInfo, wasm_js_function_data,
+            Tagged<WasmJSFunctionData>) {
+   DCHECK(HasWasmJSFunctionData());
++#ifdef V8_ENABLE_SANDBOX
++  return WasmJSFunctionData::cast(
++      trusted_function_data(GetIsolateForSandbox(*this), kAcquireLoad));
++#else
+   return WasmJSFunctionData::cast(function_data(cage_base, kAcquireLoad));
++#endif
+ }
+ 
+ DEF_GETTER(SharedFunctionInfo, wasm_capi_function_data,
+            Tagged<WasmCapiFunctionData>) {
+   DCHECK(HasWasmCapiFunctionData());
++#if V8_ENABLE_SANDBOX
++  return WasmCapiFunctionData::cast(
++      trusted_function_data(GetIsolateForSandbox(*this), kAcquireLoad));
++#else
+   return WasmCapiFunctionData::cast(function_data(cage_base, kAcquireLoad));
++#endif
+ }
+ 
+ DEF_GETTER(SharedFunctionInfo, wasm_resume_data, Tagged<WasmResumeData>) {
+diff --git a/src/objects/shared-function-info.h b/src/objects/shared-function-info.h
+index 78ba27e..4b71b22 100644
+--- a/src/objects/shared-function-info.h
++++ b/src/objects/shared-function-info.h
+@@ -333,6 +333,9 @@ class SharedFunctionInfo
+   //  - a UncompiledDataWithPreparseData for lazy compilation
+   //    [HasUncompiledDataWithPreparseData()]
+   //  - a WasmExportedFunctionData for Wasm [HasWasmExportedFunctionData()]
++  //  - a WasmJSFunctionData for functions created with WebAssembly.Function
++  //  - a WasmCapiFunctionData for Wasm C-API functions
++  //  - a WasmResumeData for JSPI Wasm functions
+   //
+   // If the (expected) type of data is known, prefer to use the specialized
+   // accessors (e.g. bytecode_array(), uncompiled_data(), etc.).
+diff --git a/src/objects/shared-function-info.tq b/src/objects/shared-function-info.tq
+index c96fbc9..015b8ea 100644
+--- a/src/objects/shared-function-info.tq
++++ b/src/objects/shared-function-info.tq
+@@ -104,6 +104,9 @@ extern class SharedFunctionInfo extends HeapObject {
+   padding: uint16;
+ }
+ 
++extern operator '.data' macro LoadSharedFunctionInfoData(SharedFunctionInfo):
++    Object;
++
+ // A wrapper around a SharedFunctionInfo in trusted space.
+ // Can be useful in cases where a protected pointer reference to a
+ // SharedFunctionInfo is required, for example because it is stored inside an
+diff --git a/src/runtime/runtime-test-wasm.cc b/src/runtime/runtime-test-wasm.cc
+index e272aba..98523dc 100644
+--- a/src/runtime/runtime-test-wasm.cc
++++ b/src/runtime/runtime-test-wasm.cc
+@@ -183,15 +183,13 @@ RUNTIME_FUNCTION(Runtime_HasUnoptimizedWasmToJSWrapper) {
+   DCHECK_EQ(1, args.length());
+   Tagged<JSFunction> function = JSFunction::cast(args[0]);
+   Tagged<SharedFunctionInfo> sfi = function->shared();
+-  Tagged<WasmFunctionData> func_data =
+-      WasmExportedFunction::IsWasmExportedFunction(function)
+-          ? Tagged<WasmFunctionData>{sfi->wasm_exported_function_data()}
+-          : Tagged<WasmFunctionData>{sfi->wasm_js_function_data()};
+-  Tagged<WasmInternalFunction> internal =
+-      func_data->func_ref()->internal(isolate);
++  Tagged<Object> func_data = sfi->GetData(isolate);
++  if (!IsWasmFunctionData(func_data)) return isolate->heap()->ToBoolean(false);
++  Address call_target =
++      WasmFunctionData::cast(func_data)->internal()->call_target();
+ 
+   Address wrapper = Builtins::EntryOf(Builtin::kWasmToJsWrapperAsm, isolate);
+-  return isolate->heap()->ToBoolean(internal->call_target() == wrapper);
++  return isolate->heap()->ToBoolean(call_target == wrapper);
+ }
+ 
+ RUNTIME_FUNCTION(Runtime_HasUnoptimizedJSToJSWrapper) {
+@@ -207,7 +205,7 @@ RUNTIME_FUNCTION(Runtime_HasUnoptimizedJSToJSWrapper) {
+ 
+   Handle<JSFunction> external_function =
+       WasmInternalFunction::GetOrCreateExternal(
+-          handle(function_data->func_ref()->internal(isolate), isolate));
++          handle(function_data->internal(), isolate));
+   Handle<Code> external_function_code =
+       handle(external_function->code(isolate), isolate);
+   Handle<Code> function_data_code =
+diff --git a/src/sandbox/indirect-pointer-tag.h b/src/sandbox/indirect-pointer-tag.h
+index 1961027..b4144cd 100644
+--- a/src/sandbox/indirect-pointer-tag.h
++++ b/src/sandbox/indirect-pointer-tag.h
+@@ -47,7 +47,8 @@ constexpr uint64_t kTrustedPointerTableFreeEntryBit = 0x4000000000000000;
+   IF_WASM(V, kWasmApiFunctionRefIndirectPointerTag,            \
+           WASM_API_FUNCTION_REF_TYPE)                          \
+   IF_WASM(V, kWasmInternalFunctionIndirectPointerTag,          \
+-          WASM_INTERNAL_FUNCTION_TYPE)
++          WASM_INTERNAL_FUNCTION_TYPE)                         \
++  IF_WASM(V, kWasmFunctionDataIndirectPointerTag, WASM_FUNCTION_DATA_TYPE)
+ 
+ #define MAKE_TAG(instance_type) \
+   (uint64_t{instance_type} << kIndirectPointerTagShift)
+@@ -133,9 +134,27 @@ static_assert(!IsValidIndirectPointerTag(kIndirectPointerNullTag));
+ 
+ V8_INLINE IndirectPointerTag
+ IndirectPointerTagFromInstanceType(InstanceType instance_type) {
+-  auto tag = static_cast<IndirectPointerTag>(MAKE_TAG(instance_type));
+-  DCHECK(IsValidIndirectPointerTag(tag));
+-  return tag;
++  uint64_t raw = 0;
++  switch (instance_type) {
++#define CASE(name, instance_type)  \
++  case instance_type:              \
++    raw = MAKE_TAG(instance_type); \
++    break;
++    INDIRECT_POINTER_TAG_LIST(CASE)
++#undef CASE
++#if V8_ENABLE_WEBASSEMBLY
++    case WASM_EXPORTED_FUNCTION_DATA_TYPE:
++    case WASM_JS_FUNCTION_DATA_TYPE:
++    case WASM_CAPI_FUNCTION_DATA_TYPE:
++      // TODO(saelo): Consider adding support for inheritance hierarchies in
++      // our tag checking mechanism.
++      raw = kWasmFunctionDataIndirectPointerTag;
++      break;
++#endif  // V8_ENABLE_WEBASSEMBLY
++    default:
++      UNREACHABLE();
++  }
++  return static_cast<IndirectPointerTag>(raw);
+ }
+ 
+ V8_INLINE InstanceType
+diff --git a/src/wasm/c-api.cc b/src/wasm/c-api.cc
+index 80d596a..999350f 100644
+--- a/src/wasm/c-api.cc
++++ b/src/wasm/c-api.cc
+@@ -1487,11 +1487,8 @@ auto make_func(Store* store_abs, FuncData* data) -> own<Func> {
+   i::Handle<i::WasmCapiFunction> function = i::WasmCapiFunction::New(
+       isolate, reinterpret_cast<i::Address>(&FuncData::v8_callback),
+       embedder_data, SignatureHelper::Serialize(isolate, data->type.get()));
+-  i::WasmApiFunctionRef::cast(function->shared()
+-                                  ->wasm_capi_function_data()
+-                                  ->func_ref()
+-                                  ->internal(isolate)
+-                                  ->ref())
++  i::WasmApiFunctionRef::cast(
++      function->shared()->wasm_capi_function_data()->internal()->ref())
+       ->set_callable(*function);
+   auto func = implement<Func>::type::make(store, function);
+   return func;
+@@ -1726,8 +1723,7 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
+   PrepareFunctionData(isolate, function_data, sig, module);
+   i::Handle<i::Code> wrapper_code(function_data->c_wrapper_code(isolate),
+                                   isolate);
+-  i::Address call_target =
+-      function_data->func_ref()->internal(isolate)->call_target();
++  i::Address call_target = function_data->internal()->call_target();
+ 
+   i::wasm::CWasmArgumentsPacker packer(function_data->packed_args_size());
+   PushArgs(sig, args, &packer, store);
+diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
+index 43c1e4e..46530e8 100644
+--- a/src/wasm/wasm-js.cc
++++ b/src/wasm/wasm-js.cc
+@@ -2269,9 +2269,7 @@ void WebAssemblyFunction(const v8::FunctionCallbackInfo<v8::Value>& info) {
+       return;
+     }
+     i::Handle<i::WasmTrustedInstanceData> trusted_instance_data(
+-        i::WasmTrustedInstanceData::cast(
+-            data->func_ref()->internal(i_isolate)->ref()),
+-        i_isolate);
++        i::WasmTrustedInstanceData::cast(data->internal()->ref()), i_isolate);
+     int func_index = data->function_index();
+     i::Handle<i::Code> wrapper =
+         BUILTIN_CODE(i_isolate, WasmReturnPromiseOnSuspend);
+@@ -2302,7 +2300,7 @@ void WebAssemblyFunction(const v8::FunctionCallbackInfo<v8::Value>& info) {
+     internal->set_call_target(trusted_instance_data->GetCallTarget(func_index));
+ 
+     i::Handle<i::JSFunction> result = i::WasmExportedFunction::New(
+-        i_isolate, trusted_instance_data, func_ref, func_index,
++        i_isolate, trusted_instance_data, func_ref, internal,
+         static_cast<int>(data->sig()->parameter_count()), wrapper);
+     info.GetReturnValue().Set(Utils::ToLocal(result));
+     return;
+@@ -2344,9 +2342,8 @@ void WebAssemblyFunctionType(const v8::FunctionCallbackInfo<v8::Value>& info) {
+   if (i::WasmExportedFunction::IsWasmExportedFunction(*fun)) {
+     auto wasm_exported_function =
+         i::Handle<i::WasmExportedFunction>::cast(fun);
+-    auto sfi = handle(wasm_exported_function->shared(), i_isolate);
+-    i::Handle<i::WasmExportedFunctionData> data =
+-        handle(sfi->wasm_exported_function_data(), i_isolate);
++    i::Tagged<i::WasmExportedFunctionData> data =
++        wasm_exported_function->shared()->wasm_exported_function_data();
+     sig = wasm_exported_function->sig();
+     if (i::WasmFunctionData::PromiseField::decode(data->js_promise_flags())) {
+       // If this export is "promising", the first parameter of the original
+diff --git a/src/wasm/wasm-objects-inl.h b/src/wasm/wasm-objects-inl.h
+index 5725008..bcf729a 100644
+--- a/src/wasm/wasm-objects-inl.h
++++ b/src/wasm/wasm-objects-inl.h
+@@ -372,12 +372,15 @@ TRUSTED_POINTER_ACCESSORS(WasmFuncRef, internal, WasmInternalFunction,
+ // WasmFunctionData
+ CODE_POINTER_ACCESSORS(WasmFunctionData, wrapper_code, kWrapperCodeOffset)
+ 
++PROTECTED_POINTER_ACCESSORS(WasmFunctionData, internal, WasmInternalFunction,
++                            kProtectedInternalOffset)
++
+ // WasmExportedFunctionData
+ CODE_POINTER_ACCESSORS(WasmExportedFunctionData, c_wrapper_code,
+                        kCWrapperCodeOffset)
+ 
+-EXTERNAL_POINTER_ACCESSORS(WasmExportedFunctionData, sig, wasm::FunctionSig*,
+-                           kSigOffset, kWasmExportedFunctionDataSignatureTag)
++PRIMITIVE_ACCESSORS(WasmExportedFunctionData, sig, const wasm::FunctionSig*,
++                    kSigOffset)
+ 
+ // WasmJSFunction
+ WasmJSFunction::WasmJSFunction(Address ptr) : JSFunction(ptr) {
+diff --git a/src/wasm/wasm-objects.cc b/src/wasm/wasm-objects.cc
+index 68ed214..29d3d9a 100644
+--- a/src/wasm/wasm-objects.cc
++++ b/src/wasm/wasm-objects.cc
+@@ -543,11 +543,8 @@ void WasmTableObject::UpdateDispatchTables(
+       isolate->counters()->wasm_reloc_size()->Increment(
+           wasm_code->reloc_info().length());
+     }
+-    Tagged<HeapObject> ref = capi_function->shared()
+-                                 ->wasm_capi_function_data()
+-                                 ->func_ref()
+-                                 ->internal(isolate)
+-                                 ->ref();
++    Tagged<HeapObject> ref =
++        capi_function->shared()->wasm_capi_function_data()->internal()->ref();
+     Address call_target = wasm_code->instruction_start();
+     trusted_instance_data->dispatch_table(table_index)
+         ->Set(entry_index, ref, call_target, canonical_type_index);
+@@ -1511,7 +1508,7 @@ Handle<JSFunction> WasmInternalFunction::GetOrCreateExternal(
+       isolate};
+   DCHECK_EQ(func_ref->internal(isolate), *internal);
+   auto result = WasmExportedFunction::New(
+-      isolate, instance_data, func_ref, internal->function_index(),
++      isolate, instance_data, func_ref, internal,
+       static_cast<int>(function.sig->parameter_count()), wrapper_code);
+ 
+   internal->set_external(*result);
+@@ -2180,7 +2177,7 @@ Handle<WasmCapiFunction> WasmCapiFunction::New(
+   Handle<JSFunction> result =
+       Factory::JSFunctionBuilder{isolate, shared, isolate->native_context()}
+           .Build();
+-  fun_data->func_ref()->internal(isolate)->set_external(*result);
++  fun_data->internal()->set_external(*result);
+   return Handle<WasmCapiFunction>::cast(result);
+ }
+ 
+@@ -2194,13 +2191,15 @@ int WasmExportedFunction::function_index() {
+ 
+ Handle<WasmExportedFunction> WasmExportedFunction::New(
+     Isolate* isolate, Handle<WasmTrustedInstanceData> instance_data,
+-    Handle<WasmFuncRef> func_ref, int func_index, int arity,
++    Handle<WasmFuncRef> func_ref,
++    Handle<WasmInternalFunction> internal_function, int arity,
+     Handle<Code> export_wrapper) {
+   DCHECK(
+       CodeKind::JS_TO_WASM_FUNCTION == export_wrapper->kind() ||
+       (export_wrapper->is_builtin() &&
+        (export_wrapper->builtin_id() == Builtin::kJSToWasmWrapper ||
+         export_wrapper->builtin_id() == Builtin::kWasmReturnPromiseOnSuspend)));
++  int func_index = internal_function->function_index();
+   Factory* factory = isolate->factory();
+   Handle<WasmInstanceObject> instance_object{instance_data->instance_object(),
+                                              isolate};
+@@ -2216,7 +2215,7 @@ Handle<WasmExportedFunction> WasmExportedFunction::New(
+       module->isorecursive_canonical_type_ids[sig_index];
+   Handle<WasmExportedFunctionData> function_data =
+       factory->NewWasmExportedFunctionData(
+-          export_wrapper, instance_object, func_ref, func_index, sig,
++          export_wrapper, instance_object, func_ref, internal_function, sig,
+           canonical_type_index, v8_flags.wasm_wrapper_tiering_budget, promise);
+ 
+   MaybeHandle<String> maybe_name;
+@@ -2264,7 +2263,7 @@ Handle<WasmExportedFunction> WasmExportedFunction::New(
+   shared->set_length(arity);
+   shared->set_internal_formal_parameter_count(JSParameterCount(arity));
+   shared->set_script(instance_object->module_object()->script(), kReleaseStore);
+-  function_data->func_ref()->internal(isolate)->set_external(*js_function);
++  function_data->internal()->set_external(*js_function);
+   return Handle<WasmExportedFunction>::cast(js_function);
+ }
+ 
+@@ -2365,8 +2364,8 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
+   Handle<WasmJSFunctionData> function_data = factory->NewWasmJSFunctionData(
+       callable, serialized_sig, js_to_js_wrapper_code, rtt, suspend,
+       wasm::kNoPromise);
+-  Handle<WasmInternalFunction> internal_function{
+-      function_data->func_ref()->internal(isolate), isolate};
++  Handle<WasmInternalFunction> internal_function{function_data->internal(),
++                                                 isolate};
+ 
+   // Now set the call_target or code object for calls from Wasm.
+   if (WasmExportedFunction::IsWasmExportedFunction(*callable)) {
+@@ -2431,21 +2430,16 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
+ }
+ 
+ Tagged<JSReceiver> WasmJSFunction::GetCallable() const {
+-  return JSReceiver::cast(WasmApiFunctionRef::cast(shared()
+-                                                       ->wasm_js_function_data()
+-                                                       ->func_ref()
+-                                                       ->internal(GetIsolate())
+-                                                       ->ref())
+-                              ->callable());
++  return JSReceiver::cast(
++      WasmApiFunctionRef::cast(
++          shared()->wasm_js_function_data()->internal()->ref())
++          ->callable());
+ }
+ 
+ wasm::Suspend WasmJSFunction::GetSuspend() const {
+   return static_cast<wasm::Suspend>(
+-      WasmApiFunctionRef::cast(shared()
+-                                   ->wasm_js_function_data()
+-                                   ->func_ref()
+-                                   ->internal(GetIsolate())
+-                                   ->ref())
++      WasmApiFunctionRef::cast(
++          shared()->wasm_js_function_data()->internal()->ref())
+           ->suspend());
+ }
+ 
+diff --git a/src/wasm/wasm-objects.h b/src/wasm/wasm-objects.h
+index 553bc44..a9e95a7 100644
+--- a/src/wasm/wasm-objects.h
++++ b/src/wasm/wasm-objects.h
+@@ -763,7 +763,8 @@ class WasmExportedFunction : public JSFunction {
+ 
+   V8_EXPORT_PRIVATE static Handle<WasmExportedFunction> New(
+       Isolate* isolate, Handle<WasmTrustedInstanceData> instance_data,
+-      Handle<WasmFuncRef> func_ref, int func_index, int arity,
++      Handle<WasmFuncRef> func_ref,
++      Handle<WasmInternalFunction> internal_function, int arity,
+       Handle<Code> export_wrapper);
+ 
+   Address GetWasmCallTarget();
+@@ -837,15 +838,19 @@ class WasmExternalFunction : public JSFunction {
+ };
+ 
+ class WasmFunctionData
+-    : public TorqueGeneratedWasmFunctionData<WasmFunctionData, HeapObject> {
++    : public TorqueGeneratedWasmFunctionData<WasmFunctionData,
++                                             ExposedTrustedObject> {
+  public:
+   DECL_CODE_POINTER_ACCESSORS(wrapper_code)
++  DECL_PROTECTED_POINTER_ACCESSORS(internal, WasmInternalFunction)
+ 
+   DECL_PRINTER(WasmFunctionData)
+ 
+-  using BodyDescriptor =
+-      StackedBodyDescriptor<FixedBodyDescriptorFor<WasmFunctionData>,
+-                            WithStrongCodePointer<kWrapperCodeOffset>>;
++  using BodyDescriptor = StackedBodyDescriptor<
++      FixedExposedTrustedObjectBodyDescriptor<
++          WasmFunctionData, kWasmFunctionDataIndirectPointerTag>,
++      WithStrongCodePointer<kWrapperCodeOffset>,
++      WithProtectedPointer<kProtectedInternalOffset>>;
+ 
+   using SuspendField = base::BitField<wasm::Suspend, 0, 1>;
+   using PromiseField = base::BitField<wasm::Promise, 1, 1>;
+@@ -862,7 +867,7 @@ class WasmExportedFunctionData
+  public:
+   DECL_CODE_POINTER_ACCESSORS(c_wrapper_code)
+ 
+-  DECL_EXTERNAL_POINTER_ACCESSORS(sig, wasm::FunctionSig*)
++  DECL_PRIMITIVE_ACCESSORS(sig, const wasm::FunctionSig*)
+ 
+   // Dispatched behavior.
+   DECL_PRINTER(WasmExportedFunctionData)
+@@ -871,7 +876,7 @@ class WasmExportedFunctionData
+   using BodyDescriptor = StackedBodyDescriptor<
+       SubclassBodyDescriptor<WasmFunctionData::BodyDescriptor,
+                              FixedBodyDescriptorFor<WasmExportedFunctionData>>,
+-      WithExternalPointer<kSigOffset, kWasmExportedFunctionDataSignatureTag>>;
++      WithStrongCodePointer<kCWrapperCodeOffset>>;
+ 
+   TQ_OBJECT_CONSTRUCTORS(WasmExportedFunctionData)
+ };
+diff --git a/src/wasm/wasm-objects.tq b/src/wasm/wasm-objects.tq
+index 386114a..1f3a7f9 100644
+--- a/src/wasm/wasm-objects.tq
++++ b/src/wasm/wasm-objects.tq
+@@ -76,38 +76,42 @@ extern class WasmFuncRef extends HeapObject {
+ extern operator '.internal' macro LoadWasmInternalFunctionFromFuncRef(
+     WasmFuncRef): WasmInternalFunction;
+ 
+-extern class WasmFunctionData extends HeapObject {
++extern class WasmFunctionData extends ExposedTrustedObject {
+   // Used for calling this function from JavaScript.
+   @if(V8_ENABLE_SANDBOX) wrapper_code: IndirectPointer<Code>;
+   @ifnot(V8_ENABLE_SANDBOX) wrapper_code: Code;
+   // The function reference for this function object. This is used when
+-  // converting a JS function back to the wasm-side func ref, and for loading
+-  // the call target in js-to-wasm wrappers.
+-  // We could save one indirection there by storing either the
+-  // WasmInternalFunction or the call target (via CPT) directly here.
++  // converting a JS function back to the wasm-side func ref.
+   func_ref: WasmFuncRef;
+   // Encode the {promising} and {suspending} flags in a single smi.
+   js_promise_flags: Smi;
++  // Trusted-to-trusted pointer, to ensure that the pair of WasmFunctionData
++  // and WasmInternalFunction remains in an overall consistent state.
++  protected_internal: ProtectedPointer<WasmInternalFunction>;
+ }
+ 
++extern operator '.internal' macro LoadWasmInternalFunctionFromFunctionData(
++    WasmFunctionData): WasmInternalFunction;
++
+ extern class WasmExportedFunctionData extends WasmFunctionData {
+   // This is the instance that exported the function (which in case of
+   // imported and re-exported functions is different from the instance
+   // where the function is defined -- for the latter see WasmFunctionData::ref).
+   instance: WasmInstanceObject;
+   function_index: Smi;
+-  wrapper_budget: Smi;
+-  // The next two fields are for fast calling from C++. The contract is
+-  // that they are lazily populated, and either all will be present or none.
+-  packed_args_size: Smi;
++  // Contains a Smi; boxed so that generated code can update the value.
++  wrapper_budget: Cell;
+   canonical_type_index: Smi;
++
++  // {packed_args_size} and {c_wrapper_code} are for fast calling from C++.
++  // The contract is that they are lazily populated, and either both will be
++  // present or neither.
++  packed_args_size: Smi;
+   @if(V8_ENABLE_SANDBOX) c_wrapper_code: IndirectPointer<Code>;
+   @ifnot(V8_ENABLE_SANDBOX) c_wrapper_code: Code;
+-  sig: ExternalPointer;  // wasm::FunctionSig*
+-}
+ 
+-extern operator '.sig_ptr' macro LoadWasmExportedFunctionDataSigPtr(
+-    WasmExportedFunctionData): RawPtr;
++  sig: RawPtr;  // wasm::FunctionSig*
++}
+ 
+ extern class WasmJSFunctionData extends WasmFunctionData {
+   serialized_signature: PodArrayOfWasmValueType;
+diff --git a/src/wasm/wrappers.cc b/src/wasm/wrappers.cc
+index dfb88e5..c4397ec 100644
+--- a/src/wasm/wrappers.cc
++++ b/src/wasm/wrappers.cc
+@@ -406,12 +406,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+       } else {
+         // Call to a wasm function defined in this module.
+         // The (cached) call target is the jump table slot for that function.
+-        V<WasmFuncRef> func_ref = V<WasmFuncRef>::Cast(__ LoadTaggedField(
+-            function_data, WasmFunctionData::kFuncRefOffset));
+-        V<WasmInternalFunction> internal = V<WasmInternalFunction>::Cast(
+-            __ LoadTrustedPointerField(func_ref, LoadOp::Kind::TaggedBase(),
+-                                       kWasmInternalFunctionIndirectPointerTag,
+-                                       WasmFuncRef::kTrustedInternalOffset));
++        V<WasmInternalFunction> internal =
++            V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
++                function_data, LoadOp::Kind::TaggedBase().Immutable(),
++                WasmExportedFunctionData::kProtectedInternalOffset));
+         V<WordPtr> callee = __ Load(internal, LoadOp::Kind::TaggedBase(),
+                                     MemoryRepresentation::UintPtr(),
+                                     WasmInternalFunction::kCallTargetOffset);
+@@ -465,10 +463,16 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+         __ Load(js_closure, LoadOp::Kind::TaggedBase(),
+                 MemoryRepresentation::TaggedPointer(),
+                 JSFunction::kSharedFunctionInfoOffset);
+-    V<HeapObject> function_data =
+-        __ Load(shared, LoadOp::Kind::TaggedBase(),
+-                MemoryRepresentation::TaggedPointer(),
+-                SharedFunctionInfo::kFunctionDataOffset);
++#if V8_ENABLE_SANDBOX
++    static constexpr int kOffset =
++        SharedFunctionInfo::kTrustedFunctionDataOffset;
++#else
++    static constexpr int kOffset = SharedFunctionInfo::kFunctionDataOffset;
++#endif
++    V<WasmFunctionData> function_data =
++        V<WasmFunctionData>::Cast(__ LoadTrustedPointerField(
++            shared, LoadOp::Kind::TaggedBase(),
++            kWasmFunctionDataIndirectPointerTag, kOffset));
+ 
+     if (!wasm::IsJSCompatibleSignature(sig_)) {
+       // Throw a TypeError. Use the js_context of the calling javascript
+@@ -554,7 +558,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ 
+   void BuildWasmToJSWrapper(wasm::ImportCallKind kind, int expected_arity,
+                             wasm::Suspend suspend, const WasmModule* module) {
+-    int wasm_count = static_cast<int>(sig_->parameter_count()) - suspend;
++    int wasm_count =
++        static_cast<int>(sig_->parameter_count()) - suspend;
+ 
+     __ Bind(__ NewBlock());
+     base::SmallVector<OpIndex, 16> wasm_params(wasm_count);
+@@ -721,8 +726,16 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+     V<Object> function_node = __ LoadTaggedField(
+         incoming_params[0], WasmApiFunctionRef::kCallableOffset);
+     V<HeapObject> shared = LoadSharedFunctionInfo(function_node);
+-    V<WasmFunctionData> function_data = V<WasmFunctionData>::Cast(
+-        __ LoadTaggedField(shared, SharedFunctionInfo::kFunctionDataOffset));
++#if V8_ENABLE_SANDBOX
++    static constexpr int kOffset =
++        SharedFunctionInfo::kTrustedFunctionDataOffset;
++#else
++    static constexpr int kOffset = SharedFunctionInfo::kFunctionDataOffset;
++#endif
++    V<WasmFunctionData> function_data =
++        V<WasmFunctionData>::Cast(__ LoadTrustedPointerField(
++            shared, LoadOp::Kind::TaggedBase(),
++            kWasmFunctionDataIndirectPointerTag, kOffset));
+     V<Object> host_data_foreign = __ LoadTaggedField(
+         function_data, WasmCapiFunctionData::kEmbedderDataOffset);
+ 
+@@ -1328,12 +1341,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ 
+   V<WordPtr> BuildLoadCallTargetFromExportedFunctionData(
+       V<WasmFunctionData> function_data) {
+-    V<WasmFuncRef> func_ref = V<WasmFuncRef>::Cast(__ LoadTaggedField(
+-        function_data, WasmExportedFunctionData::kFuncRefOffset));
+-    V<WasmInternalFunction> internal = V<WasmInternalFunction>::Cast(
+-        __ LoadTrustedPointerField(func_ref, LoadOp::Kind::TaggedBase(),
+-                                   kWasmInternalFunctionIndirectPointerTag,
+-                                   WasmFuncRef::kTrustedInternalOffset));
++    V<WasmInternalFunction> internal =
++        V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
++            function_data, LoadOp::Kind::TaggedBase().Immutable(),
++            WasmFunctionData::kProtectedInternalOffset));
+     return __ Load(internal, LoadOp::Kind::TaggedBase(),
+                    MemoryRepresentation::UintPtr(),
+                    WasmInternalFunction::kCallTargetOffset);
+diff --git a/test/cctest/wasm/test-run-wasm-wrappers.cc b/test/cctest/wasm/test-run-wasm-wrappers.cc
+index fb19e80..18b040e 100644
+--- a/test/cctest/wasm/test-run-wasm-wrappers.cc
++++ b/test/cctest/wasm/test-run-wasm-wrappers.cc
+@@ -99,15 +99,17 @@ TEST(WrapperBudget) {
+ 
+     // Check that the generic-wrapper budget has initially a value of
+     // kGenericWrapperBudget.
+-    CHECK_EQ(main_function_data->wrapper_budget(), kGenericWrapperBudget);
+-    CHECK_GT(kGenericWrapperBudget, 0);
++    CHECK_EQ(Smi::ToInt(main_function_data->wrapper_budget()->value()),
++             kGenericWrapperBudget);
++    static_assert(kGenericWrapperBudget > 0);
+ 
+     // Call the exported Wasm function.
+     Handle<Object> params[2] = {SmiHandle(isolate, 6), SmiHandle(isolate, 7)};
+     SmiCall(isolate, main_export, 2, params, 42);
+ 
+     // Check that the budget has now a value of (kGenericWrapperBudget - 1).
+-    CHECK_EQ(main_function_data->wrapper_budget(), kGenericWrapperBudget - 1);
++    CHECK_EQ(Smi::ToInt(main_function_data->wrapper_budget()->value()),
++             kGenericWrapperBudget - 1);
+   }
+   Cleanup();
+ }
+@@ -145,14 +147,16 @@ TEST(WrapperReplacement) {
+ 
+     // Check that the generic-wrapper budget has initially a value of
+     // kGenericWrapperBudget.
+-    CHECK_EQ(main_function_data->wrapper_budget(), kGenericWrapperBudget);
+-    CHECK_GT(kGenericWrapperBudget, 0);
++    CHECK_EQ(Smi::ToInt(main_function_data->wrapper_budget()->value()),
++             kGenericWrapperBudget);
++    static_assert(kGenericWrapperBudget > 0);
+ 
+     // Set the generic-wrapper budget to a value that allows for a few
+     // more calls through the generic wrapper.
+     const int remaining_budget =
+         std::min(static_cast<int>(kGenericWrapperBudget), 2);
+-    main_function_data->set_wrapper_budget(remaining_budget);
++    main_function_data->wrapper_budget()->set_value(
++        Smi::FromInt(remaining_budget));
+ 
+     // Call the exported Wasm function as many times as required to almost
+     // exhaust the remaining budget for using the generic wrapper.
+@@ -166,14 +170,15 @@ TEST(WrapperReplacement) {
+       Handle<Object> params[1] = {SmiHandle(isolate, i)};
+       SmiCall(isolate, main_export, 1, params, i);
+       // Verify that the budget has now a value of (i - 1).
+-      CHECK_EQ(main_function_data->wrapper_budget(), i - 1);
++      CHECK_EQ(Smi::ToInt(main_function_data->wrapper_budget()->value()),
++               i - 1);
+     }
+ 
+     // Get the wrapper-code object after the wrapper replacement.
+     Tagged<Code> wrapper_after_call = main_function_data->wrapper_code(isolate);
+ 
+     // Verify that the budget has been exhausted.
+-    CHECK_EQ(main_function_data->wrapper_budget(), 0);
++    CHECK_EQ(Smi::ToInt(main_function_data->wrapper_budget()->value()), 0);
+     // Verify that the wrapper-code object has changed and the wrapper is now a
+     // specific one.
+     // TODO(saelo): here we have to use full pointer comparison while not all
+@@ -241,12 +246,14 @@ TEST(EagerWrapperReplacement) {
+ 
+     // Set the remaining generic-wrapper budget for add to 1,
+     // so that the next call to it will cause the function to tier up.
+-    add_function_data->set_wrapper_budget(1);
++    add_function_data->wrapper_budget()->set_value(Smi::FromInt(1));
+ 
+     // Verify that the generic-wrapper budgets for all functions are correct.
+-    CHECK_EQ(add_function_data->wrapper_budget(), 1);
+-    CHECK_EQ(mult_function_data->wrapper_budget(), kGenericWrapperBudget);
+-    CHECK_EQ(id_function_data->wrapper_budget(), kGenericWrapperBudget);
++    CHECK_EQ(Smi::ToInt(add_function_data->wrapper_budget()->value()), 1);
++    CHECK_EQ(Smi::ToInt(mult_function_data->wrapper_budget()->value()),
++             kGenericWrapperBudget);
++    CHECK_EQ(Smi::ToInt(id_function_data->wrapper_budget()->value()),
++             kGenericWrapperBudget);
+ 
+     // Verify that all functions are set to use the generic wrapper.
+     CHECK(IsGeneric(add_function_data->wrapper_code(isolate)));
+@@ -259,9 +266,11 @@ TEST(EagerWrapperReplacement) {
+                                   SmiHandle(isolate, 11)};
+       SmiCall(isolate, add_export, 2, params, 21);
+       // Verify that the generic-wrapper budgets for all functions are correct.
+-      CHECK_EQ(add_function_data->wrapper_budget(), 0);
+-      CHECK_EQ(mult_function_data->wrapper_budget(), kGenericWrapperBudget);
+-      CHECK_EQ(id_function_data->wrapper_budget(), kGenericWrapperBudget);
++      CHECK_EQ(Smi::ToInt(add_function_data->wrapper_budget()->value()), 0);
++      CHECK_EQ(Smi::ToInt(mult_function_data->wrapper_budget()->value()),
++               kGenericWrapperBudget);
++      CHECK_EQ(Smi::ToInt(id_function_data->wrapper_budget()->value()),
++               kGenericWrapperBudget);
+       // Verify that the tier-up of the add function replaced the wrapper
+       // for both the add and the mult functions, but not the id function.
+       CHECK(IsSpecific(add_function_data->wrapper_code(isolate)));
+@@ -275,7 +284,8 @@ TEST(EagerWrapperReplacement) {
+       SmiCall(isolate, mult_export, 2, params, 42);
+       // Verify that mult's budget is still intact, which means that the call
+       // didn't go through the generic wrapper.
+-      CHECK_EQ(mult_function_data->wrapper_budget(), kGenericWrapperBudget);
++      CHECK_EQ(Smi::ToInt(mult_function_data->wrapper_budget()->value()),
++               kGenericWrapperBudget);
+     }
+ 
+     // Call the id function to verify that the generic wrapper is used.
+@@ -284,7 +294,8 @@ TEST(EagerWrapperReplacement) {
+       SmiCall(isolate, id_export, 1, params, 6);
+       // Verify that id's budget decreased by 1, which means that the call
+       // used the generic wrapper.
+-      CHECK_EQ(id_function_data->wrapper_budget(), kGenericWrapperBudget - 1);
++      CHECK_EQ(Smi::ToInt(id_function_data->wrapper_budget()->value()),
++               kGenericWrapperBudget - 1);
+     }
+   }
+   Cleanup();
+@@ -346,11 +357,12 @@ TEST(WrapperReplacement_IndirectExport) {
+     // kGenericWrapperBudget and the wrapper to be used for calls to the
+     // indirect function is the generic one.
+     CHECK(IsGeneric(indirect_function_data->wrapper_code(isolate)));
+-    CHECK(indirect_function_data->wrapper_budget() == kGenericWrapperBudget);
++    CHECK(Smi::ToInt(indirect_function_data->wrapper_budget()->value()) ==
++          kGenericWrapperBudget);
+ 
+     // Set the remaining generic-wrapper budget for the indirect function to 1,
+     // so that the next call to it will cause the function to tier up.
+-    indirect_function_data->set_wrapper_budget(1);
++    indirect_function_data->wrapper_budget()->set_value(Smi::FromInt(1));
+ 
+     // Call the Wasm function.
+     Handle<Object> params[1] = {SmiHandle(isolate, 6)};
+@@ -358,7 +370,7 @@ TEST(WrapperReplacement_IndirectExport) {
+ 
+     // Verify that the budget is now exhausted and the generic wrapper has been
+     // replaced by a specific one.
+-    CHECK_EQ(indirect_function_data->wrapper_budget(), 0);
++    CHECK_EQ(Smi::ToInt(indirect_function_data->wrapper_budget()->value()), 0);
+     CHECK(IsSpecific(indirect_function_data->wrapper_code(isolate)));
+   }
+   Cleanup();
+diff --git a/tools/dev/gm.py b/tools/dev/gm.py
+index bff8779..36a240a 100755
+--- a/tools/dev/gm.py
++++ b/tools/dev/gm.py
+@@ -705,7 +705,9 @@ class ArgumentParser(object):
+       return
+     # Specifying a single unit test looks like "unittests/Foo.Bar", test262
+     # tests have names like "S15.4.4.7_A4_T1", don't split these.
+-    if argstring.startswith("unittests/") or argstring.startswith("test262/"):
++    if (argstring.startswith("unittests/") or
++        argstring.startswith("test262/") or
++        argstring.startswith("wasm-api-tests/")):
+       words = [argstring]
+     else:
+       # Assume it's a word like "x64.release" -> split at the dot.

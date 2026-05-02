@@ -1,0 +1,52 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1912715",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/gc/Cell.h",
+        "js/src/vm/NativeObject.h",
+        "js/src/vm/NativeObject.cpp",
+        "js/src/vm/Interpreter-inl.h",
+        "js/src/vm/Interpreter.cpp",
+        "js/src/vm/EnvironmentObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/gc",
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Interpreter FetchName with_LookupProperty \u2014 Stale PropertyResult After Symbol.unscopables Getter Self-Redefines to Data Property \u2192 Cell::as<GetterSetter>() Type Confusion (CVE-2024-8381). CVE-2024-8381. Type confusion vulnerability (csectype-wildptr, sec-high) in the 'with' statement environment lookup path, rooted in with_LookupProperty in js/src/vm/EnvironmentObject.cpp and FetchName in js/src/vm/Interpreter-inl.h. The bug occurs when an object's property has a getter that replaces itself with a data property, and the object is set as its own Symbol.unscopables. During 'with' statement name resolution: (1) LookupProperty finds an own-property getter and populates a PropertyResult indicating it is an accessor, (2) CheckUnscopables calls obj[Symbol.unscopables] which returns the same object, then accesses obj.prop which triggers the getter -- the getter redefines the property as a plain data property and returns false (not unscopable), (3) FetchName receives the now-stale PropertyResult which still claims the property is an accessor. FetchName then calls NativeObject::getGetterSetter (via Cell::as<GetterSetter> in js/src/gc/Cell.h:193) on the slot, which now contains a plain JS value instead of a GetterSetter pointer. In a release build, the engine loads the data value as a pointer, dereferences it to find a supposed getter function, and calls it -- a classic type confusion that enables attacker-controlled function pointer invocation. The fix in changeset 4f1411f1beb6 simplifies with-environment handling in FetchName by forcing a fresh property lookup via the slow path after CheckUnscopables, ensuring the PropertyResult always reflects the current property state.",
+    "fix_commits": [
+        "fab7e5c28e62",
+        "0ca509a3a7fb"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-simplify-with-env-handling-in-fetchname.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1912715 fix part 1",
+            "source_commit": "fab7e5c28e62",
+            "commit": "fab7e5c28e62",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/fab7e5c28e62",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/fab7e5c28e62"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-tests.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1912715 fix part 2",
+            "source_commit": "0ca509a3a7fb",
+            "commit": "0ca509a3a7fb",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/0ca509a3a7fb",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/0ca509a3a7fb"
+        }
+    ],
+    "vrp": null
+}

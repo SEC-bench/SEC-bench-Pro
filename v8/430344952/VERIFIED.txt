@@ -1,0 +1,3 @@
+Verified with `../../v8/crash_check.sh 430344952` using `out/x64.debug/d8` from `meta.json`.
+
+`output.txt` was refreshed from the canonical docker invocation and shows the expected debug check failure in `../../src/objects/fixed-array-inl.h`, line 116, `IsInBounds(index)`, matching the reported parser/preparser mismatch crash.

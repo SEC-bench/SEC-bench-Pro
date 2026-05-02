@@ -1,0 +1,35 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1954042",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmBCClass.h",
+        "js/src/wasm/WasmBaselineCompile.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds write",
+    "error_type": "ASAN_CRASH",
+    "description": "WasmBaselineCompile struct.new — Missing OOM Check After readAllocSiteIndex, Post-OOM Vector Index Lands One Past End (Adjacent Heap Write During Function Discard). Bug 1954042 (sec-high). During wasm baseline compilation of struct.new, a missing OOM check after readAllocSiteIndex() causes the compiler to generate an incorrect index into an internal vector when OOM occurs during function compilation. The vector does not grow due to the OOM, but the code uses the expected vector length as an index, writing one element past the end. Although the entire function is discarded when the masm OOM is observed, the out-of-bounds write to the vector has already occurred and can corrupt adjacent heap memory. The fix adds an OOM check after readAllocSiteIndex().",
+    "fix_commits": [
+        "33cf2bc78a72536179af5366d73df2751e1afcd0"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-check-oom-condition-after-readallocsiteindex.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1954042 - Check OOM condition after readAllocSiteIndex().",
+            "source_commit": "33cf2bc78a72536179af5366d73df2751e1afcd0",
+            "commit": "33cf2bc78a72536179af5366d73df2751e1afcd0",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/33cf2bc78a72536179af5366d73df2751e1afcd0",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/33cf2bc78a72536179af5366d73df2751e1afcd0",
+            "phabricator": "D241665"
+        }
+    ],
+    "vrp": null
+}

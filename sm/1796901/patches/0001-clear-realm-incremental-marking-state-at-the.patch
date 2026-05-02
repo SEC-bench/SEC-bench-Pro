@@ -1,0 +1,52 @@
+From 041774db08880cca1ab10e807d0d71718964dffe Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Wed, 26 Oct 2022 11:09:39 +0000
+Subject: [PATCH] Bug 1796901 - Clear realm incremental marking state at the
+ start of GC rather than at the end r=jandem
+
+GC can be aborted in several states and zones GCRuntime::finishCollection
+doesn't always get called. It's easier to clear this state in a signle place at
+the start.
+
+Differential Revision: https://phabricator.services.mozilla.com/D160056
+---
+ js/src/gc/GC.cpp                        | 7 ++++---
+ js/src/jit-test/tests/gc/bug-1796901.js | 4 ++++
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1796901.js
+
+diff --git a/js/src/gc/GC.cpp b/js/src/gc/GC.cpp
+index 41cab90b9c898..a7176bde3b980 100644
+--- a/js/src/gc/GC.cpp
++++ b/js/src/gc/GC.cpp
+@@ -2720,6 +2720,10 @@ void GCRuntime::beginMarkPhase(AutoGCSession& session) {
+     // the collecting arena lists.
+     zone->arenas.mergeArenasFromCollectingLists();
+     zone->arenas.moveArenasToCollectingLists();
++
++    for (RealmsInZoneIter realm(zone); !realm.done(); realm.next()) {
++      realm->clearAllocatedDuringGC();
++    }
+   }
+ 
+   if (rt->isBeingDestroyed()) {
+@@ -2850,9 +2854,6 @@ void GCRuntime::finishCollection() {
+   for (GCZonesIter zone(this); !zone.done(); zone.next()) {
+     zone->changeGCState(Zone::Finished, Zone::NoGC);
+     zone->notifyObservingDebuggers();
+-    for (RealmsInZoneIter realm(zone); !realm.done(); realm.next()) {
+-      realm->clearAllocatedDuringGC();
+-    }
+   }
+ 
+ #ifdef JS_GC_ZEAL
+diff --git a/js/src/jit-test/tests/gc/bug-1796901.js b/js/src/jit-test/tests/gc/bug-1796901.js
+new file mode 100644
+index 0000000000000..081b5b8e6e30a
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1796901.js
+@@ -0,0 +1,4 @@
++// |jit-test| --no-threads
++gcslice(0);
++evalcx("lazy");
++abortgc();

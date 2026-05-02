@@ -1,0 +1,18 @@
+[*] Leak sandbox base address
+heap_addr: 0x218e00000000
+target_page: 0x36f2f8a23000
+218e00200000
+offset_base: 0x200171
+Sandbox testing mode is enabled. Write to the page starting at 0x36f2f8a23000 (available from JavaScript as `Sandbox.targetPage`) to demonstrate a sandbox bypass.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_ACCERR 36f2f8a23000
+
+==== C stack trace ===============================
+
+ [0x635192965857]
+ [0x768450d21330]
+ [0x36f2f8a23000]
+[end of stack trace]
+Segmentation fault (core dumped)

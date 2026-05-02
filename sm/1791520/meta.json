@@ -1,0 +1,62 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1791520",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/IonAnalysis.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --no-threads --ion-eager",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Missing GC keep-alive on TypedArray across BigInt allocation in Ion JIT-compiled BigInt64Array element ops. CVE-2022-42928 (sec-high, MFSA 2022-46, Firefox 107). MLoadUnboxedScalar / MAtomicTypedArrayElementBinop for Scalar::BigInt64 returned via CreateBigIntFromInt64 which nursery-allocates a fresh BigInt. The Ion-compiled code held the TypedArrayObject in a register without a Rooted/MKeepAliveObject annotation; a minor GC during BigInt creation could move or free the typed array's backing data, leaving the register pointing at freed nursery memory. The fix (commit c224760a76fa4c1f59d4bb82d3e69d74503dfc83 'Add some keep alive annotations' by André Bargull, 2022-10-06, r=jandem, Phabricator D157735) inserts MKeepAlive annotations in js/src/jit/IonAnalysis.cpp so the typed array survives across the BigInt allocation. Follow-up commits add GC-unsafe-region instrumentation (a40af352d29a63054e12d2ae2519ec970f2d8580 'Add GC unsafe region instructions for JIT code') and a regression test (557d0219977ec65dca21449915b1db50e7d85507 'Add tests') at js/src/jit-test/tests/ion/bug1791520.js. Reporters: Samuel Groß, Carl Smith.",
+    "fix_commits": [
+        "c224760a76fa4c1f59d4bb82d3e69d74503dfc83",
+        "557d0219977ec65dca21449915b1db50e7d85507",
+        "a40af352d29a63054e12d2ae2519ec970f2d8580"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-add-some-keep-alive-annotations.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1791520: Add some keep alive annotations. r=jandem",
+            "source_commit": "c224760a76fa4c1f59d4bb82d3e69d74503dfc83",
+            "commit": "c224760a76fa4c1f59d4bb82d3e69d74503dfc83",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/c224760a76fa4c1f59d4bb82d3e69d74503dfc83",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/c224760a76fa4c1f59d4bb82d3e69d74503dfc83",
+            "phabricator": "D157735"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-tests.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1791520: Add tests. r=jandem",
+            "source_commit": "557d0219977ec65dca21449915b1db50e7d85507",
+            "commit": "557d0219977ec65dca21449915b1db50e7d85507",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/557d0219977ec65dca21449915b1db50e7d85507",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/557d0219977ec65dca21449915b1db50e7d85507",
+            "phabricator": "D157900"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0003-add-gc-unsafe-region-instructions-for-jit-code.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 3,
+            "description": "Bug 1791520: Add GC unsafe region instructions for JIT code.",
+            "source_commit": "a40af352d29a63054e12d2ae2519ec970f2d8580",
+            "commit": "a40af352d29a63054e12d2ae2519ec970f2d8580",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/a40af352d29a63054e12d2ae2519ec970f2d8580",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/a40af352d29a63054e12d2ae2519ec970f2d8580",
+            "phabricator": "D157781"
+        }
+    ],
+    "vrp": null
+}

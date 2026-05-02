@@ -1,0 +1,75 @@
+From 313905c4f2c153be4bf4b09b2b06ffad7106869c Mon Sep 17 00:00:00 2001
+From: Victor Gomes <victorgomes@chromium.org>
+Date: Thu, 25 Jul 2024 11:36:01 +0200
+Subject: [PATCH] [maglev] Consider WasmStruct in InferHasInPrototypeChain
+
+Fixed: 355256380
+Change-Id: I0d82c1a723685cf4c1a093ed9e8eb8190502fce8
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5741275
+Commit-Queue: Leszek Swirski <leszeks@chromium.org>
+Auto-Submit: Victor Gomes <victorgomes@chromium.org>
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#95271}
+---
+ src/maglev/maglev-graph-builder.cc       |  4 +++-
+ test/mjsunit/maglev/regress-355256380.js | 19 +++++++++++++++++++
+ test/mjsunit/mjsunit.status              |  2 ++
+ 3 files changed, 24 insertions(+), 1 deletion(-)
+ create mode 100644 test/mjsunit/maglev/regress-355256380.js
+
+diff --git a/src/maglev/maglev-graph-builder.cc b/src/maglev/maglev-graph-builder.cc
+index 647ac998b85..fc132bf25cb 100644
+--- a/src/maglev/maglev-graph-builder.cc
++++ b/src/maglev/maglev-graph-builder.cc
+@@ -10121,7 +10121,9 @@ MaglevGraphBuilder::InferHasInPrototypeChain(
+       // might be a different object each time, so it's much simpler to include
+       // {prototype}. That does, however, mean that we must check {prototype}'s
+       // map stability.
+-      if (!prototype.map(broker()).is_stable()) return kMayBeInPrototypeChain;
++      if (!prototype.IsJSObject() || !prototype.map(broker()).is_stable()) {
++        return kMayBeInPrototypeChain;
++      }
+       last_prototype = prototype.AsJSObject();
+     }
+     broker()->dependencies()->DependOnStablePrototypeChains(
+diff --git a/test/mjsunit/maglev/regress-355256380.js b/test/mjsunit/maglev/regress-355256380.js
+new file mode 100644
+index 00000000000..9c95274b2db
+--- /dev/null
++++ b/test/mjsunit/maglev/regress-355256380.js
+@@ -0,0 +1,19 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++//
++// Flags: --allow-natives-syntax
++
++d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
++let builder = new WasmModuleBuilder();
++let struct_type = builder.addStruct([makeField(kWasmI32, true)]);
++builder.addFunction('MakeStruct', makeSig([], [kWasmExternRef])).exportFunc().addBody([kExprI32Const, 42, kGCPrefix, kExprStructNew, struct_type, kGCPrefix, kExprExternConvertAny]);
++let instance = builder.instantiate();
++globalThis.struct = instance.exports.MakeStruct();
++function foo(arg) {
++  arg.prototype = globalThis.struct;
++  for (var i = 0; i < 5000; i++) {
++    new arg() instanceof arg;
++  }
++}
++foo(function () {});
+diff --git a/test/mjsunit/mjsunit.status b/test/mjsunit/mjsunit.status
+index b1f0618b9f8..edc1ace6928 100644
+--- a/test/mjsunit/mjsunit.status
++++ b/test/mjsunit/mjsunit.status
+@@ -460,6 +460,8 @@
+   'asm/*': [SKIP],
+   'wasm/*': [SKIP],
+ 
++  'maglev/regress-355256380': [SKIP],
++
+   'turboshaft/maglev-frontend/has-in-prototype-chain-wasm': [SKIP],
+ 
+   'sandbox/regress/regress-334120897': [SKIP],
+-- 
+2.43.0
+

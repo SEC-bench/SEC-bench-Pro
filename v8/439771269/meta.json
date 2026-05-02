@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:439771269",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/wasm/wasm-js.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "command_options": "--expose-gc",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A use-after-free vulnerability exists in `WebAssemblyValidateImpl` (src/wasm/wasm-js.cc). The function first calls `GetFirstArgumentAsBytes` to extract a raw pointer into the ArrayBuffer's backing store, storing it in a `base::Vector<const uint8_t>`. It then calls `ArgumentToCompileOptions(info[1], ...)` to process the `options` argument, which may invoke `JSReceiver::GetProperty` on a Proxy object, thereby triggering arbitrary JavaScript execution via the Proxy's `get` trap. An attacker can use this callback window to call `buffer.transfer()` to detach the original ArrayBuffer (severing it from its backing store) and then `gc()` to free the backing store. When `WasmEngine::SyncValidate` is subsequently called with the now-stale `bytes` vector, it reads from freed memory. The root cause is a TOCTOU race: the raw data pointer is obtained before the `options` argument is processed, but processing `options` can trigger JS execution that invalidates the pointer through detachment and garbage collection of the ArrayBuffer's backing store.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6865998 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "4293cb47afcbb1575f51e1cbd63c7cf8f21f85ff [wasm] WA.validate(): always copy the wire bytes",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6865998",
+      "source_cl": 6865998,
+      "source_commit": "4293cb47afcbb1575f51e1cbd63c7cf8f21f85ff"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+From a85fc72269124b76f985b0b84b46bde92e5bd552 Mon Sep 17 00:00:00 2001
+From: Julian Seward <jseward@acm.org>
+Date: Wed, 4 Sep 2024 06:26:52 +0000
+Subject: [PATCH] Bug 1914475.  r=yury.
+
+Differential Revision: https://phabricator.services.mozilla.com/D220254
+---
+ js/src/jit/CodeGenerator.cpp | 3 ++-
+ js/src/jit/Lowering.cpp      | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index ac8670bac3185..495482a500e2b 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -9670,7 +9670,8 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
+ 
+   // Note the assembler offset and framePushed for use by the adjunct
+   // LSafePoint, see visitor for LWasmCallIndirectAdjunctSafepoint below.
+-  if (callee.which() == wasm::CalleeDesc::WasmTable) {
++  if (callee.which() == wasm::CalleeDesc::WasmTable ||
++      callee.which() == wasm::CalleeDesc::FuncRef) {
+     lir->adjunctSafepoint()->recordSafepointInfo(secondRetOffset,
+                                                  framePushedAtStackMapBase);
+   }
+diff --git a/js/src/jit/Lowering.cpp b/js/src/jit/Lowering.cpp
+index 9f049f53869c4..e17e2fc2dac18 100644
+--- a/js/src/jit/Lowering.cpp
++++ b/js/src/jit/Lowering.cpp
+@@ -6677,7 +6677,8 @@ void LIRGenerator::visitWasmCall(MWasmCallT ins) {
+   // safepoint associated with them.  Create a second safepoint here; the node
+   // otherwise does nothing, and codegen for it only marks the safepoint at the
+   // node.
+-  if (ins->callee().which() == wasm::CalleeDesc::WasmTable &&
++  if ((ins->callee().which() == wasm::CalleeDesc::WasmTable ||
++       ins->callee().which() == wasm::CalleeDesc::FuncRef) &&
+       !ins->isWasmReturnCall()) {
+     auto* adjunctSafepoint = new (alloc()) LWasmCallIndirectAdjunctSafepoint();
+     add(adjunctSafepoint);

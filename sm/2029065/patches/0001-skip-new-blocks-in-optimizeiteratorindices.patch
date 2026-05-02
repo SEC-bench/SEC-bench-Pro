@@ -1,0 +1,69 @@
+From 5cfc09e7ce19a151df5651a24ebd250632aac10f Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Fri, 10 Apr 2026 16:08:47 +0000
+Subject: [PATCH] Bug 2029065: Skip new blocks in OptimizeIteratorIndices
+ r=jandem
+
+I considered trying to create precise dominator input here, but given the way we represent dominator relationships (roughly: each block has a dominator id and a numDominated value, and dominates the blocks in the range id..(id+numDominated)), I don't think we can insert new nodes in the middle without modifying all the other blocks.
+
+Instead, I settled for skipping this part of the optimization if a freshly created block is involved. This only affects the Object.keys iterator sharing Alex added in bug 2001383, and should basically never matter in practice.
+
+Differential Revision: https://phabricator.services.mozilla.com/D293432
+---
+ js/src/jit-test/tests/ion/bug2029065.js | 19 +++++++++++++++++++
+ js/src/jit/IonAnalysis.cpp              |  9 ++++++++-
+ 2 files changed, 27 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/ion/bug2029065.js
+
+diff --git a/js/src/jit-test/tests/ion/bug2029065.js b/js/src/jit-test/tests/ion/bug2029065.js
+new file mode 100644
+index 0000000000000..9e33e213abf93
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug2029065.js
+@@ -0,0 +1,19 @@
++function f(obj1, obj2) {
++    let keys1 = Object.keys(obj1);
++    let r = 0;
++    for (let i = 0; i < keys1.length; i++) {
++        r += obj1[keys1[i]];
++        let keys2 = Object.keys(obj2);
++        r += obj2[keys1[i]];
++        r += obj2[keys1[i]];
++        r += keys2.length;
++    }
++    return r;
++}
++
++let o1 = {a: 1, b: 2, c: 3};
++let o2 = {a: 10, b: 20, c: 30};
++
++for (let i = 0; i < 1000; i++) {
++    f(o1, o2);
++}
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 14f4fcef48813..106c5608a0d5b 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -2116,6 +2116,11 @@ static MObjectToIterator* FindObjectToIteratorUse(MDefinition* ins) {
+ bool jit::OptimizeIteratorIndices(const MIRGenerator* mir, MIRGraph& graph) {
+   bool changed = false;
+ 
++  uint32_t numInitialBlocks = graph.numBlockIds();
++  auto hasNoDominatorInfo = [&](MBasicBlock* block) {
++    return block->id() >= numInitialBlocks;
++  };
++
+   for (ReversePostorderIterator blockIter = graph.rpoBegin();
+        blockIter != graph.rpoEnd();) {
+     MBasicBlock* block = *blockIter++;
+@@ -2231,7 +2236,9 @@ bool jit::OptimizeIteratorIndices(const MIRGenerator* mir, MIRGraph& graph) {
+             otherIter = FindObjectToIteratorUse(SkipIterObjectUnbox(receiver));
+           }
+ 
+-          if (!otherIter || !otherIter->dominates(ins)) {
++          if (!otherIter || hasNoDominatorInfo(block) ||
++              hasNoDominatorInfo(otherIter->block()) ||
++              !otherIter->dominates(ins)) {
+             continue;
+           }
+         }

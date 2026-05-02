@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:2012018",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/Iteration.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Use-after-free in SpiderMonkey's for..in iteration helper SuppressDeletedProperty (js/src/vm/Iteration.cpp). CVE-2026-2763 (sec-high, MFSA 2026-13, Firefox 148). When a property is deleted during an active for..in enumeration, SuppressDeletedProperty walks the live NativeIterator list to hide that key from in-progress iterators, then checks the prototype chain to see whether the key is still visible and should therefore not be hidden. The vulnerable visibility check used the re-entrant trio GetPrototype + PrimitiveValueToId<CanGC> + GetPropertyDescriptor; each of these can invoke a Proxy trap and run arbitrary JS. The attacker-controlled proxy trap re-enters the VM and can splice or free entries on the very NativeIteratorListHead linked list that SuppressDeletedPropertyHelper is traversing, so when control returns the helper continues with a dangling NativeIterator*, producing a heap-use-after-free on the intrusive list pointers. The fix (commit 2292742e2bba10cc7f56ff2f0f89f29e6f949b04 by Jan de Mooij, 2026-01-29, r=iain; Phabricator D280679) rewrites the visibility check to the pure, non-re-entrant path: it bails if the object lacks a static prototype, then uses LookupPropertyPure + GetPropertyAttributes (both guaranteed not to run user code or GC) so proxy traps can no longer invalidate the iterator list. Tests landed separately under the same bug as commit c804cf3c4ed53461306b29c1dbf87a1b50e99981 (2026-04-07) after public disclosure. Reported by Evyatar Ben Asher, Keane Lucas, Nicholas Carlini, Newton Cheng, Daniel Freeman, Alex Gaynor, and Joel Weinberger using Claude from Anthropic.",
+    "fix_commits": [
+        "2292742e2bba10cc7f56ff2f0f89f29e6f949b04"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-simplify-property-lookup-in.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 2012018 - Simplify property lookup in",
+            "source_commit": "2292742e2bba10cc7f56ff2f0f89f29e6f949b04",
+            "commit": "2292742e2bba10cc7f56ff2f0f89f29e6f949b04",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/2292742e2bba10cc7f56ff2f0f89f29e6f949b04",
+            "source_url": "https://github.com/mozilla-firefox/firefox/commit/2292742e2bba10cc7f56ff2f0f89f29e6f949b04",
+            "phabricator": "D280679"
+        }
+    ],
+    "vrp": null
+}

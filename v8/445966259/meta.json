@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:445966259",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax --sandbox-testing",
+  "target_source_files": [
+    "src/builtins/builtins-internal-gen.cc"
+  ],
+  "target_subdir": [
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The DebugBreakTrampoline builtin (in src/builtins/builtins-internal-gen.cc) retrieves the code object from a JSFunction's SharedFunctionInfo via GetSharedFunctionInfoCode() and immediately tail-calls into it using TailCallJSCode() without validating that the retrieved code has JS linkage. An attacker who can corrupt the SharedFunctionInfo's trusted data field (achievable from within the V8 sandbox) can replace it with a non-JS-linkage builtin such as CEntry_Return1_ArgvOnStack_NoBuiltinExit or MemCopyUint8Uint8. When a debug break is subsequently triggered on the target function, DebugBreakTrampoline tail-calls into the attacker-controlled builtin using JS calling convention, causing that builtin to misinterpret its arguments and resulting in PC control or arbitrary address write, thereby escaping the V8 sandbox.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "a622c3686d9b0eeb6fbf38c949252479460b967a [sandbox] Introduce kCEntryEntrypointTag for CEntry builtins",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6965029",
+      "cl": 6965029,
+      "commit": "a622c3686d9b0eeb6fbf38c949252479460b967a",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6965029 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6965029",
+      "source_cl": 6965029,
+      "source_commit": "a622c3686d9b0eeb6fbf38c949252479460b967a",
+      "source_ref": "refs/changes/29/6965029/2",
+      "source_patchset": 2
+    }
+  ]
+}

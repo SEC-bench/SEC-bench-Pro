@@ -1,0 +1,51 @@
+From 3517e6ced4eddbe54c1d468c91622494190984cc Mon Sep 17 00:00:00 2001
+From: Stephen Roettger <sroettger@google.com>
+Date: Mon, 20 Jan 2025 17:34:45 +0100
+Subject: [PATCH] [sandbox] fix UB after switch on CachedTieringDecision enum
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ShouldResetInterruptBudgetByICChange doesn't have a return after the
+exhaustive switch on the CachedTieringDecision enum. This is UB if the
+enum value can be outside of the range of the declared enum values.
+
+Fixed: 390205877
+Bug: 390617721
+Change-Id: Iec0648067b40f598b86b1b401df9f6e897994859
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6179823
+Commit-Queue: Stephen Röttger <sroettger@google.com>
+Reviewed-by: Igor Sheludko <ishell@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98206}
+---
+ src/execution/tiering-manager.cc | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/execution/tiering-manager.cc b/src/execution/tiering-manager.cc
+index bca0c1c5589..2c512773b37 100644
+--- a/src/execution/tiering-manager.cc
++++ b/src/execution/tiering-manager.cc
+@@ -208,6 +208,10 @@ int InterruptBudgetFor(Isolate* isolate, std::optional<CodeKind> code_kind,
+         case CachedTieringDecision::kNormal:
+           return v8_flags.invocation_count_for_maglev * bytecode_length;
+       }
++      // The enum value is coming from inside the sandbox and while the switch
++      // is exhaustive, it's not guaranteed that value is one of the declared
++      // values.
++      UNREACHABLE();
+     }
+     return v8_flags.invocation_count_for_maglev * bytecode_length;
+   }
+@@ -430,6 +434,9 @@ bool ShouldResetInterruptBudgetByICChange(
+     case CachedTieringDecision::kNormal:
+       return true;
+   }
++  // The enum value is coming from inside the sandbox and while the switch is
++  // exhaustive, it's not guaranteed that value is one of the declared values.
++  UNREACHABLE();
+ }
+ 
+ }  // namespace
+-- 
+2.43.0
+

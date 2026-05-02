@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:380397544",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--turboshaft-wasm --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/wasm/canonical-types.h"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A WASM type confusion vulnerability in V8's isorecursive type canonicalization. The bug was introduced by commit 20d9a7f (attempting to fix b/379009132) which added the RecursionGroupRange struct in canonical-types.h to handle recursive group comparisons. The flaw is in RecursionGroupRange::RelativeIndex(): when two recursive groups are compared for equality (CanonicalEquality) or hashed (CanonicalHashing), intra-group type references are converted to relative indices (0-based offsets from the group start), while external references retain their absolute canonical indices. Both are represented as CanonicalTypeIndex, making them structurally indistinguishable. As a result, a relative index N within a group (meaning 'the N-th type in this recursive group') is identical in representation to absolute canonical index N (meaning a completely different globally canonicalized type). This causes structurally different recursive groups that reference different types to be incorrectly considered equal and collapsed to the same canonical index, yielding arbitrary WASM type confusion exploitable for in-sandbox memory corruption and full code execution.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Backport patch for CL 6048961 plus the CL 6055121 hashing typo correction, adapted to start/end RecursionGroupRange names.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "0f2e4bf2b22ee367a02c9bc6b7ab26a1f4411f5d [wasm] Fix comparison of relative type indexes",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6048961",
+      "source_cl": 6048961,
+      "source_commit": "0f2e4bf2b22ee367a02c9bc6b7ab26a1f4411f5d"
+    }
+  ]
+}

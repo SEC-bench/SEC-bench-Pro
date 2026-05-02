@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:439521654",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/runtime/runtime-typedarray.cc"
+  ],
+  "target_subdir": [
+    "src/runtime"
+  ],
+  "command_options": "",
+  "verification_binary": "out/ia32.asan/d8",
+  "target_vulnerability_type": "Race condition",
+  "error_type": "ASAN_CRASH",
+  "description": "A race condition (TOCTOU) vulnerability exists in Runtime_TypedArraySortFast (src/runtime/runtime-typedarray.cc) when sorting a TypedArray backed by a Growable SharedArrayBuffer (GSAB). The function first reads byte_length from the typed array and allocates a temporary copy buffer of that size, then copies the array contents into it. Later, it re-reads length (number of elements) from the typed array to drive the sort and the copy-back operations. Between these two reads, a concurrent worker thread can call gsab.grow(newSize), increasing the underlying buffer size. After growing, GetLength() returns the new larger element count, but the temporary buffer was only allocated for the original byte_length. Passing the inflated length to std::sort and to the copy-back memcpy causes a heap buffer overflow. A SBXCHECK(length * sizeof(ctype) == byte_length) at line ~162 acts as a hard CHECK (crash-on-violation) when the V8 sandbox is enabled (typical 64-bit builds), but degrades to a DCHECK (no-op in release) on non-sandbox builds such as 32-bit Chrome, leaving those configurations fully vulnerable to exploitation.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "variant-hardening",
+      "evidence_lineno": 0,
+      "evidence_text": "3bbb4dcb340460be8ff9afe51290cfe94d7188ff [rab/gsab] Handle GSABs growing during sorting gracefully",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6918956",
+      "cl": 6918956,
+      "source_commit": "3bbb4dcb340460be8ff9afe51290cfe94d7188ff",
+      "commit": "3bbb4dcb340460be8ff9afe51290cfe94d7188ff",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6918956 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6918956",
+      "source_cl": 6918956,
+      "source_ref": "refs/changes/56/6918956/5",
+      "source_patchset": 5
+    }
+  ]
+}

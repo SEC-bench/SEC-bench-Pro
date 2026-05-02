@@ -1,0 +1,97 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x7a5c00000000,0x7b5c00000000)
+Corrupting memory starting from object at 0x80d3bc with RNG seed 1032026359
+  Corrupting object at 0x80d3bc of type UINT8_TYPED_ARRAY_CONSTRUCTOR_TYPE
+  Recursively corrupting object referenced through pointer at offset 0
+    Corrupting object at 0x81d1ac of type MAP_TYPE
+    Recursively corrupting neighboring object at offset 616
+      Corrupting object at 0x81d414 of type EXTERNAL_ONE_BYTE_STRING_TYPE
+      Corrupted 16-bit field at offset 8. Old value: 0x1b, new value: 0x45d2
+=================================================================
+==13==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x7c4d423e0208 at pc 0x557c91917c2f bp 0x7fffd5be5d80 sp 0x7fffd5be5d78
+READ of size 1 at 0x7c4d423e0208 thread T0
+    #0 0x557c91917c2e in void v8::internal::CalculateLineEndsImpl<unsigned char>(v8::base::SmallVector<int, 32ul, std::__Cr::allocator<int>>*, v8::base::Vector<unsigned char const>, bool) src/objects/string.cc:1148:23
+    #1 0x557c919170c4 in v8::base::SmallVector<int, 32ul, std::__Cr::allocator<int>> v8::internal::String::CalculateLineEndsVector<v8::internal::Isolate>(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, bool) src/objects/string.cc:1177:7
+    #2 0x557c919181a2 in v8::internal::Handle<v8::internal::FixedArray> v8::internal::String::CalculateLineEnds<v8::internal::Isolate>(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, bool) src/objects/string.cc:1197:7
+    #3 0x557c918cd92b in void v8::internal::Script::InitLineEndsInternal<v8::internal::Isolate>(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Script>) src/objects/script.cc:112:9
+    #4 0x557c918cf74a in InitLineEnds src/objects/script-inl.h:201:3
+    #5 0x557c918cf74a in v8::internal::Script::GetPositionInfo(v8::internal::DirectHandle<v8::internal::Script>, int, v8::internal::Script::PositionInfo*, v8::internal::Script::OffsetFlag) src/objects/script.cc:149:3
+    #6 0x557c913cfea6 in v8::internal::ExistingCodeLogger::LogExistingFunction(v8::internal::DirectHandle<v8::internal::SharedFunctionInfo>, v8::internal::DirectHandle<v8::internal::AbstractCode>, v8::internal::LogEventListener::CodeTag) src/logging/log.cc:2697:5
+    #7 0x557c913bb651 in v8::internal::ExistingCodeLogger::LogCompiledFunctions(bool) src/logging/log.cc:2673:5
+    #8 0x557c91aa5207 in v8::internal::ProfilingScope::ProfilingScope(v8::internal::Isolate*, v8::internal::ProfilerListener*) src/profiler/cpu-profiler.cc:94:16
+    #9 0x557c91aa9b18 in v8::internal::CpuProfiler::EnableLogging() src/profiler/cpu-profiler.cc:594:11
+    #10 0x557c91aaafc2 in v8::internal::CpuProfiler::StartProcessorIfNotStarted() src/profiler/cpu-profiler.cc:704:5
+    #11 0x557c91aaaa49 in v8::internal::CpuProfiler::StartProfiling(char const*, v8::CpuProfilingOptions, std::__Cr::unique_ptr<v8::DiscardedSamplesDelegate, std::__Cr::default_delete<v8::DiscardedSamplesDelegate>>) src/profiler/cpu-profiler.cc:658:5
+    #12 0x557c91aab46d in v8::internal::CpuProfiler::StartProfiling(v8::internal::Tagged<v8::internal::String>, v8::CpuProfilingOptions, std::__Cr::unique_ptr<v8::DiscardedSamplesDelegate, std::__Cr::default_delete<v8::DiscardedSamplesDelegate>>) src/profiler/cpu-profiler.cc:692:10
+    #13 0x557c908cd302 in Start src/api/api.cc:11588:51
+    #14 0x557c908cd302 in v8::CpuProfiler::StartProfiling(v8::Local<v8::String>, v8::CpuProfilingOptions, std::__Cr::unique_ptr<v8::DiscardedSamplesDelegate, std::__Cr::default_delete<v8::DiscardedSamplesDelegate>>) src/api/api.cc:11614:10
+    #15 0x557c90588066 in v8::D8Console::Profile(v8::debug::ConsoleCallArguments const&, v8::debug::ConsoleContext const&) src/d8/d8-console.cc:115:14
+    #16 0x557c909bbbff in v8::internal::(anonymous namespace)::ConsoleCall(v8::internal::Isolate*, v8::internal::BuiltinArguments const&, void (v8::debug::ConsoleDelegate::*)(v8::debug::ConsoleCallArguments const&, v8::debug::ConsoleContext const&)) src/builtins/builtins-console.cc:170:3
+    #17 0x557c909b276c in Builtin_Impl_ConsoleProfile src/builtins/builtins-console.cc:197:1
+    #18 0x557c909b276c in v8::internal::Builtin_ConsoleProfile(int, unsigned long*, v8::internal::Isolate*) src/builtins/builtins-console.cc:197:1
+    #19 0x557c95118ff5 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #20 0x557c9506d7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #21 0x557c9506a55b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #22 0x557c9506a2aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #23 0x557c90c8ae73 in Call src/execution/simulator.h:212:12
+    #24 0x557c90c8ae73 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #25 0x557c90c8c3a8 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #26 0x557c9088903d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1953:7
+    #27 0x557c905ae7c6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1044:44
+    #28 0x557c905e7ae0 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5543:10
+    #29 0x557c905f3ab3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6503:37
+    #30 0x557c905f2ee5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6411:18
+    #31 0x557c905f6aa9 in v8::Shell::Main(int, char**) src/d8/d8.cc:7301:18
+    #32 0x7f9d432781c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #33 0x7f9d4327828a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #34 0x557c904a1024 in _start (/src/v8/out/x64.asan/d8+0x129a024) (BuildId: 0b328dac491554ed)
+
+0x7c4d423e0208 is located 0 bytes after 104-byte region [0x7c4d423e01a0,0x7c4d423e0208)
+allocated by thread T0 here:
+    #0 0x557c9057c15d in operator new(unsigned long) (/src/v8/out/x64.asan/d8+0x137515d) (BuildId: 0b328dac491554ed)
+    #1 0x557c9118ec7d in make_unique<v8::internal::FuzzilliExtension, const char (&)[9], 0> third_party/libc++/src/include/__memory/unique_ptr.h:759:26
+    #2 0x557c9118ec7d in v8::internal::Bootstrapper::InitializeOncePerProcess() src/init/bootstrapper.cc:163:25
+    #3 0x557c911ec944 in v8::internal::V8::Initialize() src/init/v8.cc:228:3
+    #4 0x557c908b2036 in v8::V8::Initialize(int) src/api/api.cc:6466:3
+    #5 0x557c905f57c2 in Initialize include/v8-initialization.h:127:12
+    #6 0x557c905f57c2 in v8::Shell::Main(int, char**) src/d8/d8.cc:7098:3
+    #7 0x7f9d432781c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #8 0x7f9d4327828a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #9 0x557c904a1024 in _start (/src/v8/out/x64.asan/d8+0x129a024) (BuildId: 0b328dac491554ed)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow src/objects/string.cc:1148:23 in void v8::internal::CalculateLineEndsImpl<unsigned char>(v8::base::SmallVector<int, 32ul, std::__Cr::allocator<int>>*, v8::base::Vector<unsigned char const>, bool)
+Shadow bytes around the buggy address:
+  0x7c4d423dff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7c4d423e0000: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+  0x7c4d423e0080: 00 00 00 00 00 00 fa fa fa fa fa fa fa fa 00 00
+  0x7c4d423e0100: 00 00 00 00 00 00 00 00 00 00 00 fa fa fa fa fa
+  0x7c4d423e0180: fa fa fa fa 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7c4d423e0200: 00[fa]fa fa fa fa fa fa fa fa 00 00 00 00 00 00
+  0x7c4d423e0280: 00 00 00 00 00 00 00 fa fa fa fa fa fa fa fa fa
+  0x7c4d423e0300: 00 00 00 00 00 00 00 00 00 00 00 00 00 fa fa fa
+  0x7c4d423e0380: fa fa fa fa fa fa 00 00 00 00 00 00 00 00 00 00
+  0x7c4d423e0400: 00 00 00 00 fa fa fa fa fa fa fa fa 00 00 00 00
+  0x7c4d423e0480: 00 00 00 00 00 00 00 00 00 fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING
+
+## V8 sandbox violation detected!
+

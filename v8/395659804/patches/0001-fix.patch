@@ -1,0 +1,88 @@
+diff --git a/src/builtins/arm64/builtins-arm64.cc b/src/builtins/arm64/builtins-arm64.cc
+index 762182175e6..5465255ab98 100644
+--- a/src/builtins/arm64/builtins-arm64.cc
++++ b/src/builtins/arm64/builtins-arm64.cc
+@@ -2313,6 +2313,13 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
+     __ LeaveFrame(StackFrame::STUB);
+   }
+ 
++  // Check we are actually jumping to an OSR code object. This among other
++  // things ensures that the object contains deoptimization data below.
++  __ Ldr(scratch.W(),
++         FieldMemOperand(maybe_target_code, Code::kOsrOffsetOffset));
++  __ Cmp(scratch.W(), BytecodeOffset::None().ToInt());
++  __ SbxCheck(Condition::kNotEqual, AbortReason::kExpectedOsrCode);
++
+   // Check the target has a matching parameter count. This ensures that the OSR
+   // code will correctly tear down our frame when leaving.
+   __ Ldrh(scratch.W(),
+diff --git a/src/builtins/x64/builtins-x64.cc b/src/builtins/x64/builtins-x64.cc
+index e8511e05a2f..23fa7bf8ee1 100644
+--- a/src/builtins/x64/builtins-x64.cc
++++ b/src/builtins/x64/builtins-x64.cc
+@@ -3036,6 +3036,12 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
+     __ leave();
+   }
+ 
++  // Check we are actually jumping to an OSR code object. This among other
++  // things ensures that the object contains deoptimization data below.
++  __ movl(scratch, FieldOperand(maybe_target_code, Code::kOsrOffsetOffset));
++  __ cmpl(scratch, Immediate(BytecodeOffset::None().ToInt()));
++  __ SbxCheck(Condition::not_equal, AbortReason::kExpectedOsrCode);
++
+   // Check the target has a matching parameter count. This ensures that the OSR
+   // code will correctly tear down our frame when leaving.
+   __ movzxwq(scratch,
+diff --git a/src/codegen/bailout-reason.h b/src/codegen/bailout-reason.h
+index 06a9c212ec1..c9fd2f977a7 100644
+--- a/src/codegen/bailout-reason.h
++++ b/src/codegen/bailout-reason.h
+@@ -22,6 +22,7 @@ namespace internal {
+   V(kAllocationIsNotDoubleAligned, "Allocation is not double aligned")         \
+   V(kExpectedOptimizationSentinel,                                             \
+     "Expected optimized code cell or optimization sentinel")                   \
++  V(kExpectedOsrCode, "Expected OSR code")                                     \
+   V(kExpectedUndefinedOrCell, "Expected undefined or cell in register")        \
+   V(kExpectedFeedbackCell, "Expected feedback cell")                           \
+   V(kExpectedFeedbackVector, "Expected feedback vector")                       \
+diff --git a/src/heap/factory-base.cc b/src/heap/factory-base.cc
+index c3bec4354a8..c6f75ecc00c 100644
+--- a/src/heap/factory-base.cc
++++ b/src/heap/factory-base.cc
+@@ -32,6 +32,7 @@
+ #include "src/objects/swiss-name-dictionary-inl.h"
+ #include "src/objects/template-objects-inl.h"
+ #include "src/roots/roots.h"
++#include "src/sandbox/check.h"
+ 
+ namespace v8 {
+ namespace internal {
+@@ -93,6 +94,8 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
+   code->set_metadata_size(options.metadata_size);
+   code->set_inlined_bytecode_size(options.inlined_bytecode_size);
+   code->set_osr_offset(options.osr_offset);
++  SBXCHECK_IMPLIES(options.deoptimization_data.is_null(),
++                   options.osr_offset.IsNone());
+   code->set_handler_table_offset(options.handler_table_offset);
+   code->set_constant_pool_offset(options.constant_pool_offset);
+   code->set_code_comments_offset(options.code_comments_offset);
+diff --git a/src/sandbox/check.h b/src/sandbox/check.h
+index fba2d017b80..72bbe787c58 100644
+--- a/src/sandbox/check.h
++++ b/src/sandbox/check.h
+@@ -56,6 +56,7 @@
+ #define SBXCHECK_LT(lhs, rhs) SBXCHECK_WRAPPED(LT, lhs, rhs)
+ #define SBXCHECK_LE(lhs, rhs) SBXCHECK_WRAPPED(LE, lhs, rhs)
+ #define SBXCHECK_BOUNDS(index, limit) SBXCHECK_WRAPPED(BOUNDS, index, limit)
++#define SBXCHECK_IMPLIES(when, then) SBXCHECK_WRAPPED(IMPLIES, when, then)
+ #else
+ #define SBXCHECK(condition) DCHECK(condition)
+ #define SBXCHECK_EQ(lhs, rhs) DCHECK_EQ(lhs, rhs)
+@@ -65,6 +66,7 @@
+ #define SBXCHECK_LT(lhs, rhs) DCHECK_LT(lhs, rhs)
+ #define SBXCHECK_LE(lhs, rhs) DCHECK_LE(lhs, rhs)
+ #define SBXCHECK_BOUNDS(index, limit) DCHECK_BOUNDS(index, limit)
++#define SBXCHECK_IMPLIES(when, then) DCHECK_IMPLIES(when, then)
+ #endif
+ 
+ #endif  // V8_SANDBOX_CHECK_H_

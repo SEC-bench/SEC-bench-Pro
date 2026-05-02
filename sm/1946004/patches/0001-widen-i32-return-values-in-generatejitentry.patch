@@ -1,0 +1,26 @@
+From 7a1bf5ae72cdef17ac65f39c26e0f4c665500252 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Thu, 13 Feb 2025 12:21:29 +0000
+Subject: [PATCH] Bug 1946004 - Widen i32 return values in GenerateJitEntry.
+ r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D237530
+---
+ js/src/wasm/WasmStubs.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/js/src/wasm/WasmStubs.cpp b/js/src/wasm/WasmStubs.cpp
+index a7e101bd5b31b..8d821c40452e6 100644
+--- a/js/src/wasm/WasmStubs.cpp
++++ b/js/src/wasm/WasmStubs.cpp
+@@ -1241,7 +1241,9 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
+     switch (results[0].kind()) {
+       case ValType::I32:
+         GenPrintIsize(DebugChannel::Function, masm, ReturnReg);
+-        // No widening is required, as the value is boxed.
++#ifdef JS_64BIT
++        masm.widenInt32(ReturnReg);
++#endif
+         masm.boxNonDouble(JSVAL_TYPE_INT32, ReturnReg, JSReturnOperand);
+         break;
+       case ValType::F32: {

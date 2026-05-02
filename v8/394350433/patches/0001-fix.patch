@@ -1,0 +1,141 @@
+From 84a0e230dabc2c874a129c2280d6be4f45636225 Mon Sep 17 00:00:00 2001
+From: Thibaud Michaud <thibaudm@chromium.org>
+Date: Mon, 10 Feb 2025 14:31:16 +0100
+Subject: [PATCH] Reland "Lower the maximum JS parameter count"
+
+This is a reland of commit 1827ed8345369ca50a55a10ab3e45bcc581c6339
+
+Before the change, one of the nodes had more than 2^16 inputs
+so optimization bailed out.
+After the change, the function has fewer parameters and gets
+optimized, and the register allocator struggles with that many
+parameters and times out.
+Just mark the test as slow for now.
+
+Original change's description:
+> Lower the maximum JS parameter count
+>
+> To allow extra implicit arguments on the call node without overflowing
+> the uint16_t input count, in particular in the wasm-to-js wrapper where
+> we don't have a bailout mechanism.
+>
+> R=verwaest@chromium.org
+>
+> Fixed: 394350433
+> Change-Id: I61d2e2387539cafd6a0909c3ee035c93d0217be3
+> Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6239302
+> Reviewed-by: Toon Verwaest <verwaest@chromium.org>
+> Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+> Cr-Commit-Position: refs/heads/main@{#98556}
+
+Change-Id: I9b5c53a8f7ee247914585a3292895672bbce1ab6
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6249299
+Reviewed-by: Toon Verwaest <verwaest@chromium.org>
+Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98609}
+---
+ src/objects/code.h                                           | 4 +++-
+ test/mjsunit/mjsunit.status                                  | 4 ++++
+ test/mjsunit/regress/regress-11491.js                        | 2 +-
+ test/mjsunit/regress/regress-388905056.js                    | 2 +-
+ test/mjsunit/regress/regress-crbug-724153.js                 | 2 +-
+ test/mjsunit/regress/regress-v8-6716.js                      | 2 +-
+ test/mjsunit/turboshaft/maglev-frontend/regress-359266991.js | 2 +-
+ 7 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/objects/code.h b/src/objects/code.h
+index ea84a623cad..6cbfa2ee0c4 100644
+--- a/src/objects/code.h
++++ b/src/objects/code.h
+@@ -458,7 +458,9 @@ class Code : public ExposedTrustedObject {
+   static const int kIsTurbofannedBit = IsTurbofannedField::kShift;
+ 
+   static const int kArgumentsBits = 16;
+-  static const int kMaxArguments = (1 << kArgumentsBits) - 1;
++  // Slightly less than 2^kArgumentBits-1 to allow for extra implicit arguments
++  // on the call nodes without overflowing the uint16_t input_count.
++  static const int kMaxArguments = (1 << kArgumentsBits) - 10;
+ 
+  private:
+   DECL_PRIMITIVE_SETTER(marked_for_deoptimization, bool)
+diff --git a/test/mjsunit/mjsunit.status b/test/mjsunit/mjsunit.status
+index 8c48ebd7f83..11213f98707 100644
+--- a/test/mjsunit/mjsunit.status
++++ b/test/mjsunit/mjsunit.status
+@@ -246,6 +246,10 @@
+   # collide more. This tests adds many objects to a WeakMap and that is very
+   # slow in the lower_limits_mode.
+   'es6/big-weakmap': [PASS, HEAVY, ['lower_limits_mode', SKIP]],
++
++  # TODO(thibaudm): Register allocation struggles with the function in this
++  # test, which has the maximum allowed number of parameters.
++  'regress/regress-crbug-724153': [SLOW],
+ }],  # ALWAYS
+ 
+ ################################################################################
+diff --git a/test/mjsunit/regress/regress-11491.js b/test/mjsunit/regress/regress-11491.js
+index 795480a15db..4e188d44226 100644
+--- a/test/mjsunit/regress/regress-11491.js
++++ b/test/mjsunit/regress/regress-11491.js
+@@ -4,7 +4,7 @@
+ 
+ function test() {
+   // Create a generator constructor with the maximum number of allowed parameters.
+-  const args = new Array(65535);
++  const args = new Array(65526);
+   function* gen() {}
+   const c = gen.constructor.apply(null, args);
+ 
+diff --git a/test/mjsunit/regress/regress-388905056.js b/test/mjsunit/regress/regress-388905056.js
+index c647a0988fd..3b942e8bc4c 100644
+--- a/test/mjsunit/regress/regress-388905056.js
++++ b/test/mjsunit/regress/regress-388905056.js
+@@ -7,7 +7,7 @@
+ 
+ function f() {}
+ let array = [];
+-array.length = 65534;
++array.length = 65525;
+ let bound = f.bind(null, ...array);
+ function g() { bound(1); }
+ %PrepareFunctionForOptimization(g);
+diff --git a/test/mjsunit/regress/regress-crbug-724153.js b/test/mjsunit/regress/regress-crbug-724153.js
+index a571f8e0bf5..282532e5026 100644
+--- a/test/mjsunit/regress/regress-crbug-724153.js
++++ b/test/mjsunit/regress/regress-crbug-724153.js
+@@ -6,7 +6,7 @@
+ 
+ (function TestParameterLimit() {
+   var src = '(function f(a,';
+-  for (var i = 0; i < 65534 - 2; i++) {
++  for (var i = 0; i < 65525 - 2; i++) {
+     src += 'b' + i + ',';
+   }
+   src += 'c) { return a + c })';
+diff --git a/test/mjsunit/regress/regress-v8-6716.js b/test/mjsunit/regress/regress-v8-6716.js
+index 87b72e14882..df8c0688772 100644
+--- a/test/mjsunit/regress/regress-v8-6716.js
++++ b/test/mjsunit/regress/regress-v8-6716.js
+@@ -3,5 +3,5 @@
+ // found in the LICENSE file.
+ 
+ function f() {}
+-var a = Array(2 ** 16 - 2);  // Elements in large-object-space.
++var a = Array(2 ** 16 - 10);  // Elements in large-object-space.
+ f.bind(...a);
+diff --git a/test/mjsunit/turboshaft/maglev-frontend/regress-359266991.js b/test/mjsunit/turboshaft/maglev-frontend/regress-359266991.js
+index 5e67a79d95b..06efd2a00cd 100644
+--- a/test/mjsunit/turboshaft/maglev-frontend/regress-359266991.js
++++ b/test/mjsunit/turboshaft/maglev-frontend/regress-359266991.js
+@@ -5,7 +5,7 @@
+ // Flags: --allow-natives-syntax --turbolev --turbofan
+ 
+ function foo() {
+-  const arr = new Array(65535);
++  const arr = new Array(65526);
+   function* bar() {}
+   const f = bar.constructor.apply(null, arr);
+   f();
+-- 
+2.43.0
+

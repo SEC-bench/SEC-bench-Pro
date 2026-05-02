@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:398065918",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--allow-natives-syntax --no-js-atomics-pause --no-script-context-mutable-heap-number --predictable --wasm-staging --isolate",
+  "target_source_files": [
+    "src/maglev/maglev-graph-builder.cc"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability in V8's Maglev JIT compiler caused by improper handling of folded allocations during garbage collection. In `BuildInlinedAllocation` (maglev-graph-builder.cc), when processing a `VirtualObject::kDefault` object whose fields contain nested `VirtualObject` instances (e.g., a rest-parameter array whose element is a HeapNumber), the recursive call to `BuildInlinedAllocation` for the nested object extends the same current allocation block. This produces a folded allocation where the parent object (e.g., a HeapNumber `PI`) and a later sibling object (e.g., the rest-parameter array `A`) are assigned contiguous slots in the same young-space block. If a GC/scavenge is triggered while filling in a subsequent allocation (e.g., allocating `R` exhausts the current semi-space page and invokes `Builtins_AllocateInYoungGeneration`), the surviving objects `V` and `PI` are promoted and copied to old space in order, placing `V` immediately after `PI`. When execution resumes and `A` is materialised, it is written into the slot that was reserved for it in the folded allocation block \u2014 the slot that is now occupied by the promoted `V` \u2014 overwriting `V`'s map and fields with `A`'s FixedArray header. The result is that a HeapNumber is aliased as a FixedArray (or vice-versa), causing subsequent operations on `V` (e.g., `Number.prototype.toString`) to crash or misbehave. The fix is to call `ClearCurrentAllocationBlock()` before recursing into a nested `VirtualObject` inside `ForEachDeoptInputLocation`, ensuring that the nested object and its parent are not folded together across a potential GC safepoint.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit eb9b25970b0ad4a3f8ce23d8de3583c62e5d6b87 for CL 6297972.",
+      "url": "https://crrev.com/c/6297972",
+      "cl": 6297972,
+      "source_commit": "eb9b25970b0ad4a3f8ce23d8de3583c62e5d6b87",
+      "commit": "eb9b25970b0ad4a3f8ce23d8de3583c62e5d6b87",
+      "source_cl": 6297972,
+      "source_url": "https://crrev.com/c/6297972"
+    }
+  ]
+}

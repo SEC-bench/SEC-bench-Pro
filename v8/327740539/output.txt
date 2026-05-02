@@ -1,0 +1,43 @@
+Cannot dereference handle owned by non-running local heap
+
+
+#
+# Fatal error in ../../src/handles/handles.h, line 162
+# Check failed: !v8::internal::v8_flags.enable_slow_asserts.value() || (IsDereferenceAllowed()).
+#
+#
+#
+#FailureMessage Object: 0x7f0f3d364c60
+==== C stack trace ===============================
+
+    out/x64.asan/d8(___interceptor_backtrace+0x46) [0x60e18c8b0506]
+    out/x64.asan/d8(+0x6ee5c53) [0x60e191a08c53]
+    out/x64.asan/d8(+0x6ee3b7a) [0x60e191a06b7a]
+    out/x64.asan/d8(+0x6eb89d9) [0x60e1919db9d9]
+    out/x64.asan/d8(+0x205df89) [0x60e18cb80f89]
+    out/x64.asan/d8(+0x3b26d28) [0x60e18e649d28]
+    out/x64.asan/d8(+0x3b22935) [0x60e18e645935]
+    out/x64.asan/d8(+0x3b1b69c) [0x60e18e63e69c]
+    out/x64.asan/d8(+0x3b16224) [0x60e18e639224]
+    out/x64.asan/d8(+0x3b283b5) [0x60e18e64b3b5]
+    out/x64.asan/d8(+0x3b4aa0d) [0x60e18e66da0d]
+    out/x64.asan/d8(+0x3b3dfa0) [0x60e18e660fa0]
+    out/x64.asan/d8(+0x3b3bc41) [0x60e18e65ec41]
+    out/x64.asan/d8(+0x3b469e7) [0x60e18e6699e7]
+    out/x64.asan/d8(+0x3b3e02f) [0x60e18e66102f]
+    out/x64.asan/d8(+0x3ad2bc8) [0x60e18e5f5bc8]
+    out/x64.asan/d8(+0x3afcee3) [0x60e18e61fee3]
+    out/x64.asan/d8(+0x3af9906) [0x60e18e61c906]
+    out/x64.asan/d8(+0x3ad48df) [0x60e18e5f78df]
+    out/x64.asan/d8(+0x3ada61a) [0x60e18e5fd61a]
+    out/x64.asan/d8(+0x3b02ee9) [0x60e18e625ee9]
+    out/x64.asan/d8(+0x23edbfa) [0x60e18cf10bfa]
+    out/x64.asan/d8(+0x2562abe) [0x60e18d085abe]
+    out/x64.asan/d8(+0x6ee9eee) [0x60e191a0ceee]
+    out/x64.asan/d8(+0x6ef6333) [0x60e191a19333]
+    out/x64.asan/d8(+0x6eddc23) [0x60e191a00c23]
+    out/x64.asan/d8(+0x1ddf6a9) [0x60e18c9026a9]
+    /lib/x86_64-linux-gnu/libc.so.6(+0x9caa4) [0x7f0f70d60aa4]
+    /lib/x86_64-linux-gnu/libc.so.6(__clone+0x44) [0x7f0f70deda64]
+Received signal 6
+Aborted (core dumped)

@@ -1,0 +1,21 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x79720447e7f0 (pc 0x7d7140466aec bp 0x7ffde4729c50 sp 0x7ffde4729408 T0)
+==13==The signal is caused by a WRITE memory access.
+    #0 0x7d7140466aec  (/lib/x86_64-linux-gnu/libc.so.6+0x188aec) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #1 0x572fba937f1b in __asan_memcpy /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors_memintrinsics.cpp:63:3
+    #2 0x572fbacbbaf8 in js::detail::OrderedHashTableImpl<js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::Entry, js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::MapOps>::rehash(JSContext*, unsigned int) /src/gecko-dev/js/src/builtin/OrderedHashTableObject.h:1222:13
+    #3 0x572fbacba46e in bool js::detail::OrderedHashTableImpl<js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::Entry, js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::MapOps>::put<js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::Entry>(JSContext*, js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::Entry&&) /src/gecko-dev/js/src/builtin/OrderedHashTableObject.h:717:52
+    #4 0x572fbac812de in bool js::OrderedHashMapImpl<js::PreBarriered<js::HashableValue>, js::HeapPtr<JS::Value>, js::HashableValueHasher>::put<js::HashableValue const&, JS::Value const&>(JSContext*, js::HashableValue const&, JS::Value const&) /src/gecko-dev/js/src/builtin/OrderedHashTableObject.h:1357:17
+    #5 0x572fbac54f05 in js::MapObject::setWithHashableKey(JSContext*, js::HashableValue const&, JS::Value const&) /src/gecko-dev/js/src/builtin/MapObject.cpp:564:22
+    #6 0x572fbac54d77 in js::MapObject::set(JSContext*, JS::Value const&, JS::Value const&) /src/gecko-dev/js/src/builtin/MapObject.cpp:552:10
+    #7 0x3a8823efdbcd  (<unknown module>)
+
+==13==Register values:
+rax = 0x000079720447e7f0  rbx = 0x0000000000000000  rcx = 0x00000f2ec0887cff  rdx = 0x0000000000000010  
+rdi = 0x000079720447e7f0  rsi = 0x00007970964767f8  rbp = 0x00007ffde4729c50  rsp = 0x00007ffde4729408  
+ r8 = 0x00000f2e4088fcfe   r9 = 0x000079720447e7ff  r10 = 0x00000f2e4088fcff  r11 = 0x00000f2ec0887cf8  
+r12 = 0x00000f2ec0887cf8  r13 = 0xffffffffffffffcf  r14 = 0x00007b613f7e0080  r15 = 0x0000000004000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (/lib/x86_64-linux-gnu/libc.so.6+0x188aec) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb) 
+==13==ABORTING

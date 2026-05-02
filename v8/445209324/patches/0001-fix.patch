@@ -1,0 +1,97 @@
+From 581bca24327d088eaa5d6689a1428aa4cf28fbb3 Mon Sep 17 00:00:00 2001
+From: Krishna Ravishankar <krishna.ravi732@gmail.com>
+Date: Tue, 16 Sep 2025 11:38:54 -0400
+Subject: [PATCH] [sandbox] Ensure only JS linkage builtins are added to
+ dispatch tables
+
+Fixed: 445209324
+Change-Id: Ide965ed03736799ec820ad0ba6aa153c8eb7e662
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6955106
+Auto-Submit: Krishna Ravishankar <krishna.ravi732@gmail.com>
+Reviewed-by: Igor Sheludko <ishell@chromium.org>
+Reviewed-by: Michael Lippautz <mlippautz@chromium.org>
+Commit-Queue: Michael Lippautz <mlippautz@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102533}
+---
+ AUTHORS                                       |  1 +
+ src/sandbox/js-dispatch-table-inl.h           |  4 ++
+ .../sandbox/regress/regress-445209324.js      | 40 +++++++++++++++++++
+ 3 files changed, 45 insertions(+)
+ create mode 100644 test/mjsunit/sandbox/regress/regress-445209324.js
+
+diff --git a/AUTHORS b/AUTHORS
+index ffce5c6df02..7e92884c351 100644
+--- a/AUTHORS
++++ b/AUTHORS
+@@ -191,6 +191,7 @@ Keith Smiley <keithbsmiley@gmail.com>
+ Kevin Gibbons <bakkot@gmail.com>
+ Keyhan Vakil <kvakil@googlecontrib.kvakil.me>
+ Kris Selden <kris.selden@gmail.com>
++Krishna Ravishankar <krishna.ravi732@gmail.com>
+ Kyounga Ra <kyounga@alticast.com>
+ Levi Zim <rsworktech@outlook.com>
+ LN Liberda <lauren@selfisekai.rocks>
+diff --git a/src/sandbox/js-dispatch-table-inl.h b/src/sandbox/js-dispatch-table-inl.h
+index 4541bee2166..67b67ce2eb4 100644
+--- a/src/sandbox/js-dispatch-table-inl.h
++++ b/src/sandbox/js-dispatch-table-inl.h
+@@ -342,6 +342,10 @@ bool JSDispatchTable::IsCompatibleCode(Tagged<Code> code,
+     // Target code doesn't use JS linkage. This cannot be valid.
+     return false;
+   }
++  // TODO(saelo): turn this into DCHECK once entrypoint tag check is enough.
++  if (code->is_builtin() && !Builtins::HasJSLinkage(code->builtin_id())) {
++    return false;
++  }
+   if (code->parameter_count() == parameter_count) {
+     DCHECK_IMPLIES(code->is_builtin(),
+                    parameter_count ==
+diff --git a/test/mjsunit/sandbox/regress/regress-445209324.js b/test/mjsunit/sandbox/regress/regress-445209324.js
+new file mode 100644
+index 00000000000..3d42d72074a
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress/regress-445209324.js
+@@ -0,0 +1,40 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --allow-natives-syntax --sandbox-testing
++
++// get a compatible function (ie. dispatch entry says it takes 0 params)
++const victim = (() => {}).__proto__;
++
++// we want maglev to call the victim via dispatch as the code will later be changed
++// change victim's SFI now so maglev doesn't recognize the builtin and inline the call to it
++const dummy = () => {};
++const memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++const kSharedFunctionInfoOffset = Sandbox.getFieldOffset(Sandbox.getInstanceTypeIdFor("JS_FUNCTION"), "shared_function_info");
++memory.setUint32(
++    Sandbox.getAddressOf(victim) + kSharedFunctionInfoOffset,
++    memory.getUint32(Sandbox.getAddressOf(dummy) + kSharedFunctionInfoOffset)
++);
++
++// a function that lets us control rbx via the last argument
++const {stub} = new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.fromBase64(
++    // (module (func (export "stub") (param i64 i64 i64 i64) return))
++    "AGFzbQEAAAABCAFgBH5+fn4AAwIBAAcIAQRzdHViAAAKBQEDAA8LAAoEbmFtZQIDAQAA"
++))).exports;
++
++// tier it up so it can set rbx
++for (let i = 0; i < 0x100000; i++) stub(0n, 0n, 0n, 0n);
++
++const call = (addr) => {
++  stub(0n, 0n, 0n, addr);
++  victim();
++};
++%PrepareFunctionForOptimization(call);
++call(0n);
++%OptimizeMaglevOnNextCall(call);
++call(1n);
++
++// this builtin will call rbx which we set via stub
++Sandbox.setFunctionCodeToBuiltin(victim, Sandbox.getBuiltinNames().indexOf("CEntry_Return1_ArgvOnStack_NoBuiltinExit"));
++call(0x424242424242n);
+-- 
+2.43.0
+

@@ -1,0 +1,4 @@
+Verified on 2026-04-16.
+Recovered from failed/350292240 by switching the case to the exact rewarded x64 sandbox-testing artifact.
+Reproduced with ./crash_check.sh failed/350292240.
+Result: CONFIMRED: SANDBOX_VIOLATION.

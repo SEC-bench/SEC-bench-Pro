@@ -1,0 +1,25 @@
+From c224760a76fa4c1f59d4bb82d3e69d74503dfc83 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Thu, 6 Oct 2022 18:22:12 +0000
+Subject: [PATCH] Bug 1791520: Add some keep alive annotations. r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D157735
+---
+ js/src/jit/IonAnalysis.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 45cfc88b89e71..e5df9895e9a29 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -4033,6 +4033,10 @@ static bool NeedsKeepAlive(MInstruction* slotsOrElements, MInstruction* use) {
+     return true;
+   }
+ 
++  if (use->type() == MIRType::BigInt) {
++    return true;
++  }
++
+   MBasicBlock* block = use->block();
+   MInstructionIterator iter(block->begin(slotsOrElements));
+   MOZ_ASSERT(*iter == slotsOrElements);

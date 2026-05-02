@@ -1,0 +1,36 @@
+From 16781a13b5ecce172cf06a272f1cee629c9afee2 Mon Sep 17 00:00:00 2001
+From: Yury Delendik <ydelendik@mozilla.com>
+Date: Fri, 13 Sep 2024 17:07:58 +0000
+Subject: [PATCH] Bug 1917807 - Fix GenerateJitEntry call parameters alignment.
+ r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D221868
+---
+ js/src/wasm/WasmStubs.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/wasm/WasmStubs.cpp b/js/src/wasm/WasmStubs.cpp
+index 748717f01e446..70c6c98d919ae 100644
+--- a/js/src/wasm/WasmStubs.cpp
++++ b/js/src/wasm/WasmStubs.cpp
+@@ -944,15 +944,18 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
+ 
+   MOZ_ASSERT(masm.framePushed() == 0);
+ 
++  // Avoid overlapping aligned stack arguments area with ExitFooterFrame.
++  const unsigned AlignedExitFooterFrameSize =
++      AlignBytes(ExitFooterFrame::Size(), WasmStackAlignment);
+   unsigned normalBytesNeeded =
+-      ExitFooterFrame::Size() + StackArgBytesForWasmABI(funcType);
++      AlignedExitFooterFrameSize + StackArgBytesForWasmABI(funcType);
+ 
+   MIRTypeVector coerceArgTypes;
+   MOZ_ALWAYS_TRUE(coerceArgTypes.append(MIRType::Int32));
+   MOZ_ALWAYS_TRUE(coerceArgTypes.append(MIRType::Pointer));
+   MOZ_ALWAYS_TRUE(coerceArgTypes.append(MIRType::Pointer));
+   unsigned oolBytesNeeded =
+-      ExitFooterFrame::Size() + StackArgBytesForWasmABI(coerceArgTypes);
++      AlignedExitFooterFrameSize + StackArgBytesForWasmABI(coerceArgTypes);
+ 
+   unsigned bytesNeeded = std::max(normalBytesNeeded, oolBytesNeeded);
+ 

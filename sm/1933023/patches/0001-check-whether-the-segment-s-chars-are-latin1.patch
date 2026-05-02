@@ -1,0 +1,89 @@
+From 6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 27 Nov 2024 12:16:40 +0000
+Subject: [PATCH] Bug 1933023 - Check whether the segment's chars are Latin1
+ instead of the JS string. r=anba
+
+Differential Revision: https://phabricator.services.mozilla.com/D230111
+---
+ js/src/builtin/intl/Segmenter.cpp | 10 +++++-----
+ js/src/builtin/intl/Segmenter.h   | 10 ++++++++++
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/js/src/builtin/intl/Segmenter.cpp b/js/src/builtin/intl/Segmenter.cpp
+index 437a2f1a5d6aa..ab1f09a87be8f 100644
+--- a/js/src/builtin/intl/Segmenter.cpp
++++ b/js/src/builtin/intl/Segmenter.cpp
+@@ -574,7 +574,7 @@ static void DestroyBreakIterator(const T* segments) {
+   void* brk = segments->getBreakIterator();
+   MOZ_ASSERT(brk);
+ 
+-  bool isLatin1 = segments->getString()->hasLatin1Chars();
++  bool isLatin1 = segments->hasLatin1StringChars();
+ 
+   switch (segments->getGranularity()) {
+     case SegmenterGranularity::Grapheme: {
+@@ -660,7 +660,7 @@ static Boundaries FindBoundaryFrom(Handle<T*> segments, int32_t index) {
+ template <typename T>
+ static Boundaries GraphemeBoundaries(Handle<T*> segments, int32_t index) {
+ #if defined(MOZ_ICU4X)
+-  if (segments->getString()->hasLatin1Chars()) {
++  if (segments->hasLatin1StringChars()) {
+     return FindBoundaryFrom<GraphemeClusterSegmenter::BreakIteratorLatin1>(
+         segments, index);
+   }
+@@ -674,7 +674,7 @@ static Boundaries GraphemeBoundaries(Handle<T*> segments, int32_t index) {
+ template <typename T>
+ static Boundaries WordBoundaries(Handle<T*> segments, int32_t index) {
+ #if defined(MOZ_ICU4X)
+-  if (segments->getString()->hasLatin1Chars()) {
++  if (segments->hasLatin1StringChars()) {
+     return FindBoundaryFrom<WordSegmenter::BreakIteratorLatin1>(segments,
+                                                                 index);
+   }
+@@ -687,7 +687,7 @@ static Boundaries WordBoundaries(Handle<T*> segments, int32_t index) {
+ template <typename T>
+ static Boundaries SentenceBoundaries(Handle<T*> segments, int32_t index) {
+ #if defined(MOZ_ICU4X)
+-  if (segments->getString()->hasLatin1Chars()) {
++  if (segments->hasLatin1StringChars()) {
+     return FindBoundaryFrom<SentenceSegmenter::BreakIteratorLatin1>(segments,
+                                                                     index);
+   }
+@@ -782,7 +782,7 @@ static bool EnsureBreakIterator(JSContext* cx, Handle<T*> segments,
+   }
+ 
+ #if defined(MOZ_ICU4X)
+-  bool isLatin1 = segments->getString()->hasLatin1Chars();
++  bool isLatin1 = segments->hasLatin1StringChars();
+ 
+   // Create a new break iterator based on the granularity and character type.
+   void* brk;
+diff --git a/js/src/builtin/intl/Segmenter.h b/js/src/builtin/intl/Segmenter.h
+index 3b204578b452d..2b75b86488257 100644
+--- a/js/src/builtin/intl/Segmenter.h
++++ b/js/src/builtin/intl/Segmenter.h
+@@ -198,6 +198,11 @@ class SegmentsObject : public NativeObject {
+     setFixedSlot(STRING_CHARS_SLOT, PrivateValue(chars.tagged()));
+   }
+ 
++  bool hasLatin1StringChars() const {
++    MOZ_ASSERT(hasStringChars());
++    return getStringChars().has<JS::Latin1Char>();
++  }
++
+   int32_t getIndex() const {
+     const auto& slot = getFixedSlot(INDEX_SLOT);
+     if (slot.isUndefined()) {
+@@ -295,6 +300,11 @@ class SegmentIteratorObject : public NativeObject {
+     setFixedSlot(STRING_CHARS_SLOT, PrivateValue(chars.tagged()));
+   }
+ 
++  bool hasLatin1StringChars() const {
++    MOZ_ASSERT(hasStringChars());
++    return getStringChars().has<JS::Latin1Char>();
++  }
++
+   int32_t getIndex() const {
+     const auto& slot = getFixedSlot(INDEX_SLOT);
+     if (slot.isUndefined()) {

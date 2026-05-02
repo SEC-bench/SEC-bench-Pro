@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:420697404",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "",
+  "target_source_files": [
+    "src/objects/js-regexp.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Integer overflow",
+  "error_type": "DCHECK",
+  "description": "An integer overflow vulnerability exists in the CountAdditionalEscapeChars function in src/objects/js-regexp.cc. The function uses a 32-bit signed int variable 'escapes' to count the additional characters required when escaping a RegExp source string. For each U+2028 (LINE SEPARATOR) or U+2029 (PARAGRAPH SEPARATOR) character in the source, 'escapes' is incremented by 5, because each such character is replaced by a 6-character escape sequence ('\\u2028' or '\\u2029'). When the RegExp source string contains approximately 430 million or more U+2028/U+2029 characters, the accumulated value of 'escapes' exceeds INT_MAX (2,147,483,647) and wraps around to a large negative value due to signed 32-bit integer overflow. In the PoC, a string of ~457.9 million U+2028 characters causes escapes to overflow to -2005397586 (= 457913942 * 5 mod 2^32 interpreted as signed), triggering the debug assertion DCHECK_GE(escapes, 0) at line 234. In a release build, execution continues to EscapeRegExpSource, which computes 'length = source->length() + additional_escape_chars' with the overflowed (negative) value, resulting in an undersized buffer allocation. WriteEscapedRegExpSource then writes beyond the allocated buffer, causing a heap buffer overflow.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "merge-context",
+      "evidence_lineno": 320,
+      "evidence_text": "[https://crrev.com/c/6611425](<https://crrev.com/c/6611425>) approved for merges, please feel free to merge to 13.8, 13.7, 13.6 at your earliest convenience; there is no rush on this and can wait until after the Monday MUC holiday",
+      "url": "https://crrev.com/c/6611425",
+      "cl": 6611425,
+      "commit": "62ee3244f3b212b92e22b8e2651afbed35de9768",
+      "description": "Local patch exported from https://crrev.com/c/6611425 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6611425",
+      "source_cl": 6611425,
+      "source_commit": "62ee3244f3b212b92e22b8e2651afbed35de9768",
+      "source_ref": "refs/changes/25/6611425/3",
+      "source_patchset": 3
+    }
+  ]
+}

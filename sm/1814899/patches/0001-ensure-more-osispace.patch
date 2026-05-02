@@ -1,0 +1,107 @@
+From d307cab06d56b4be62796b083b16feb86a47829c Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 13 Feb 2023 18:33:10 +0000
+Subject: [PATCH] Bug 1814899: Ensure more OsiSpace r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D169274
+---
+ js/src/jit/CodeGenerator.cpp               | 9 +++++++++
+ js/src/jit/shared/CodeGenerator-shared.cpp | 2 +-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index 1c1fc34fb2890..8a7856551b99b 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -348,6 +348,7 @@ void CodeGenerator::callVMInternal(VMFunctionId id, LInstruction* ins) {
+   // when returning from the call.  Failures are handled with exceptions based
+   // on the return value of the C functions.  To guard the outcome of the
+   // returned value, use another LIR instruction.
++  ensureOsiSpace();
+   uint32_t callOffset = masm.callJit(code);
+   markSafepointAt(callOffset, ins);
+ 
+@@ -5231,6 +5232,7 @@ void CodeGenerator::visitCallNative(LCallNative* call) {
+       native = jitInfo->ignoresReturnValueMethod;
+     }
+   }
++  ensureOsiSpace();
+   masm.callWithABI(DynamicFunction<JSNative>(native), MoveOp::GENERAL,
+                    CheckUnsafeCallWithABI::DontCheckHasExitFrame);
+ 
+@@ -5377,6 +5379,7 @@ void CodeGenerator::visitCallDOMNative(LCallDOMNative* call) {
+   masm.passABIArg(argObj);
+   masm.passABIArg(argPrivate);
+   masm.passABIArg(argArgs);
++  ensureOsiSpace();
+   masm.callWithABI(DynamicFunction<JSJitMethodOp>(target->jitInfo()->method),
+                    MoveOp::GENERAL,
+                    CheckUnsafeCallWithABI::DontCheckHasExitFrame);
+@@ -5530,6 +5533,7 @@ void CodeGenerator::visitCallGeneric(LCallGeneric* call) {
+ 
+   // Finally call the function in objreg.
+   masm.bind(&makeCall);
++  ensureOsiSpace();
+   uint32_t callOffset = masm.callJit(objreg);
+   markSafepointAt(callOffset, call);
+ 
+@@ -5614,6 +5618,7 @@ void CodeGenerator::visitCallKnown(LCallKnown* call) {
+   masm.PushFrameDescriptorForJitCall(FrameType::IonJS, call->numActualArgs());
+ 
+   // Finally call the function in objreg.
++  ensureOsiSpace();
+   uint32_t callOffset = masm.callJit(objreg);
+   markSafepointAt(callOffset, call);
+ 
+@@ -6095,6 +6100,7 @@ void CodeGenerator::emitApplyGeneric(T* apply) {
+ 
+     // Finally call the function in objreg, as assigned by one of the paths
+     // above.
++    ensureOsiSpace();
+     uint32_t callOffset = masm.callJit(objreg);
+     markSafepointAt(callOffset, apply);
+ 
+@@ -15606,6 +15612,7 @@ void CodeGenerator::visitGetDOMProperty(LGetDOMProperty* ins) {
+   masm.passABIArg(ObjectReg);
+   masm.passABIArg(PrivateReg);
+   masm.passABIArg(ValueReg);
++  ensureOsiSpace();
+   masm.callWithABI(DynamicFunction<JSJitGetterOp>(ins->mir()->fun()),
+                    MoveOp::GENERAL,
+                    CheckUnsafeCallWithABI::DontCheckHasExitFrame);
+@@ -15726,6 +15733,7 @@ void CodeGenerator::visitSetDOMProperty(LSetDOMProperty* ins) {
+   masm.passABIArg(ObjectReg);
+   masm.passABIArg(PrivateReg);
+   masm.passABIArg(ValueReg);
++  ensureOsiSpace();
+   masm.callWithABI(DynamicFunction<JSJitSetterOp>(ins->mir()->fun()),
+                    MoveOp::GENERAL,
+                    CheckUnsafeCallWithABI::DontCheckHasExitFrame);
+@@ -17924,6 +17932,7 @@ void CodeGenerator::emitIonToWasmCallBase(LIonToWasmCallBase<NumDefs>* lir) {
+   Register scratch = ToRegister(lir->temp());
+ 
+   uint32_t callOffset;
++  ensureOsiSpace();
+   GenerateDirectCallFromJit(masm, funcExport, instObj->instance(), stackArgs,
+                             scratch, &callOffset);
+ 
+diff --git a/js/src/jit/shared/CodeGenerator-shared.cpp b/js/src/jit/shared/CodeGenerator-shared.cpp
+index bd51c8112b1e4..04a8baa752834 100644
+--- a/js/src/jit/shared/CodeGenerator-shared.cpp
++++ b/js/src/jit/shared/CodeGenerator-shared.cpp
+@@ -832,7 +832,6 @@ void CodeGeneratorShared::ensureOsiSpace() {
+   }
+   MOZ_ASSERT_IF(!masm.oom(), masm.currentOffset() - lastOsiPointOffset_ >=
+                                  Assembler::PatchWrite_NearCallSize());
+-  lastOsiPointOffset_ = masm.currentOffset();
+ }
+ 
+ uint32_t CodeGeneratorShared::markOsiPoint(LOsiPoint* ins) {
+@@ -842,6 +841,7 @@ uint32_t CodeGeneratorShared::markOsiPoint(LOsiPoint* ins) {
+   uint32_t offset = masm.currentOffset();
+   SnapshotOffset so = ins->snapshot()->snapshotOffset();
+   masm.propagateOOM(osiIndices_.append(OsiIndex(offset, so)));
++  lastOsiPointOffset_ = offset;
+ 
+   return offset;
+ }

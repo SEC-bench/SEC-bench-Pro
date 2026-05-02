@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:385775375",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--single-threaded --sandbox-fuzzing --allow-natives-syntax --expose-gc",
+  "target_source_files": [
+    "src/runtime/runtime-typedarray.cc"
+  ],
+  "target_subdir": [
+    "src/runtime"
+  ],
+  "target_vulnerability_type": "Out-of-bounds write",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A heap buffer overflow (out-of-bounds write) vulnerability exists in V8's Runtime_TypedArraySortFast function in src/runtime/runtime-typedarray.cc. The root cause is a TOCTOU (Time-of-Check-to-Time-of-Use) race condition \u2014 a double-fetch bug \u2014 arising from multiple reads of the TypedArray's element type (elements_kind) from the Map object during a single sort operation. When sorting a SharedArrayBuffer-backed TypedArray, the function first calls array->GetByteLength() to compute the size of a temporary copy buffer, which internally reads the elements_kind from the TypedArray's Map to determine the per-element byte size. It then allocates the copy buffer (offheap_copy.resize(bytes)) and subsequently re-reads the element type via switch(array->type()) to dispatch the std::sort call. A background worker can exploit this window by concurrently modifying the bit_field2 field in the TypedArray's Map object (which encodes the elements_kind) to change the apparent element type between these two reads. If the background worker flips the type to one with a larger element size (e.g., from Int32 to Float64) after the buffer allocation but before the switch statement, std::sort computes its end iterator as data + length using the new, larger element size, causing it to read and write beyond the end of the allocated copy buffer. This constitutes a V8 sandbox violation triggered by concurrent ArrayBuffer element-type corruption.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Backport of CL 6268383 plus CL 6918956 runtime-typedarray.cc mitigation for validation; upstream review CLs are retained as auxiliary evidence.",
+      "context": "backport-validation",
+      "evidence_text": "CL 6268383 fixed the TypedArray sort sandbox escape; CL 6918956 corrected that hardening for GSAB growth during sorting.",
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/v8/v8/+/6268383",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/6918956"
+      ],
+      "source_cls": [
+        6268383,
+        6918956
+      ],
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6918956",
+      "source_commit": "3bbb4dcb340460be8ff9afe51290cfe94d7188ff",
+      "source_cl": 6918956
+    }
+  ]
+}

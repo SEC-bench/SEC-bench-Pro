@@ -1,0 +1,31 @@
+
+
+#
+# Fatal error in ../../src/maglev/maglev-ir.h, line 2266
+# Debug check failed: is_loadable().
+#
+#
+#
+#FailureMessage Object: 0x7fff74deb480
+==== C stack trace ===============================
+
+    out/x64.debug/d8(+0x363ba53) [0x557837c65a53]
+    out/x64.debug/d8(+0x363ad9d) [0x557837c64d9d]
+    out/x64.debug/d8(+0x361f4ee) [0x557837c494ee]
+    out/x64.debug/d8(+0x361ef45) [0x557837c48f45]
+    out/x64.debug/d8(+0x1676c63) [0x557835ca0c63]
+    out/x64.debug/d8(+0x19ed614) [0x557836017614]
+    out/x64.debug/d8(+0x19e7d2b) [0x557836011d2b]
+    out/x64.debug/d8(+0x19e4a29) [0x55783600ea29]
+    out/x64.debug/d8(+0x19e0a0b) [0x55783600aa0b]
+    out/x64.debug/d8(+0x19deb43) [0x557836008b43]
+    out/x64.debug/d8(+0x17231dd) [0x557835d4d1dd]
+    out/x64.debug/d8(+0x17df9ea) [0x557835e099ea]
+    out/x64.debug/d8(+0xa8873d) [0x5578350b273d]
+    out/x64.debug/d8(+0xaa2931) [0x5578350cc931]
+    out/x64.debug/d8(+0xa93a2c) [0x5578350bda2c]
+    out/x64.debug/d8(+0xa95445) [0x5578350bf445]
+    out/x64.debug/d8(+0x14f24d7) [0x557835b1c4d7]
+    out/x64.debug/d8(+0x14f1fc2) [0x557835b1bfc2]
+    out/x64.debug/d8(+0x2dbf9fd) [0x5578373e99fd]
+Trace/breakpoint trap (core dumped)

@@ -1,0 +1,102 @@
+diff --git a/src/codegen/arm64/macro-assembler-arm64.cc b/src/codegen/arm64/macro-assembler-arm64.cc
+index 2981a56e1c6..11d902daa5b 100644
+--- a/src/codegen/arm64/macro-assembler-arm64.cc
++++ b/src/codegen/arm64/macro-assembler-arm64.cc
+@@ -2676,8 +2676,20 @@ void MacroAssembler::ResolveWasmCodePointer(Register target,
+   Register scratch = temps.AcquireX();
+   Mov(scratch, global_jump_table);
+ #ifdef V8_ENABLE_SANDBOX
+-  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
+-  Add(target, scratch, Operand(target, LSL, 4));
++  // Mask `target` to be within [0, WasmCodePointerTable::kMaxWasmCodePointers).
++  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <
++                (kMaxUInt32 / sizeof(wasm::WasmCodePointerTableEntry)));
++  static_assert(base::bits::IsPowerOfTwo(
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers));
++  And(target.W(), target.W(),
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers - 1);
++
++  // Shift to multiply by `sizeof(WasmCodePointerTableEntry)`.
++  Add(target, scratch,
++      Operand(target, LSL,
++              base::bits::WhichPowerOfTwo(
++                  sizeof(wasm::WasmCodePointerTableEntry))));
++
+   Ldr(scratch,
+       MemOperand(target, wasm::WasmCodePointerTable::kOffsetOfSignatureHash));
+   bool has_second_tmp = temps.CanAcquire();
+@@ -2716,9 +2728,21 @@ void MacroAssembler::CallWasmCodePointerNoSignatureCheck(Register target) {
+   UseScratchRegisterScope temps(this);
+   Register scratch = temps.AcquireX();
+   Mov(scratch, global_jump_table);
+-  constexpr unsigned int kEntrySizeLog2 =
+-      std::bit_width(sizeof(wasm::WasmCodePointerTableEntry)) - 1;
+-  Add(target, scratch, Operand(target, LSL, kEntrySizeLog2));
++
++  // Mask `target` to be within [0, WasmCodePointerTable::kMaxWasmCodePointers).
++  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <
++                (kMaxUInt32 / sizeof(wasm::WasmCodePointerTableEntry)));
++  static_assert(base::bits::IsPowerOfTwo(
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers));
++  And(target.W(), target.W(),
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers - 1);
++
++  // Shift to multiply by `sizeof(WasmCodePointerTableEntry)`.
++  Add(target, scratch,
++      Operand(target, LSL,
++              base::bits::WhichPowerOfTwo(
++                  sizeof(wasm::WasmCodePointerTableEntry))));
++
+   Ldr(target, MemOperand(target));
+ 
+   Call(target);
+diff --git a/src/codegen/x64/macro-assembler-x64.cc b/src/codegen/x64/macro-assembler-x64.cc
+index 61f0e232dab..48cab56f615 100644
+--- a/src/codegen/x64/macro-assembler-x64.cc
++++ b/src/codegen/x64/macro-assembler-x64.cc
+@@ -3734,11 +3734,17 @@ void MacroAssembler::CallWasmCodePointer(Register target,
+   Move(kScratchRegister, ExternalReference::wasm_code_pointer_table());
+ 
+ #ifdef V8_ENABLE_SANDBOX
+-  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
+-  // Check that using a 32-bit shift is valid for any valid code pointer.
+-  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <=
+-                (kMaxInt >> 4));
+-  shll(target, Immediate(4));
++  // Mask `target` to be within [0, WasmCodePointerTable::kMaxWasmCodePointers).
++  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <
++                (kMaxUInt32 / sizeof(wasm::WasmCodePointerTableEntry)));
++  static_assert(base::bits::IsPowerOfTwo(
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers));
++  andl(target, Immediate(wasm::WasmCodePointerTable::kMaxWasmCodePointers - 1));
++
++  // Shift to multiply by `sizeof(WasmCodePointerTableEntry)`.
++  shll(target, Immediate(base::bits::WhichPowerOfTwo(
++                   sizeof(wasm::WasmCodePointerTableEntry))));
++
+   // Add `target` and `kScratchRegister` early to free `kScratchRegister` again.
+   addq(target, kScratchRegister);
+ 
+@@ -3776,11 +3782,17 @@ void MacroAssembler::CallWasmCodePointerNoSignatureCheck(Register target) {
+   Move(kScratchRegister, ExternalReference::wasm_code_pointer_table());
+ 
+ #ifdef V8_ENABLE_SANDBOX
+-  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
+-  // Check that using a 32-bit shift is valid for any valid code pointer.
+-  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <=
+-                (kMaxInt >> 4));
+-  shll(target, Immediate(4));
++  // Mask `target` to be within [0, WasmCodePointerTable::kMaxWasmCodePointers).
++  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <
++                (kMaxUInt32 / sizeof(wasm::WasmCodePointerTableEntry)));
++  static_assert(base::bits::IsPowerOfTwo(
++      wasm::WasmCodePointerTable::kMaxWasmCodePointers));
++  andl(target, Immediate(wasm::WasmCodePointerTable::kMaxWasmCodePointers - 1));
++
++  // Shift to multiply by `sizeof(WasmCodePointerTableEntry)`.
++  shll(target, Immediate(base::bits::WhichPowerOfTwo(
++                   sizeof(wasm::WasmCodePointerTableEntry))));
++
+   call(Operand(kScratchRegister, target, ScaleFactor::times_1, 0));
+ #else
+   static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);

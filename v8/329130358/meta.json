@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:329130358",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--expose-gc --jit-fuzzing --wasm-staging",
+  "target_source_files": [
+    "src/objects/objects-body-descriptors-inl.h"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A use-after-free vulnerability exists in V8's WasmInternalFunction GC body descriptor. WasmInternalFunction::BodyDescriptor::IterateBody() in src/objects/objects-body-descriptors-inl.h does not call IterateCodePointer for the 'code' field (an IndirectPointer<Code> at kCodeOffset = kEndOfStrongFieldsOffset, outside the iterated strong fields range [kStartOfStrongFieldsOffset, kEndOfStrongFieldsOffset)). When --jit-fuzzing sets wasm_wrapper_tiering_budget=1, the first call to a WebAssembly.Function wrapping a JavaScript function triggers TierUpWasmToJSWrapper, which installs a freshly-compiled Code object into WasmInternalFunction.code and resets call_target to 0. If the JavaScript function then triggers GC (e.g., via gc()), the GC cannot trace the newly-installed Code object through the code field due to the missing IterateCodePointer call, causing the Code object to be collected. On the next call_ref, CallRefIC reads the freed code pointer table entry (containing kFreeCodePointerTableEntryTag | freelist_index = 0xffff00000000200e) and uses it as the call target, causing a SIGSEGV.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit b93975a48c722c2e5fe9b39437738eb2e23dac74 for CL 5374907.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5374907",
+      "cl": 5374907,
+      "source_commit": "b93975a48c722c2e5fe9b39437738eb2e23dac74",
+      "commit": "b93975a48c722c2e5fe9b39437738eb2e23dac74",
+      "source_cl": 5374907,
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5374907"
+    }
+  ]
+}

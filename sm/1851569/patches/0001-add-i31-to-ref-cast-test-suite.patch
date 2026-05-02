@@ -1,0 +1,155 @@
+From a637208c750c031c65e5c162660b0970786a4399 Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Wed, 13 Sep 2023 20:57:56 +0000
+Subject: [PATCH] Bug 1851569: Add i31 to ref.cast test suite. r=jseward
+
+This thoroughly tests i31's interaction with other types, and fixes a couple subtle bugs. For example, casting an anyref to an eqref was incorrectly failing if the value was i31.
+
+Differential Revision: https://phabricator.services.mozilla.com/D188108
+---
+ .../jit-test/tests/wasm/gc/cast-abstract.js   |  9 ++++++-
+ js/src/jit/MacroAssembler.cpp                 | 27 ++++++++++++-------
+ js/src/wasm/WasmBaselineCompile.cpp           |  3 ++-
+ js/src/wasm/WasmIonCompile.cpp                |  3 ++-
+ js/src/wasm/WasmValType.cpp                   |  2 +-
+ js/src/wasm/WasmValidate.cpp                  |  3 ++-
+ 6 files changed, 33 insertions(+), 14 deletions(-)
+
+diff --git a/js/src/jit-test/tests/wasm/gc/cast-abstract.js b/js/src/jit-test/tests/wasm/gc/cast-abstract.js
+index 5570106197c35..cb054d616f7bf 100644
+--- a/js/src/jit-test/tests/wasm/gc/cast-abstract.js
++++ b/js/src/jit-test/tests/wasm/gc/cast-abstract.js
+@@ -75,6 +75,7 @@ const a2 = {
+   ],
+   top: 'anyref',
+ };
++const i31 = { name: 'i31', make: '(i31.new (i32.const 123))', top: 'anyref' };
+ const none = { name: 'none', none: true, top: 'anyref' };
+ 
+ const func = { name: 'func', top: 'funcref' };
+@@ -91,7 +92,9 @@ const typeSets = [
+   [any, eq, struct, s1, s2, none],
+   [any, eq, array, a1, a2, none],
+   [any, eq, s1, s2, a1, a2, none],
+-  // i31 eventually
++  [any, eq, i31, none],
++  [any, eq, i31, s1, none],
++  [any, eq, i31, a1, none],
+ 
+   [func, ft1, ft2, nofunc],
+   [func, ft3, ft4, nofunc],
+@@ -192,6 +195,10 @@ for (const typeSet of typeSets) {
+               // v5 instructions only support gc types
+               doV5 = false;
+             }
++            if (!start.makeV5 || !middle.makeV5 || !end.makeV5) {
++              // finally, some types just never made it into v5
++              doV5 = false;
++            }
+ 
+             let emoji1 = good1 ? '✅' : '❌';
+             let emoji2 = good2 ? '✅' : '❌';
+diff --git a/js/src/jit/MacroAssembler.cpp b/js/src/jit/MacroAssembler.cpp
+index 570f76d2a7739..80a88dab6df10 100644
+--- a/js/src/jit/MacroAssembler.cpp
++++ b/js/src/jit/MacroAssembler.cpp
+@@ -5671,17 +5671,26 @@ void MacroAssembler::branchWasmRefIsSubtypeAny(
+     return;
+   }
+ 
+-  if (destType.isI31()) {
++  // 'type' is now 'eq' or lower, which currently will either be a gc object or
++  // an i31.
++
++  // Check first for i31 values, and get them out of the way. i31 values are
++  // valid when casting to i31 or eq, and invalid otherwise.
++  if (destType.isI31() || destType.isEq()) {
+     branchWasmAnyRefIsI31(true, ref, successLabel);
+-    jump(failLabel);
+-    bind(&fallthrough);
+-    return;
++
++    if (destType.isI31()) {
++      // No further checks for 'i31'
++      jump(failLabel);
++      bind(&fallthrough);
++      return;
++    }
+   }
+ 
+-  // 'type' is now 'eq' or lower, which currently will always be a gc object.
+-  // Test for non-gc objects.
++  // Then check for any kind of gc object.
+   MOZ_ASSERT(scratch1 != Register::Invalid());
+-  if (!wasm::RefType::isSubTypeOf(sourceType, wasm::RefType::eq())) {
++  if (!wasm::RefType::isSubTypeOf(sourceType, wasm::RefType::struct_()) &&
++      !wasm::RefType::isSubTypeOf(sourceType, wasm::RefType::array())) {
+     branchWasmAnyRefIsObjectOrNull(false, ref, failLabel);
+     branchObjectIsWasmGcObject(false, ref, scratch1, failLabel);
+   }
+@@ -5693,8 +5702,8 @@ void MacroAssembler::branchWasmRefIsSubtypeAny(
+     return;
+   }
+ 
+-  // 'type' is now 'struct', 'array', or a concrete type. (Bottom types were
+-  // handled above.)
++  // 'type' is now 'struct', 'array', or a concrete type. (Bottom types and i31
++  // were handled above.)
+   //
+   // Casting to a concrete type only requires a simple check on the
+   // object's superTypeVector. Casting to an abstract type (struct, array)
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index 005ec7ba8d0bd..ed95fe1a08969 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -7530,7 +7530,8 @@ bool BaseCompiler::emitArrayCopy() {
+ 
+ bool BaseCompiler::emitI31New() {
+   Nothing value;
+-  if (!iter_.readConversion(ValType::I32, ValType(RefType::i31()), &value)) {
++  if (!iter_.readConversion(ValType::I32,
++                            ValType(RefType::i31().asNonNullable()), &value)) {
+     return false;
+   }
+ 
+diff --git a/js/src/wasm/WasmIonCompile.cpp b/js/src/wasm/WasmIonCompile.cpp
+index fb2e2770a2aab..6083a7a5206c0 100644
+--- a/js/src/wasm/WasmIonCompile.cpp
++++ b/js/src/wasm/WasmIonCompile.cpp
+@@ -7416,7 +7416,8 @@ static bool EmitArrayCopy(FunctionCompiler& f) {
+ 
+ static bool EmitI31New(FunctionCompiler& f) {
+   MDefinition* input;
+-  if (!f.iter().readConversion(ValType::I32, ValType(RefType::i31()), &input)) {
++  if (!f.iter().readConversion(
++          ValType::I32, ValType(RefType::i31().asNonNullable()), &input)) {
+     return false;
+   }
+ 
+diff --git a/js/src/wasm/WasmValType.cpp b/js/src/wasm/WasmValType.cpp
+index de0856e08665e..3ac14044dc7f7 100644
+--- a/js/src/wasm/WasmValType.cpp
++++ b/js/src/wasm/WasmValType.cpp
+@@ -352,7 +352,7 @@ UniqueChars wasm::ToString(RefType type, const TypeContext* types) {
+       heapType = "eq";
+       break;
+     case RefType::I31:
+-      heapType = "eq";
++      heapType = "i31";
+       break;
+     case RefType::Struct:
+       heapType = "struct";
+diff --git a/js/src/wasm/WasmValidate.cpp b/js/src/wasm/WasmValidate.cpp
+index 6aa5fadc8ffa0..837f548e1ed14 100644
+--- a/js/src/wasm/WasmValidate.cpp
++++ b/js/src/wasm/WasmValidate.cpp
+@@ -668,7 +668,8 @@ static bool DecodeFunctionBodyExprs(const ModuleEnvironment& env,
+                                      &nothing, &nothing, &nothing, &nothing));
+           }
+           case uint32_t(GcOp::I31New): {
+-            CHECK(iter.readConversion(ValType::I32, ValType(RefType::i31()),
++            CHECK(iter.readConversion(ValType::I32,
++                                      ValType(RefType::i31().asNonNullable()),
+                                       &nothing));
+           }
+           case uint32_t(GcOp::I31GetS): {

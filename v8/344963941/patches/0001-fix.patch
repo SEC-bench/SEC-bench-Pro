@@ -1,0 +1,39 @@
+From 8859e5e21f4b5e587d9b75839c27befbdf1b9ddd Mon Sep 17 00:00:00 2001
+From: pthier <pthier@chromium.org>
+Date: Fri, 7 Jun 2024 11:06:57 +0200
+Subject: [PATCH] [regexp] Harden backtrack strack access in interpreter
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Prevent reading/popping on empty stack.
+
+Fixed: 344963941
+Bug: 42204606
+Change-Id: Ia962afb4241df42dc460e6895513892fb5fd36be
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5604430
+Auto-Submit: Patrick Thier <pthier@chromium.org>
+Reviewed-by: Olivier Flückiger <olivf@chromium.org>
+Commit-Queue: Patrick Thier <pthier@chromium.org>
+Commit-Queue: Olivier Flückiger <olivf@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#94308}
+---
+ src/regexp/regexp-interpreter.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/regexp/regexp-interpreter.cc b/src/regexp/regexp-interpreter.cc
+index 13cf076d9c2..a351e381db0 100644
+--- a/src/regexp/regexp-interpreter.cc
++++ b/src/regexp/regexp-interpreter.cc
+@@ -135,7 +135,7 @@ class BacktrackStack {
+     return (static_cast<int>(data_.size()) <= kMaxSize);
+   }
+   int peek() const {
+-    DCHECK(!data_.empty());
++    SBXCHECK(!data_.empty());
+     return data_.back();
+   }
+   int pop() {
+-- 
+2.43.0
+

@@ -1,0 +1,45 @@
+From b71d94fb35c0f54be3d0a855204d68e0c6ef7684 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Mon, 24 Apr 2023 12:17:07 +0000
+Subject: [PATCH] Bug 1827073 part 4 - Add test and release assertion. r=iain
+
+Depends on D175114
+
+Differential Revision: https://phabricator.services.mozilla.com/D175115
+---
+ js/src/jit-test/tests/arguments/bug1827073.js | 13 +++++++++++++
+ js/src/vm/ArgumentsObject.cpp                 |  1 +
+ 2 files changed, 14 insertions(+)
+ create mode 100644 js/src/jit-test/tests/arguments/bug1827073.js
+
+diff --git a/js/src/jit-test/tests/arguments/bug1827073.js b/js/src/jit-test/tests/arguments/bug1827073.js
+new file mode 100644
+index 0000000000000..aecbc6f4a67be
+--- /dev/null
++++ b/js/src/jit-test/tests/arguments/bug1827073.js
+@@ -0,0 +1,13 @@
++// |jit-test| --fast-warmup
++let depth = 0;
++function f1(a2, a3, a4, a5) {
++    f2();
++}
++function f2() {
++    if (depth++ > 100) {
++        return;
++    }
++    f1(1, 2);
++    assertEq(JSON.stringify(Array.from(f1.arguments)), "[1,2]");
++}
++f1(1, 2);
+diff --git a/js/src/vm/ArgumentsObject.cpp b/js/src/vm/ArgumentsObject.cpp
+index 0ca915d3766c5..a35519c18eb5d 100644
+--- a/js/src/vm/ArgumentsObject.cpp
++++ b/js/src/vm/ArgumentsObject.cpp
+@@ -177,6 +177,7 @@ struct CopyScriptFrameIterArgs {
+     // Append actual arguments.
+     iter_.unaliasedForEachActual(
+         cx, [this](const Value& v) { actualArgs_.infallibleAppend(v); });
++    MOZ_RELEASE_ASSERT(actualArgs_.length() == numActuals);
+     return true;
+   }
+ 

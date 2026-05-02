@@ -1,0 +1,11 @@
+Verified against the original collector report in `../../collector/output/general/Blink/JavaScript/WebAssembly/368241697/Report.md`.
+
+Collector artifacts checked:
+- `poc.js`
+- `poc_comment_3.js`
+
+Local `poc.js` matches the collector d8 PoC. Reproduced with:
+
+`out/x64.asan/d8 --wasm-test-streaming --wasm_max_module_size=1500000000 --module --disable-in-process-stack-traces /testcase/poc.js`
+
+`output.txt` captures an ASan SEGV on an address ending in `0x04242424`, matching the report's streamed oversized-module type confusion and arbitrary caged write crash.

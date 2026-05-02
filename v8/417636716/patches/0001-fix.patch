@@ -1,0 +1,478 @@
+diff --git a/src/builtins/builtins-lazy-gen.cc b/src/builtins/builtins-lazy-gen.cc
+index 75baa8c57f8..c95ce99e7ae 100644
+--- a/src/builtins/builtins-lazy-gen.cc
++++ b/src/builtins/builtins-lazy-gen.cc
+@@ -16,6 +16,28 @@ namespace internal {
+ 
+ #include "src/codegen/define-code-stub-assembler-macros.inc"
+ 
++void LazyBuiltinsAssembler::GenerateTailCallToJSFunction(
++    TNode<JSFunction> function) {
++  auto argc = UncheckedParameter<Int32T>(Descriptor::kActualArgumentsCount);
++  auto context = Parameter<Context>(Descriptor::kContext);
++  auto new_target = Parameter<Object>(Descriptor::kNewTarget);
++#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
++  auto dispatch_handle =
++      UncheckedParameter<JSDispatchHandleT>(Descriptor::kDispatchHandle);
++  CSA_DCHECK(this,
++             Word32Equal(dispatch_handle,
++                         LoadObjectField<JSDispatchHandleT>(
++                             function, JSFunction::kDispatchHandleOffset)));
++  TNode<Code> code = LoadCodeObjectFromJSDispatchTable(dispatch_handle);
++#else
++  auto dispatch_handle = InvalidDispatchHandleConstant();
++  TNode<Code> code = LoadJSFunctionCode(function);
++#endif
++  TailCallJSCode(code, context, function, new_target, argc, dispatch_handle);
++}
++
++#ifndef V8_ENABLE_LEAPTIERING
++
+ void LazyBuiltinsAssembler::GenerateTailCallToJSCode(
+     TNode<Code> code, TNode<JSFunction> function) {
+   auto argc = UncheckedParameter<Int32T>(Descriptor::kActualArgumentsCount);
+@@ -27,7 +49,6 @@ void LazyBuiltinsAssembler::GenerateTailCallToJSCode(
+ #else
+   auto dispatch_handle = InvalidDispatchHandleConstant();
+ #endif
+-  // TODO(40931165): Check that dispatch_handle-argcount == code-argcount.
+   TailCallJSCode(code, context, function, new_target, argc, dispatch_handle);
+ }
+ 
+@@ -38,8 +59,6 @@ void LazyBuiltinsAssembler::GenerateTailCallToReturnedCode(
+   GenerateTailCallToJSCode(code, function);
+ }
+ 
+-#ifndef V8_ENABLE_LEAPTIERING
+-
+ void LazyBuiltinsAssembler::MaybeTailCallOptimizedCodeSlot(
+     TNode<JSFunction> function, TNode<FeedbackVector> feedback_vector) {
+   Label fallthrough(this), may_have_optimized_code(this),
+@@ -104,7 +123,8 @@ void LazyBuiltinsAssembler::MaybeTailCallOptimizedCodeSlot(
+ 
+ #endif  // !V8_ENABLE_LEAPTIERING
+ 
+-void LazyBuiltinsAssembler::CompileLazy(TNode<JSFunction> function) {
++void LazyBuiltinsAssembler::CompileLazy(TNode<JSFunction> function,
++                                        TNode<Context> context) {
+   // First lookup code, maybe we don't need to compile!
+   Label compile_function(this, Label::kDeferred);
+ 
+@@ -155,7 +175,8 @@ void LazyBuiltinsAssembler::CompileLazy(TNode<JSFunction> function) {
+   // function's dispatch table entry and call it. Installing the code is
+   // necessary as the dispatch table entry may still contain the CompileLazy
+   // builtin at this point (we can only update dispatch table code from C++).
+-  GenerateTailCallToReturnedCode(Runtime::kInstallSFICode, function);
++  CallRuntime(Runtime::kInstallSFICode, context, function);
++  GenerateTailCallToJSFunction(function);
+ #else
+   Label tailcall_code(this), baseline(this);
+   TVARIABLE(Code, code);
+@@ -182,13 +203,15 @@ void LazyBuiltinsAssembler::CompileLazy(TNode<JSFunction> function) {
+ #endif  // V8_ENABLE_LEAPTIERING
+ 
+   BIND(&compile_function);
+-  GenerateTailCallToReturnedCode(Runtime::kCompileLazy, function);
++  CallRuntime(Runtime::kCompileLazy, context, function);
++  GenerateTailCallToJSFunction(function);
+ }
+ 
+ TF_BUILTIN(CompileLazy, LazyBuiltinsAssembler) {
+   auto function = Parameter<JSFunction>(Descriptor::kTarget);
++  auto context = Parameter<Context>(Descriptor::kContext);
+ 
+-  CompileLazy(function);
++  CompileLazy(function, context);
+ }
+ 
+ #ifdef V8_ENABLE_LEAPTIERING
+diff --git a/src/builtins/builtins-lazy-gen.h b/src/builtins/builtins-lazy-gen.h
+index 14cf5db07e3..d43b20d1431 100644
+--- a/src/builtins/builtins-lazy-gen.h
++++ b/src/builtins/builtins-lazy-gen.h
+@@ -17,15 +17,18 @@ class LazyBuiltinsAssembler : public CodeStubAssembler {
+   explicit LazyBuiltinsAssembler(compiler::CodeAssemblerState* state)
+       : CodeStubAssembler(state) {}
+ 
+-  void GenerateTailCallToJSCode(TNode<Code> code, TNode<JSFunction> function);
++  void GenerateTailCallToJSFunction(TNode<JSFunction> function);
+ 
+-  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id,
+-                                      TNode<JSFunction> function);
+ #ifdef V8_ENABLE_LEAPTIERING
+   template <typename Function>
+   void TieringBuiltinImpl(const Function& Impl);
+ 
+ #else
++  void GenerateTailCallToJSCode(TNode<Code> code, TNode<JSFunction> function);
++
++  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id,
++                                      TNode<JSFunction> function);
++
+   void TailCallRuntimeIfStateEquals(TNode<Uint32T> state,
+                                     TieringState expected_state,
+                                     Runtime::FunctionId function_id,
+@@ -35,7 +38,7 @@ class LazyBuiltinsAssembler : public CodeStubAssembler {
+                                       TNode<FeedbackVector> feedback_vector);
+ #endif  // V8_ENABLE_LEAPTIERING
+ 
+-  void CompileLazy(TNode<JSFunction> function);
++  void CompileLazy(TNode<JSFunction> function, TNode<Context> context);
+ };
+ 
+ }  // namespace internal
+diff --git a/src/codegen/arm/macro-assembler-arm.cc b/src/codegen/arm/macro-assembler-arm.cc
+index 4fa721f72a9..72269ec0c2e 100644
+--- a/src/codegen/arm/macro-assembler-arm.cc
++++ b/src/codegen/arm/macro-assembler-arm.cc
+@@ -2094,21 +2094,6 @@ void MacroAssembler::AssertFeedbackVector(Register object, Register scratch) {
+ }
+ #endif  // V8_ENABLE_DEBUG_CODE
+ 
+-void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+-    Register optimized_code, Register closure) {
+-  ASM_CODE_COMMENT(this);
+-#ifdef V8_ENABLE_LEAPTIERING
+-  UNREACHABLE();
+-#else
+-  DCHECK(!AreAliased(optimized_code, closure));
+-  // Store code entry in the closure.
+-  str(optimized_code, FieldMemOperand(closure, JSFunction::kCodeOffset));
+-  RecordWriteField(closure, JSFunction::kCodeOffset, optimized_code,
+-                   kLRHasNotBeenSaved, SaveFPRegsMode::kIgnore,
+-                   SmiCheck::kOmit);
+-#endif  // V8_ENABLE_LEAPTIERING
+-}
+-
+ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Runtime::FunctionId function_id) {
+   // ----------- S t a t e -------------
+@@ -2126,7 +2111,9 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+          kJavaScriptCallArgCountRegister, kJavaScriptCallTargetRegister);
+ 
+     CallRuntime(function_id, 1);
++#ifndef V8_ENABLE_LEAPTIERING
+     mov(r2, r0);
++#endif
+ 
+     // Restore target function, new target and actual argument count.
+     Pop(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
+@@ -2134,11 +2121,26 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+     SmiUntag(kJavaScriptCallArgCountRegister);
+   }
+   static_assert(kJavaScriptCallCodeStartRegister == r2, "ABI mismatch");
++#ifdef V8_ENABLE_LEAPTIERING
++  JumpJSFunction(kJavaScriptCallTargetRegister);
++#else
+   JumpCodeObject(r2);
++#endif
+ }
+ 
+ #ifndef V8_ENABLE_LEAPTIERING
+ 
++void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
++    Register optimized_code, Register closure) {
++  ASM_CODE_COMMENT(this);
++  DCHECK(!AreAliased(optimized_code, closure));
++  // Store code entry in the closure.
++  str(optimized_code, FieldMemOperand(closure, JSFunction::kCodeOffset));
++  RecordWriteField(closure, JSFunction::kCodeOffset, optimized_code,
++                   kLRHasNotBeenSaved, SaveFPRegsMode::kIgnore,
++                   SmiCheck::kOmit);
++}
++
+ // Read off the flags in the feedback vector and check if there
+ // is optimized code or a tiering state that needs to be processed.
+ Condition MacroAssembler::LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(
+diff --git a/src/codegen/arm/macro-assembler-arm.h b/src/codegen/arm/macro-assembler-arm.h
+index 4eac103f33f..98824b898fa 100644
+--- a/src/codegen/arm/macro-assembler-arm.h
++++ b/src/codegen/arm/macro-assembler-arm.h
+@@ -904,9 +904,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
+                           Register scratch) NOOP_UNLESS_DEBUG_CODE;
+   void AssertFeedbackVector(Register object,
+                             Register scratch) NOOP_UNLESS_DEBUG_CODE;
++  // TODO(olivf): Rename to GenerateTailCallToUpdatedFunction.
++  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
++#ifndef V8_ENABLE_LEAPTIERING
+   void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
+                                            Register closure);
+-  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
+   Condition LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(
+       Register flags, Register feedback_vector, CodeKind current_code_kind);
+   void LoadFeedbackVectorFlagsAndJumpIfNeedsProcessing(
+@@ -914,6 +916,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
+       Label* flags_need_processing);
+   void OptimizeCodeOrTailCallOptimizedCodeSlot(Register flags,
+                                                Register feedback_vector);
++#endif  // V8_ENABLE_LEAPTIERING
+ 
+   // ---------------------------------------------------------------------------
+   // Runtime calls
+diff --git a/src/codegen/arm64/macro-assembler-arm64.cc b/src/codegen/arm64/macro-assembler-arm64.cc
+index 5907c240dc5..c99437290b9 100644
+--- a/src/codegen/arm64/macro-assembler-arm64.cc
++++ b/src/codegen/arm64/macro-assembler-arm64.cc
+@@ -1512,24 +1512,6 @@ void MacroAssembler::AssertFeedbackVector(Register object, Register scratch) {
+ }
+ #endif  // V8_ENABLE_DEBUG_CODE
+ 
+-void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+-    Register optimized_code, Register closure) {
+-  ASM_CODE_COMMENT(this);
+-  DCHECK(!AreAliased(optimized_code, closure));
+-
+-#ifdef V8_ENABLE_LEAPTIERING
+-  UNREACHABLE();
+-#else
+-  // Store code entry in the closure.
+-  AssertCode(optimized_code);
+-  StoreCodePointerField(optimized_code,
+-                        FieldMemOperand(closure, JSFunction::kCodeOffset));
+-  RecordWriteField(closure, JSFunction::kCodeOffset, optimized_code,
+-                   kLRHasNotBeenSaved, SaveFPRegsMode::kIgnore, SmiCheck::kOmit,
+-                   ReadOnlyCheck::kOmit, SlotDescriptor::ForCodePointerSlot());
+-#endif  // V8_ENABLE_LEAPTIERING
+-}
+-
+ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Runtime::FunctionId function_id) {
+   ASM_CODE_COMMENT(this);
+@@ -1555,7 +1537,9 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+     PushArgument(kJavaScriptCallTargetRegister);
+ 
+     CallRuntime(function_id, 1);
++#ifndef V8_ENABLE_LEAPTIERING
+     Mov(x2, x0);
++#endif
+ 
+     // Restore target function, new target, actual argument count, and dispatch
+     // handle.
+@@ -1565,11 +1549,40 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+   }
+ 
+   static_assert(kJavaScriptCallCodeStartRegister == x2, "ABI mismatch");
++#ifdef V8_ENABLE_LEAPTIERING
++#ifndef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
++  Move(kJavaScriptCallDispatchHandleRegister.W(),
++       FieldMemOperand(kJavaScriptCallTargetRegister,
++                       JSFunction::kDispatchHandleOffset));
++#endif
++  // We jump through x17 here because for Branch Identification (BTI) we use
++  // "Call" (`bti c`) rather than "Jump" (`bti j`) landing pads for tail-called
++  // code. See TailCallBuiltin for more information.
++  LoadEntrypointFromJSDispatchTable(x2, kJavaScriptCallDispatchHandleRegister,
++                                    x5);
++  Move(x17, x2);
++  Jump(x17);
++#else
+   JumpCodeObject(x2, kJSEntrypointTag);
++#endif
+ }
+ 
+ #ifndef V8_ENABLE_LEAPTIERING
+ 
++void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
++    Register optimized_code, Register closure) {
++  ASM_CODE_COMMENT(this);
++  DCHECK(!AreAliased(optimized_code, closure));
++
++  // Store code entry in the closure.
++  AssertCode(optimized_code);
++  StoreCodePointerField(optimized_code,
++                        FieldMemOperand(closure, JSFunction::kCodeOffset));
++  RecordWriteField(closure, JSFunction::kCodeOffset, optimized_code,
++                   kLRHasNotBeenSaved, SaveFPRegsMode::kIgnore, SmiCheck::kOmit,
++                   ReadOnlyCheck::kOmit, SlotDescriptor::ForCodePointerSlot());
++}
++
+ // Read off the flags in the feedback vector and check if there
+ // is optimized code or a tiering state that needs to be processed.
+ Condition MacroAssembler::LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(
+diff --git a/src/codegen/arm64/macro-assembler-arm64.h b/src/codegen/arm64/macro-assembler-arm64.h
+index 945d3179da0..babc38162b4 100644
+--- a/src/codegen/arm64/macro-assembler-arm64.h
++++ b/src/codegen/arm64/macro-assembler-arm64.h
+@@ -2028,10 +2028,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
+   inline void AssertFeedbackVector(Register object);
+   void AssertFeedbackVector(Register object,
+                             Register scratch) NOOP_UNLESS_DEBUG_CODE;
+-  void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
+-                                           Register closure);
++  // TODO(olivf): Rename to GenerateTailCallToUpdatedFunction.
+   void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
+ #ifndef V8_ENABLE_LEAPTIERING
++  void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
++                                           Register closure);
+   Condition LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(
+       Register flags, Register feedback_vector, CodeKind current_code_kind);
+   void LoadFeedbackVectorFlagsAndJumpIfNeedsProcessing(
+diff --git a/src/codegen/ia32/macro-assembler-ia32.cc b/src/codegen/ia32/macro-assembler-ia32.cc
+index 1da37bb710a..cb827458c98 100644
+--- a/src/codegen/ia32/macro-assembler-ia32.cc
++++ b/src/codegen/ia32/macro-assembler-ia32.cc
+@@ -813,21 +813,6 @@ void MacroAssembler::AssertFeedbackVector(Register object, Register scratch) {
+ }
+ #endif  // V8_ENABLE_DEBUG_CODE
+ 
+-void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+-    Register optimized_code, Register closure, Register value,
+-    Register slot_address) {
+-  ASM_CODE_COMMENT(this);
+-#ifdef V8_ENABLE_LEAPTIERING
+-  UNREACHABLE();
+-#else
+-  // Store the optimized code in the closure.
+-  mov(FieldOperand(closure, JSFunction::kCodeOffset), optimized_code);
+-  mov(value, optimized_code);  // Write barrier clobbers slot_address below.
+-  RecordWriteField(closure, JSFunction::kCodeOffset, value, slot_address,
+-                   SaveFPRegsMode::kIgnore, SmiCheck::kOmit);
+-#endif  // V8_ENABLE_LEAPTIERING
+-}
+-
+ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Runtime::FunctionId function_id) {
+   // ----------- S t a t e -------------
+@@ -848,7 +833,9 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+     push(kJavaScriptCallTargetRegister);
+ 
+     CallRuntime(function_id, 1);
++#ifndef V8_ENABLE_LEAPTIERING
+     mov(ecx, eax);
++#endif
+ 
+     // Restore target function, new target and actual argument count.
+     pop(kJavaScriptCallArgCountRegister);
+@@ -858,11 +845,26 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+   }
+ 
+   static_assert(kJavaScriptCallCodeStartRegister == ecx, "ABI mismatch");
++#ifdef V8_ENABLE_LEAPTIERING
++  JumpJSFunction(kJavaScriptCallTargetRegister);
++#else
+   JumpCodeObject(ecx);
++#endif
+ }
+ 
+ #ifndef V8_ENABLE_LEAPTIERING
+ 
++void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
++    Register optimized_code, Register closure, Register value,
++    Register slot_address) {
++  ASM_CODE_COMMENT(this);
++  // Store the optimized code in the closure.
++  mov(FieldOperand(closure, JSFunction::kCodeOffset), optimized_code);
++  mov(value, optimized_code);  // Write barrier clobbers slot_address below.
++  RecordWriteField(closure, JSFunction::kCodeOffset, value, slot_address,
++                   SaveFPRegsMode::kIgnore, SmiCheck::kOmit);
++}
++
+ // Read off the flags in the feedback vector and check if there
+ // is optimized code or a tiering state that needs to be processed.
+ // Registers flags and feedback_vector must be aliased.
+diff --git a/src/codegen/ia32/macro-assembler-ia32.h b/src/codegen/ia32/macro-assembler-ia32.h
+index 4224a7536dc..a62c8145d1a 100644
+--- a/src/codegen/ia32/macro-assembler-ia32.h
++++ b/src/codegen/ia32/macro-assembler-ia32.h
+@@ -574,15 +574,18 @@ class V8_EXPORT_PRIVATE MacroAssembler
+                           Register scratch) NOOP_UNLESS_DEBUG_CODE;
+   void AssertFeedbackVector(Register object,
+                             Register scratch) NOOP_UNLESS_DEBUG_CODE;
++  // TODO(olivf): Rename to GenerateTailCallToUpdatedFunction.
++  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
++#ifndef V8_ENABLE_LEAPTIERING
+   void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
+                                            Register closure, Register scratch1,
+                                            Register slot_address);
+-  void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
+   void LoadFeedbackVectorFlagsAndJumpIfNeedsProcessing(
+       Register flags, XMMRegister saved_feedback_vector,
+       CodeKind current_code_kind, Label* flags_need_processing);
+   void OptimizeCodeOrTailCallOptimizedCodeSlot(
+       Register flags, XMMRegister saved_feedback_vector);
++#endif  // V8_ENABLE_LEAPTIERING
+ 
+   // Abort execution if argument is not a smi, enabled via --debug-code.
+   void AssertSmi(Register object) NOOP_UNLESS_DEBUG_CODE;
+diff --git a/src/codegen/x64/macro-assembler-x64.cc b/src/codegen/x64/macro-assembler-x64.cc
+index f0b9bf5a10f..744d0153167 100644
+--- a/src/codegen/x64/macro-assembler-x64.cc
++++ b/src/codegen/x64/macro-assembler-x64.cc
+@@ -1264,7 +1264,9 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Push(kJavaScriptCallTargetRegister);
+ 
+     CallRuntime(function_id, 1);
++#ifndef V8_ENABLE_LEAPTIERING
+     movq(rcx, rax);
++#endif
+ 
+     // Restore target function, new target, actual argument count, and dispatch
+     // handle.
+@@ -1276,10 +1278,24 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
+     Pop(kJavaScriptCallNewTargetRegister);
+     Pop(kJavaScriptCallTargetRegister);
+   }
++
+   static_assert(kJavaScriptCallCodeStartRegister == rcx, "ABI mismatch");
++#ifdef V8_ENABLE_LEAPTIERING
++#ifndef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
++  movl(kJavaScriptCallDispatchHandleRegister,
++       FieldOperand(kJavaScriptCallTargetRegister,
++                    JSFunction::kDispatchHandleOffset));
++#endif
++  LoadEntrypointFromJSDispatchTable(rcx, kJavaScriptCallDispatchHandleRegister);
++  DCHECK_EQ(jump_mode, JumpMode::kJump);
++  jmp(rcx);
++#else
+   JumpCodeObject(rcx, kJSEntrypointTag, jump_mode);
++#endif
+ }
+ 
++#ifndef V8_ENABLE_LEAPTIERING
++
+ void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+     Register optimized_code, Register closure, Register scratch1,
+     Register slot_address) {
+@@ -1287,9 +1303,6 @@ void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+   DCHECK(!AreAliased(optimized_code, closure, scratch1, slot_address));
+   DCHECK_EQ(closure, kJSFunctionRegister);
+ 
+-#ifdef V8_ENABLE_LEAPTIERING
+-  UNREACHABLE();
+-#else
+   // Store the optimized code in the closure.
+   AssertCode(optimized_code);
+   StoreCodePointerField(FieldOperand(closure, JSFunction::kCodeOffset),
+@@ -1302,11 +1315,8 @@ void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
+   RecordWriteField(closure, JSFunction::kCodeOffset, value, slot_address,
+                    SaveFPRegsMode::kIgnore, SmiCheck::kOmit,
+                    ReadOnlyCheck::kOmit, SlotDescriptor::ForCodePointerSlot());
+-#endif  // V8_ENABLE_LEAPTIERING
+ }
+ 
+-#ifndef V8_ENABLE_LEAPTIERING
+-
+ // Read off the flags in the feedback vector and check if there
+ // is optimized code or a tiering state that needs to be processed.
+ Condition MacroAssembler::CheckFeedbackVectorFlagsNeedsProcessing(
+diff --git a/src/codegen/x64/macro-assembler-x64.h b/src/codegen/x64/macro-assembler-x64.h
+index b35a8b2f3ff..7f8f0cb83ef 100644
+--- a/src/codegen/x64/macro-assembler-x64.h
++++ b/src/codegen/x64/macro-assembler-x64.h
+@@ -1068,12 +1068,13 @@ class V8_EXPORT_PRIVATE MacroAssembler
+                           Register scratch) NOOP_UNLESS_DEBUG_CODE;
+   void AssertFeedbackVector(Register object,
+                             Register scratch) NOOP_UNLESS_DEBUG_CODE;
+-  void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
+-                                           Register closure, Register scratch1,
+-                                           Register slot_address);
++  // TODO(olivf): Rename to GenerateTailCallToUpdatedFunction.
+   void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id,
+                                       JumpMode jump_mode = JumpMode::kJump);
+ #ifndef V8_ENABLE_LEAPTIERING
++  void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
++                                           Register closure, Register scratch1,
++                                           Register slot_address);
+   Condition CheckFeedbackVectorFlagsNeedsProcessing(Register feedback_vector,
+                                                     CodeKind current_code_kind);
+   void CheckFeedbackVectorFlagsAndJumpIfNeedsProcessing(

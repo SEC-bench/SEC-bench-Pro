@@ -1,0 +1,48 @@
+From 4c95847d3b3152b85ae15ddb4977ad9fad7be571 Mon Sep 17 00:00:00 2001
+From: Tooru Fujisawa <arai_a@mac.com>
+Date: Wed, 19 Jun 2024 16:31:27 +0000
+Subject: [PATCH] Bug 1901411 - Part 4: Revert inlining of
+ AsyncGeneratorDrainQueue in AsyncGeneratorReturn. r=mgaudet,jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D213354
+---
+ js/src/vm/AsyncIteration.cpp | 24 +++---------------------
+ 1 file changed, 3 insertions(+), 21 deletions(-)
+
+diff --git a/js/src/vm/AsyncIteration.cpp b/js/src/vm/AsyncIteration.cpp
+index a6b2bafe558af..acbb36666160e 100644
+--- a/js/src/vm/AsyncIteration.cpp
++++ b/js/src/vm/AsyncIteration.cpp
+@@ -916,29 +916,11 @@ bool js::AsyncGeneratorReturn(JSContext* cx, unsigned argc, Value* vp) {
+     return false;
+   }
+ 
+-  // Step 7. Let state be generator.[[AsyncGeneratorState]].
+-  // Step 8. If state is either suspendedStart or completed, then
+-  if (generator->isSuspendedStart() || generator->isCompleted()) {
+-    // Step 8.a. Set generator.[[AsyncGeneratorState]] to awaiting-return.
+-    generator->setAwaitingReturn();
+-
+-    // Step 8.b. Perform ! AsyncGeneratorAwaitReturn(generator).
+-    if (!AsyncGeneratorAwaitReturn(cx, generator, completionValue)) {
+-      return false;
+-    }
+-  } else if (generator->isSuspendedYield()) {
+-    // Step 9. Else if state is suspendedYield, then
+-
+-    // Step 9.a. Perform ! AsyncGeneratorResume(generator, completion).
+-    if (!AsyncGeneratorUnwrapYieldResumptionAndResume(
+-            cx, generator, CompletionKind::Return, completionValue)) {
++  // Steps 7-10.
++  if (!generator->isExecuting() && !generator->isAwaitingYieldReturn()) {
++    if (!AsyncGeneratorDrainQueue(cx, generator)) {
+       return false;
+     }
+-  } else {
+-    // Step 10. Else,
+-    // Step 10.a. Assert: state is either executing or awaiting-return.
+-    MOZ_ASSERT(generator->isExecuting() || generator->isAwaitingReturn() ||
+-               generator->isAwaitingYieldReturn());
+   }
+ 
+   // Step 11. Return promiseCapability.[[Promise]].

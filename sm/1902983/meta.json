@@ -1,0 +1,35 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1902983",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JSJitFrameIter.cpp",
+        "js/src/jit/JSJitFrameIter.h"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fast-warmup --gc-zeal=21,100 --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm bailout-data use-after-free in JSJitFrameIter when Ion calls a Wasm function directly via FrameType::Exit. JSJitFrameIter held a BailoutInfo* pointing into stack memory tied to Wasm frames; after iterating past the Wasm frames the memory was reused, leaving the iterator pointing at freed bailout data. Follow-up to bug 1900523 (which only patched the JSJitToWasm trampoline path; the FrameType::Exit path used when Ion calls Wasm directly remained vulnerable). Fix (commit d5df70357db3d244669ed3147467e5b7ade0f51c by Jan de Mooij, 2024-06-19, r=iain) clears bailoutData_ before iterating Wasm frames on both boundary frame types. The in-tree regression test ships at js/src/jit-test/tests/ion/bug1902983.js.",
+    "fix_commits": [
+        "d5df70357db3d244669ed3147467e5b7ade0f51c"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-don-t-use-bailout-data-after-iterating-wasm.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1902983 - Don't use bailout data after iterating Wasm",
+            "source_commit": "d5df70357db3d244669ed3147467e5b7ade0f51c",
+            "commit": "d5df70357db3d244669ed3147467e5b7ade0f51c",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/d5df70357db3d244669ed3147467e5b7ade0f51c",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/d5df70357db3d244669ed3147467e5b7ade0f51c",
+            "phabricator": "D214098"
+        }
+    ],
+    "vrp": null
+}

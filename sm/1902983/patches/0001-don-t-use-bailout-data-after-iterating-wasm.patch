@@ -1,0 +1,118 @@
+From d5df70357db3d244669ed3147467e5b7ade0f51c Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 19 Jun 2024 12:50:57 +0000
+Subject: [PATCH] Bug 1902983 - Don't use bailout data after iterating Wasm
+ frames. r=iain
+
+This is similar to bug 1900523, but the fix there was incomplete because the
+`JSJitToWasm` frame type is only used when we go through the Wasm JIT entry
+trampoline. Ion can also call Wasm functions directly and in that case the type
+will be `FrameType::Exit`.
+
+Differential Revision: https://phabricator.services.mozilla.com/D214098
+---
+ js/src/jit-test/tests/ion/bug1902983.js | 24 +++++++++++++++++++
+ js/src/jit/JSJitFrameIter.cpp           | 31 ++++++++++++++-----------
+ js/src/jit/JSJitFrameIter.h             |  4 ++--
+ 3 files changed, 43 insertions(+), 16 deletions(-)
+ create mode 100644 js/src/jit-test/tests/ion/bug1902983.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1902983.js b/js/src/jit-test/tests/ion/bug1902983.js
+new file mode 100644
+index 0000000000000..6fd9796c621f7
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1902983.js
+@@ -0,0 +1,24 @@
++// |jit-test| --fast-warmup; --gc-zeal=21,100; skip-if: !wasmIsSupported()
++let counter = 0;
++function g() {
++    counter++;
++    const y = BigInt.asIntN(counter, -883678545n);
++    const z = y >> y;
++    BigInt.asUintN(2 ** counter, 883678545n);
++    try { g(); } catch (e) { }
++}
++function f() {
++    for (let i = 0; i < 5; i++) {
++        for (let j = 0; j < 30; j++) { }
++        Promise.allSettled().catch(e => null);
++        counter = 0;
++        g();
++    }
++}
++const binary = wasmTextToBinary(`(module (import "m" "f" (func $f)) (func (export "test") (call $f)))`);
++const mod = new WebAssembly.Module(binary);
++const inst = new WebAssembly.Instance(mod, { m: { f: f } });
++for (let i = 0; i < 100; i++) { }
++for (let i = 0; i < 5; i++) {
++    inst.exports.test();
++}
+diff --git a/js/src/jit/JSJitFrameIter.cpp b/js/src/jit/JSJitFrameIter.cpp
+index b692cb12376d1..118157570d0e6 100644
+--- a/js/src/jit/JSJitFrameIter.cpp
++++ b/js/src/jit/JSJitFrameIter.cpp
+@@ -26,26 +26,29 @@ using namespace js;
+ using namespace js::jit;
+ 
+ JSJitFrameIter::JSJitFrameIter(const JitActivation* activation)
+-    : JSJitFrameIter(activation, FrameType::Exit, activation->jsExitFP()) {}
+-
+-JSJitFrameIter::JSJitFrameIter(const JitActivation* activation,
+-                               FrameType frameType, uint8_t* fp)
+-    : current_(fp),
+-      type_(frameType),
+-      resumePCinCurrentFrame_(nullptr),
+-      cachedSafepointIndex_(nullptr),
++    : current_(activation->jsExitFP()),
++      type_(FrameType::Exit),
+       activation_(activation) {
+   // If we're currently performing a bailout, we have to use the activation's
+   // bailout data when we start iterating over the activation's frames.
+-  // Note: JSJitToWasm indicates the activation contains both JS and Wasm frames
+-  // and we're resuming iteration of the JS frames.
+-  MOZ_ASSERT(type_ == FrameType::JSJitToWasm || type_ == FrameType::Exit);
+-  if (type_ == FrameType::Exit && activation_->bailoutData()) {
++  if (activation_->bailoutData()) {
+     current_ = activation_->bailoutData()->fp();
+     type_ = FrameType::Bailout;
+-  } else {
+-    MOZ_ASSERT(!TlsContext.get()->inUnsafeCallWithABI);
+   }
++  MOZ_ASSERT(!TlsContext.get()->inUnsafeCallWithABI);
++}
++
++JSJitFrameIter::JSJitFrameIter(const JitActivation* activation,
++                               FrameType frameType, uint8_t* fp)
++    : current_(fp), type_(frameType), activation_(activation) {
++  // This constructor is only used when resuming iteration after iterating Wasm
++  // frames in the same JitActivation so ignore activation_->bailoutData().
++  //
++  // Note: FrameType::JSJitToWasm is used for JIT => Wasm calls through the Wasm
++  // JIT entry trampoline. FrameType::Exit is used for direct Ion => Wasm calls.
++  MOZ_ASSERT(fp > activation->jsOrWasmExitFP());
++  MOZ_ASSERT(type_ == FrameType::JSJitToWasm || type_ == FrameType::Exit);
++  MOZ_ASSERT(!TlsContext.get()->inUnsafeCallWithABI);
+ }
+ 
+ bool JSJitFrameIter::checkInvalidation() const {
+diff --git a/js/src/jit/JSJitFrameIter.h b/js/src/jit/JSJitFrameIter.h
+index 03fd06852e04c..f87e9c5120d0a 100644
+--- a/js/src/jit/JSJitFrameIter.h
++++ b/js/src/jit/JSJitFrameIter.h
+@@ -115,14 +115,14 @@ class JSJitFrameIter {
+  protected:
+   uint8_t* current_;
+   FrameType type_;
+-  uint8_t* resumePCinCurrentFrame_;
++  uint8_t* resumePCinCurrentFrame_ = nullptr;
+ 
+   // Size of the current Baseline frame. Equivalent to
+   // BaselineFrame::debugFrameSize_ in debug builds.
+   mozilla::Maybe<uint32_t> baselineFrameSize_;
+ 
+  private:
+-  mutable const SafepointIndex* cachedSafepointIndex_;
++  mutable const SafepointIndex* cachedSafepointIndex_ = nullptr;
+   const JitActivation* activation_;
+ 
+   void dumpBaseline() const;

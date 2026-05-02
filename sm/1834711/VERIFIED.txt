@@ -1,0 +1,4 @@
+Verified on 2026-04-26.
+Reproduced with ../../spidermonkey/crash_check.sh using dataset poc.js and meta.json command flags.
+Result: CONFIMRED: ASAN_CRASH.
+Fix patches applied via Dockerfile.fixed; ../../spidermonkey/patch_check.py confirms PoC is mitigated (patch_check_status=MITIGATED).

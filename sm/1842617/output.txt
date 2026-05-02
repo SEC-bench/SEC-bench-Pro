@@ -1,0 +1,37 @@
+Assertion failure: isInt32(), at /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:914
+#01: ???[/out/js +0x2fd17d8]
+#02: ???[/out/js +0x31f7ff8]
+#03: ???[/out/js +0x2fd9ea1]
+#04: ???[/out/js +0x2fd5feb]
+#05: ???[/out/js +0x2fe268e]
+#06: ???[/out/js +0x2fe4364]
+#07: ???[/out/js +0x300001e]
+#08: ???[/out/js +0x29fbfd6]
+#09: ???[/out/js +0x41e610e]
+#10: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6155d74208cb bp 0x7ffff2f6b7b0 sp 0x7ffff2f6b6c0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6155d74208cb in JS::Value::toInt32() const /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:914:5
+    #1 0x6155d74208cb in JS::Value::toPrivateUint32() const /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:1054:54
+    #2 0x6155d74208cb in js::NativeObject::allocDictionarySlot(JSContext*, JS::Handle<js::NativeObject*>, unsigned int*) /src/gecko-dev/js/src/vm/NativeObject.cpp
+    #3 0x6155d7646ff7 in js::NativeObject::addProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, js::PropertyFlags, unsigned int*) /src/gecko-dev/js/src/vm/Shape.cpp:338:10
+    #4 0x6155d7428ea0 in bool AddOrChangeProperty<(IsAddOrChange)0>(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::PropertyDescriptor>, js::PropertyResult*) /src/gecko-dev/js/src/vm/NativeObject.cpp:1310:12
+    #5 0x6155d7424fea in js::NativeDefineProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::PropertyDescriptor>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:1626:10
+    #6 0x6155d743168d in js::SetPropertyByDefining(JSContext*, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2454:10
+    #7 0x6155d7433363 in bool SetNonexistentProperty<(js::QualifiedBool)0>(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2521:10
+    #8 0x6155d744f01d in bool js::NativeSetProperty<(js::QualifiedBool)0>(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2649:14
+    #9 0x6155d6e4afd5 in js::SetNameOperation(JSContext*, JSScript*, unsigned char*, JS::Handle<JSObject*>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:270:10
+    #10 0x6155d863510d in js::jit::DoSetPropFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Value*, JS::Handle<JS::Value>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1448:10
+    #11 0x7477bc0ff998  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00000ffffe5ed7f6  rcx = 0x00006155d502c720  rdx = 0x0000000000000000  
+rdi = 0x00006155da796490  rsi = 0x00007ffff2f6b678  rbp = 0x00007ffff2f6b7b0  rsp = 0x00007ffff2f6b6c0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000119a641690f8  r13 = 0x0000000000000149  r14 = 0x0000000000000153  r15 = 0x00000ffffe5ed6dc  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:914:5 in JS::Value::toInt32() const
+==13==ABORTING

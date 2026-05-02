@@ -1,0 +1,115 @@
+=================================================================
+==13==ERROR: AddressSanitizer: heap-use-after-free on address 0x70f0373e25f8 at pc 0x5fe6f1509023 bp 0x7ffdb0180210 sp 0x7ffdb0180208
+READ of size 8 at 0x70f0373e25f8 thread T0
+    #0 0x5fe6f1509022 in js::IteratorProperty::markDeleted() /src/gecko-dev/js/src/vm/Iteration.h:217:29
+    #1 0x5fe6f1509022 in SuppressDeletedProperty(JSContext*, js::NativeIterator*, JS::Handle<JSObject*>, JS::Handle<JSLinearString*>) /src/gecko-dev/js/src/vm/Iteration.cpp:1852:13
+    #2 0x5fe6f1509022 in SuppressDeletedPropertyHelper(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSLinearString*>) /src/gecko-dev/js/src/vm/Iteration.cpp:1877:10
+    #3 0x5fe6f1507ffe in js::SuppressDeletedProperty(JSContext*, JS::Handle<JSObject*>, JS::PropertyKey) /src/gecko-dev/js/src/vm/Iteration.cpp:1898:10
+    #4 0x5fe6f16b02bc in js::NativeDeleteProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2881:10
+    #5 0x5fe6f0ed10d1 in bool js::DelPropOperation<false>(JSContext*, JS::Handle<JS::Value>, JS::Handle<js::PropertyName*>, bool*) /src/gecko-dev/js/src/vm/Interpreter.cpp:4722:8
+    #6 0x5fe6f0eae058 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2811:14
+    #7 0x5fe6f0e92cb3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #8 0x5fe6f0e9899c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #9 0x5fe6f0e991d6 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #10 0x5fe6f13bcc24 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #11 0x5fe6f13bcf72 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #12 0x5fe6eeece8ff in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1387:10
+    #13 0x5fe6eeecd5dc in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #14 0x5fe6eee5ae2f in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12209:10
+    #15 0x5fe6eee5ae2f in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12462:12
+    #16 0x5fe6eee4aaf5 in main /src/gecko-dev/js/src/shell/js.cpp:12868:12
+    #17 0x742037fc91c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #18 0x742037fc928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #19 0x5fe6eed4e844 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2dce844) (BuildId: ee5ef0f1d22e7a0b44332984c35d6c07)
+
+0x70f0373e25f8 is located 88 bytes inside of 136-byte region [0x70f0373e25a0,0x70f0373e2628)
+freed by thread T0 here:
+    #0 0x5fe6eedefa96 in free /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x5fe6efd49c8b in unsigned long js::gc::Arena::finalize<JSObject, (js::gc::FinalizeKind)2>(JS::GCContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Sweeping.cpp:162:12
+    #2 0x5fe6efd1601b in bool FinalizeTypedArenas<JSObject, (js::gc::FinalizeKind)2, (js::gc::ReleaseEmpty)0>(JS::GCContext*, js::gc::ArenaList&, js::gc::SortedArenaList&, js::gc::AllocKind, JS::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:220:16
+    #3 0x5fe6efd16ee4 in void js::gc::ArenaLists::backgroundFinalize<(js::gc::ReleaseEmpty)0>(JS::GCContext*, js::gc::AllocKind, js::gc::Arena**) /src/gecko-dev/js/src/gc/Sweeping.cpp:314:3
+    #4 0x5fe6efcc5686 in js::gc::GCRuntime::sweepBackgroundThings(js::gc::ZoneList&) /src/gecko-dev/js/src/gc/Sweeping.cpp:395:18
+    #5 0x5fe6efcc7227 in js::gc::GCRuntime::sweepFromBackgroundThread(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/Sweeping.cpp:527:5
+    #6 0x5fe6efb82412 in js::GCParallelTask::runTask(JS::GCContext*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:218:3
+    #7 0x5fe6efb818f9 in js::GCParallelTask::runFromMainThread(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:174:3
+    #8 0x5fe6efb3f3c2 in js::GCParallelTask::runFromMainThread() /src/gecko-dev/js/src/gc/GCParallelTask.cpp:161:3
+    #9 0x5fe6efcc6d77 in js::gc::GCRuntime::queueZonesAndStartBackgroundSweep(js::gc::ZoneList&&) /src/gecko-dev/js/src/gc/Sweeping.cpp:510:15
+    #10 0x5fe6efcdaf34 in js::gc::GCRuntime::endSweepingSweepGroup(JS::GCContext*, JS::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1853:3
+    #11 0x5fe6efd62655 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2348:23
+    #12 0x5fe6efd3a71f in sweepaction::SweepActionForEach<js::gc::SweepGroupsIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2383:19
+    #13 0x5fe6efce69ac in js::gc::GCRuntime::performSweepActions(JS::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2567:53
+    #14 0x5fe6efb60926 in js::gc::GCRuntime::incrementalSlice(JS::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:4081:11
+    #15 0x5fe6efb68779 in js::gc::GCRuntime::gcCycle(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4634:3
+    #16 0x5fe6efb6b8e7 in js::gc::GCRuntime::collect(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4823:9
+    #17 0x5fe6efb3d052 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4903:3
+    #18 0x5fe6efb7a034 in JS::NonIncrementalGC(JSContext*, JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GCAPI.cpp:300:21
+    #19 0x5fe6ef33915f in GC(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:789:3
+    #20 0x5fe6f0ecf0b2 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #21 0x5fe6f0e94285 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #22 0x5fe6eff6ccc2 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1698:10
+    #23 0x1634360ffc5e  (<unknown module>)
+    #24 0x163436124833  (<unknown module>)
+    #25 0x16343612b65f  (<unknown module>)
+    #26 0x1634360f48d7  (<unknown module>)
+    #27 0x5fe6f062eda5 in EnterBaseline(JSContext*, EnterJitData&) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:147:5
+    #28 0x5fe6f062eda5 in js::jit::EnterBaselineInterpreterAtBranch(JSContext*, js::InterpreterFrame*, unsigned char*) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:202:26
+    #29 0x5fe6f0eb5815 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2032:17
+    #30 0x5fe6f0e92cb3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+
+previously allocated by thread T0 here:
+    #0 0x5fe6eedefd34 in malloc /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3
+    #1 0x5fe6f155bd8a in js_arena_malloc(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:386:10
+    #2 0x5fe6f155bd8a in js_malloc(unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:390:10
+    #3 0x5fe6f155bd8a in js::NativeIterator* js::MallocProvider<JSContext>::pod_malloc_with_extra<js::NativeIterator, unsigned char>(unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:137:28
+    #4 0x5fe6f1506de4 in CreatePropertyIterator(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::StackGCVector<JS::PropertyKey, js::TempAllocPolicy>>, bool, mozilla::Vector<js::PropertyIndex, 8ul, js::TempAllocPolicy>*, unsigned int, unsigned int, bool) /src/gecko-dev/js/src/vm/Iteration.cpp:823:19
+    #5 0x5fe6f1500c31 in GetIteratorImpl(JSContext*, JS::Handle<JSObject*>, bool, bool) /src/gecko-dev/js/src/vm/Iteration.cpp:1282:37
+    #6 0x5fe6f1507306 in js::GetIterator(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/Iteration.cpp:1316:10
+    #7 0x5fe6f1507306 in js::ValueToIterator(JSContext*, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Iteration.cpp:1728:10
+    #8 0x5fe6f0ea7af3 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2369:24
+    #9 0x5fe6f0e92cb3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #10 0x5fe6f0e9899c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #11 0x5fe6f0e991d6 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #12 0x5fe6f13bcc24 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #13 0x5fe6f13bcf72 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #14 0x5fe6eeece8ff in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1387:10
+    #15 0x5fe6eeecd5dc in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #16 0x5fe6eee5ae2f in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12209:10
+    #17 0x5fe6eee5ae2f in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12462:12
+    #18 0x5fe6eee4aaf5 in main /src/gecko-dev/js/src/shell/js.cpp:12868:12
+    #19 0x742037fc91c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x742037fc928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x5fe6eed4e844 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2dce844) (BuildId: ee5ef0f1d22e7a0b44332984c35d6c07)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/vm/Iteration.h:217:29 in js::IteratorProperty::markDeleted()
+Shadow bytes around the buggy address:
+  0x70f0373e2300: fa fa fa fa fa fa 00 00 00 00 00 00 00 00 00 00
+  0x70f0373e2380: 00 00 00 00 00 00 01 fa fa fa fa fa fa fa fa fa
+  0x70f0373e2400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x70f0373e2480: 00 02 fa fa fa fa fa fa fa fa 00 00 00 00 00 00
+  0x70f0373e2500: 00 00 00 00 00 00 00 00 00 00 00 00 fa fa fa fa
+=>0x70f0373e2580: fa fa fa fa fd fd fd fd fd fd fd fd fd fd fd[fd]
+  0x70f0373e2600: fd fd fd fd fd fa fa fa fa fa fa fa fa fa fd fd
+  0x70f0373e2680: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fa
+  0x70f0373e2700: fa fa fa fa fa fa fa fa fd fd fd fd fd fd fd fd
+  0x70f0373e2780: fd fd fd fd fd fd fd fd fd fd fa fa fa fa fa fa
+  0x70f0373e2800: fa fa 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

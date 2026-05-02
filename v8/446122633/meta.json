@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446122633",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--experimental-wasm-custom-descriptors",
+  "target_source_files": [
+    "src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc"
+  ],
+  "target_subdir": [
+    "src/compiler/turboshaft"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's Turboshaft compiler due to incorrect reachability analysis in `WasmGCTypeAnalyzer::ProcessBranchOnTarget()`. When processing a `WasmTypeCheck` operation, the analyzer marks the false branch (the branch taken when the cast fails) as statically unreachable if the checked object's static type is already a subtype of the target type. However, this assumption is incorrect for WebAssembly Custom Descriptor casts: even when static types match, a descriptor cast can fail at runtime if the object's runtime descriptor does not match the expected descriptor. As a result, the compiler incorrectly treats a reachable code path as dead, causing type assumptions on the false branch to be propagated into subsequent blocks under wrong preconditions. This can be exploited by forcing execution into the supposedly unreachable false branch (e.g., via loop reprocessing), causing the compiler to confuse two unrelated Wasm struct types and enabling arbitrary caged writes within the V8 sandbox. In contrast, the `WasmGCTypedOptimizationReducer` correctly guards against this case by checking `IsCastToCustomDescriptor()` before treating a same-type cast as always succeeding; `ProcessBranchOnTarget()` lacks this guard.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[wasm-custom-desc] Fix subtyping",
+      "url": "https://crrev.com/c/6973586",
+      "cl": 6973586,
+      "source_commit": "48c3551179299151b044b2c161566465497c0407",
+      "commit": "48c3551179299151b044b2c161566465497c0407",
+      "description": "Local patch exported from https://crrev.com/c/6973586 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6973586",
+      "source_cl": 6973586,
+      "source_ref": "refs/changes/86/6973586/5",
+      "source_patchset": 5
+    }
+  ]
+}

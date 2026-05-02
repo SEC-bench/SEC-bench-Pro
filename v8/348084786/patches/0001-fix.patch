@@ -1,0 +1,13 @@
+diff --git a/src/builtins/js-to-wasm.tq b/src/builtins/js-to-wasm.tq
+index 33c4790aa9..080714fe6a 100644
+--- a/src/builtins/js-to-wasm.tq
++++ b/src/builtins/js-to-wasm.tq
+@@ -757,7 +757,6 @@ macro JSToWasmWrapperHelper(
+   // `SharedFunctionInfo::length`.
+   let popCount = arguments.length;
+-  const declaredArgCount =
+-      Convert<intptr>(Convert<int32>(target.shared_function_info.length));
++  const declaredArgCount = Convert<intptr>(paramCount);
+   if (declaredArgCount > popCount) {
+     popCount = declaredArgCount;
+   }

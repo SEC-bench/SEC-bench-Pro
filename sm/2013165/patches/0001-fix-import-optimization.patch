@@ -1,0 +1,26 @@
+From e2acef6711967949cd0825869034165383c482e1 Mon Sep 17 00:00:00 2001
+From: Ryan Hunt <rhunt@eqrion.net>
+Date: Thu, 5 Feb 2026 19:10:03 +0000
+Subject: [PATCH] Bug 2013165 - Fix import optimization. r=yury
+
+Differential Revision: https://phabricator.services.mozilla.com/D281104
+---
+ js/src/wasm/WasmInstance.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/js/src/wasm/WasmInstance.cpp b/js/src/wasm/WasmInstance.cpp
+index ebc8c3597377e..fd39342d0d0cf 100644
+--- a/js/src/wasm/WasmInstance.cpp
++++ b/js/src/wasm/WasmInstance.cpp
+@@ -2346,6 +2346,11 @@ JSObject* MaybeOptimizeFunctionCallBind(const wasm::FuncType& funcType,
+     return nullptr;
+   }
+ 
++  if (boundThis.toObject().is<JSFunction>() &&
++      boundThis.toObject().as<JSFunction>().isWasm()) {
++    return nullptr;
++  }
++
+   return boundThis.toObjectOrNull();
+ }
+ 

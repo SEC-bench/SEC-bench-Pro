@@ -1,0 +1,53 @@
+FROM hwiwonlee/sm.base:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+ENV SRC=/src
+ENV OUT=/out
+ENV PATH="/root/.mozbuild/clang/bin:/root/.cargo/bin:/root/.mozbuild/cbindgen:$PATH"
+
+WORKDIR $SRC/gecko-dev
+
+# The base image tracks firefox/main in $SRC/gecko-dev and carries gecko-dev as
+# a secondary remote for older instance builds. The latest image defaults to
+# firefox/main but accepts any locally resolvable ref or fetched commit.
+ARG SM_REF=firefox/main
+
+RUN set -eux; \
+    git fetch firefox main; \
+    git fetch gecko-dev master; \
+    git checkout --detach "$SM_REF"
+
+RUN set -eux; \
+    rm -f mozconfig .mozconfig; \
+    cat > .mozconfig <<'EOF'
+ac_add_options --enable-address-sanitizer
+ac_add_options --disable-jemalloc
+ac_add_options --enable-optimize="-O1"
+ac_add_options --enable-debug
+ac_add_options --enable-debug-symbols
+ac_add_options --enable-application=js
+ac_add_options --disable-bootstrap
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-debug-asan
+EOF
+RUN ./mach build
+
+RUN set -eux; \
+    rm -f mozconfig .mozconfig; \
+    cat > .mozconfig <<'EOF'
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+ac_add_options --enable-application=js
+ac_add_options --disable-bootstrap
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-release
+EOF
+RUN ./mach build
+
+RUN set -eux; \
+    mkdir -p "$OUT/debug" "$OUT/release"; \
+    ln -sf "$SRC/gecko-dev/obj-debug-asan/dist/bin/js" "$OUT/js"; \
+    ln -sf "$SRC/gecko-dev/obj-release/dist/bin/js" "$OUT/js-release"; \
+    ln -sf "$SRC/gecko-dev/obj-debug-asan/dist/bin/js" "$OUT/debug/js"; \
+    ln -sf "$SRC/gecko-dev/obj-release/dist/bin/js" "$OUT/release/js"

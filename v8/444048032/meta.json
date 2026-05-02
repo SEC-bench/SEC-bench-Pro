@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:444048032",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--fuzzing --sandbox-fuzzing --single-threaded",
+  "target_source_files": [
+    "src/bigint/mul-toom.cc"
+  ],
+  "target_subdir": [
+    "src/bigint"
+  ],
+  "target_vulnerability_type": "Out-of-bounds write",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A race condition in V8's BigInt Toom-Cook multiplication leads to an out-of-bounds write that enables a V8 sandbox escape. The root cause is that `ShiftedDigits` (in `div-helpers.h`) does not allocate new storage when the divisor's top bit is already set (shift == 0), instead keeping a direct pointer into the BigInt's digit array in the V8 sandbox. When `DivideBarrett` calls `Multiply(P, B, Q)` in step (3), `B.digits_` can point directly to the live BigInt object's digit array. A Worker thread using `Sandbox.MemoryView` continuously writes two different 64-bit values to a specific digit of the divisor BigInt concurrently. This races with the Toom-Cook computation: in `Toom3Main`, Phase 2b calls `AddSigned(p_m2, p_m1, p_m1_sign, X2, false)` which reads `X2[i]` directly from the live BigInt data. The concurrent modification causes inconsistency between the length snapshot captured at the start of `MultiplyToomCook` (`k = Y.len()`) and the actual significant digits of the intermediate result `T` produced by `Toom3Main`. When `Y.Normalize()` (in `Multiply`) reads the live top digit and gets a different value than expected due to the race, the effective length `k` is altered. The subsequent `AddAndReturnOverflow(Z + i, T)` at `mul-toom.cc:217` writes the result `T` (with unexpectedly many significant digits after normalization) past the end of `Z + i`, overflowing into adjacent memory regions of the `ScratchDigits scratch` allocation in `DivideBarrett`. Because `ScratchDigits` uses the system heap (`new[]`) which lies outside the V8 sandbox, the OOB write escapes the sandbox boundary, constituting a full V8 sandbox violation.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 328,
+      "evidence_text": "Fixed: 444048032; Reviewed-on: CL 6939350",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6939350",
+      "cl": 6939350,
+      "commit": "28c02e0c7bb14704cc328b00a84782214d22f48a",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6939350 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6939350",
+      "source_cl": 6939350,
+      "source_commit": "28c02e0c7bb14704cc328b00a84782214d22f48a",
+      "source_ref": "refs/changes/50/6939350/2",
+      "source_patchset": 2
+    }
+  ]
+}

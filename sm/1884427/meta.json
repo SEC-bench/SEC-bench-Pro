@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1884427",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/Realm.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe --no-threads --no-baseline --no-ion",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Realm initialization lifetime bug - a Realm being initialized at the start of GC was not marked to be kept alive. In js/src/vm/Realm.cpp, failed global creation during an out-of-memory path could destroy a Realm while a live BaseShape still referenced the Realm's global. Later GC tracing followed that dangling Realm/global edge and ASAN/debug builds crashed in js::CheckTracedThing with poisoned memory. The fix sets the keep-alive flag for Realms being initialized at the start of GC, preventing premature Realm destruction.",
+    "fix_commits": [
+        "85c8dad6f466d7cf5c45444126ec3440e8c15aba"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-don-t-destroy-realms-that-were-being.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1884427 - Don't destroy realms that were being",
+            "source_commit": "85c8dad6f466d7cf5c45444126ec3440e8c15aba",
+            "commit": "85c8dad6f466d7cf5c45444126ec3440e8c15aba",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/85c8dad6f466d7cf5c45444126ec3440e8c15aba",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/85c8dad6f466d7cf5c45444126ec3440e8c15aba",
+            "phabricator": "D204494"
+        }
+    ],
+    "vrp": null
+}

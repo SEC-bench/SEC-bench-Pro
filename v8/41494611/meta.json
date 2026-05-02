@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:41494611",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--allow-natives-syntax --optimize-on-next-call-optimizes-to-maglev --maglev-cse",
+  "target_source_files": [
+    "src/maglev/maglev-ir.h"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Debug assertion failure",
+  "error_type": "DCHECK",
+  "description": "Maglev CSE leaves ValueNode allocation state invalid and trips the is_loadable() DCHECK in maglev-ir.h.",
+  "vrp": "8000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "report-revision",
+      "evidence_lineno": 0,
+      "evidence_text": "2414b1c31a87d40de79acfcd2a3b0c068f27442e [maglev] CSE: clear available expressions for exception handlers",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5245405",
+      "cl": 5245405,
+      "source_commit": "2414b1c31a87d40de79acfcd2a3b0c068f27442e",
+      "commit": "2414b1c31a87d40de79acfcd2a3b0c068f27442e",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/5245405 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5245405",
+      "source_cl": 5245405,
+      "source_ref": "refs/changes/05/5245405/4",
+      "source_patchset": 4
+    }
+  ]
+}

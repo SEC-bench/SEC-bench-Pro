@@ -1,0 +1,469 @@
+From 9997fc01395257cffd7231f14bb4d9fa7eaa9665 Mon Sep 17 00:00:00 2001
+From: Thibaud Michaud <thibaudm@chromium.org>
+Date: Wed, 23 Oct 2024 15:27:44 +0200
+Subject: [PATCH] [wasm][exnref] Use wasm_null for exnref
+
+A JS null caught in wasm as an exnref with catch_(all_)ref should be
+observably different from a null exnref: a JS null should behave like a
+regular JS exception with null as the externref package, while a null
+exnref is the actual null value for this type. In particular, a JS
+null exception can be rethrown while a null exnref cannot.
+Represent null exnrefs with wasm_null instead of JS null to avoid the
+confusion.
+
+R=jkummerow@chromium.org
+
+Fixed: 374790906
+Change-Id: If9f16a24407ee7d1399613255c3f14e0a6ebef9e
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5953226
+Reviewed-by: Jakob Kummerow <jkummerow@chromium.org>
+Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#96782}
+---
+ src/builtins/wasm.tq                          |   7 +-
+ .../turboshaft/builtin-call-descriptors.h     |  11 ++
+ src/compiler/wasm-compiler.cc                 |   8 ++
+ src/compiler/wasm-compiler.h                  |   1 +
+ src/wasm/baseline/liftoff-compiler.cc         |   2 +-
+ src/wasm/graph-builder-interface.cc           |   2 +-
+ src/wasm/turboshaft-graph-interface.cc        |   2 +-
+ src/wasm/value-type.h                         |   3 -
+ src/wasm/wasm-builtin-list.h                  |   1 +
+ src/wasm/wrappers.cc                          |  13 +-
+ test/mjsunit/wasm/gc-casts-exnref.js          | 126 ++++++++++++------
+ 11 files changed, 121 insertions(+), 55 deletions(-)
+
+diff --git a/src/builtins/wasm.tq b/src/builtins/wasm.tq
+index c0f31890a08..d8380b07f9f 100644
+--- a/src/builtins/wasm.tq
++++ b/src/builtins/wasm.tq
+@@ -437,7 +437,12 @@ builtin WasmThrow(tag: Object, values: FixedArray): JSAny {
+ }
+ 
+ builtin WasmRethrow(exception: Object): JSAny {
+-  if (exception == Null) tail ThrowWasmTrapRethrowNull();
++  dcheck(exception != kWasmNull);
++  tail runtime::WasmReThrow(LoadContextFromFrame(), exception);
++}
++
++builtin WasmThrowRef(exception: Object): JSAny {
++  if (exception == kWasmNull) tail ThrowWasmTrapRethrowNull();
+   tail runtime::WasmReThrow(LoadContextFromFrame(), exception);
+ }
+ 
+diff --git a/src/compiler/turboshaft/builtin-call-descriptors.h b/src/compiler/turboshaft/builtin-call-descriptors.h
+index a3952a471e9..0df70682de5 100644
+--- a/src/compiler/turboshaft/builtin-call-descriptors.h
++++ b/src/compiler/turboshaft/builtin-call-descriptors.h
+@@ -634,6 +634,17 @@ struct BuiltinCallDescriptor {
+     static constexpr OpEffects kEffects = base_effects.CanChangeControlFlow();
+   };
+ 
++  struct WasmThrowRef : public Descriptor<WasmThrowRef> {
++    static constexpr auto kFunction = Builtin::kWasmThrowRef;
++    using arguments_t = std::tuple<V<Object>>;
++    using results_t = std::tuple<OpIndex>;
++
++    static constexpr bool kNeedsFrameState = false;
++    static constexpr bool kNeedsContext = false;
++    static constexpr Operator::Properties kProperties = Operator::kNoProperties;
++    static constexpr OpEffects kEffects = base_effects.CanChangeControlFlow();
++  };
++
+   struct WasmMemoryGrow : public Descriptor<WasmMemoryGrow> {
+     static constexpr auto kFunction = Builtin::kWasmMemoryGrow;
+     using arguments_t = std::tuple<V<Word32>, V<Word32>>;
+diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
+index a6d662784d4..ac735ceffe6 100644
+--- a/src/compiler/wasm-compiler.cc
++++ b/src/compiler/wasm-compiler.cc
+@@ -2379,6 +2379,14 @@ Node* WasmGraphBuilder::Rethrow(Node* except_obj) {
+       Builtin::kWasmRethrow, Operator::kNoProperties, except_obj);
+ }
+ 
++Node* WasmGraphBuilder::ThrowRef(Node* except_obj) {
++  // TODO(v8:8091): Currently the message of the original exception is not being
++  // preserved when rethrown to the console. The pending message will need to be
++  // saved when caught and restored here while being rethrown.
++  return gasm_->CallBuiltinThroughJumptable(
++      Builtin::kWasmThrowRef, Operator::kNoProperties, except_obj);
++}
++
+ Node* WasmGraphBuilder::IsExceptionTagUndefined(Node* tag) {
+   return gasm_->TaggedEqual(tag, UndefinedValue());
+ }
+diff --git a/src/compiler/wasm-compiler.h b/src/compiler/wasm-compiler.h
+index 867be717cca..bb035210c59 100644
+--- a/src/compiler/wasm-compiler.h
++++ b/src/compiler/wasm-compiler.h
+@@ -232,6 +232,7 @@ class WasmGraphBuilder {
+               const base::Vector<Node*> values,
+               wasm::WasmCodePosition position);
+   Node* Rethrow(Node* except_obj);
++  Node* ThrowRef(Node* except_obj);
+   Node* IsExceptionTagUndefined(Node* tag);
+   Node* LoadJSTag();
+   Node* ExceptionTagEqual(Node* caught_tag, Node* expected_tag);
+diff --git a/src/wasm/baseline/liftoff-compiler.cc b/src/wasm/baseline/liftoff-compiler.cc
+index de9d71dbf65..db29f328f51 100644
+--- a/src/wasm/baseline/liftoff-compiler.cc
++++ b/src/wasm/baseline/liftoff-compiler.cc
+@@ -1788,7 +1788,7 @@ class LiftoffCompiler {
+   void ThrowRef(FullDecoder* decoder, Value*) {
+     // Like Rethrow, but pops the exception from the stack.
+     VarState exn = __ PopVarState();
+-    CallBuiltin(Builtin::kWasmRethrow, MakeSig::Params(kRef), {exn},
++    CallBuiltin(Builtin::kWasmThrowRef, MakeSig::Params(kRef), {exn},
+                 decoder->position());
+     int pc_offset = __ pc_offset();
+     MaybeOSR();
+diff --git a/src/wasm/graph-builder-interface.cc b/src/wasm/graph-builder-interface.cc
+index 31d0784bcde..a2d12917a94 100644
+--- a/src/wasm/graph-builder-interface.cc
++++ b/src/wasm/graph-builder-interface.cc
+@@ -2806,7 +2806,7 @@ class WasmGraphBuildingInterface {
+ 
+   void ThrowRef(FullDecoder* decoder, TFNode* exception) {
+     DCHECK_NOT_NULL(exception);
+-    CheckForException(decoder, builder_->Rethrow(exception), false);
++    CheckForException(decoder, builder_->ThrowRef(exception), false);
+     builder_->TerminateThrow(effect(), control());
+   }
+ };
+diff --git a/src/wasm/turboshaft-graph-interface.cc b/src/wasm/turboshaft-graph-interface.cc
+index fb5f38eee09..2dac21b8e6f 100644
+--- a/src/wasm/turboshaft-graph-interface.cc
++++ b/src/wasm/turboshaft-graph-interface.cc
+@@ -7817,7 +7817,7 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+   }
+ 
+   void ThrowRef(FullDecoder* decoder, OpIndex exn) {
+-    CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmRethrow>(
++    CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmThrowRef>(
+         decoder, {exn}, CheckForException::kCatchInThisFrame);
+     __ Unreachable();
+   }
+diff --git a/src/wasm/value-type.h b/src/wasm/value-type.h
+index 968bcfc9868..d7f92c2192f 100644
+--- a/src/wasm/value-type.h
++++ b/src/wasm/value-type.h
+@@ -713,7 +713,6 @@ class ValueTypeBase {
+     DCHECK(is_object_reference());
+     // Most nullable types use the "WasmNull" sentinel, but some reuse the
+     // external "NullValue" sentinel.
+-    // TODO(thibaudm): Can we use wasm null for exnref?
+     // TODO(jkummerow): Consider calling {wasm::IsSubtypeOf}; but then we'd
+     // need a module.
+     // TODO(14616): Extend this for shared types.
+@@ -721,8 +720,6 @@ class ValueTypeBase {
+     if (repr == HeapType::kExtern) return false;
+     if (repr == HeapType::kExternString) return false;
+     if (repr == HeapType::kNoExtern) return false;
+-    if (repr == HeapType::kExn) return false;
+-    if (repr == HeapType::kNoExn) return false;
+     return true;
+   }
+ 
+diff --git a/src/wasm/wasm-builtin-list.h b/src/wasm/wasm-builtin-list.h
+index 99d4ee7c917..16dd5a4f063 100644
+--- a/src/wasm/wasm-builtin-list.h
++++ b/src/wasm/wasm-builtin-list.h
+@@ -52,6 +52,7 @@ namespace v8::internal::wasm {
+   V(WasmAllocateFixedArray)                                                    \
+   V(WasmThrow)                                                                 \
+   V(WasmRethrow)                                                               \
++  V(WasmThrowRef)                                                              \
+   V(WasmRethrowExplicitContext)                                                \
+   V(WasmHandleStackOverflow)                                                   \
+   V(WasmTraceEnter)                                                            \
+diff --git a/src/wasm/wrappers.cc b/src/wasm/wrappers.cc
+index 9a6be2161a9..132247e5a4b 100644
+--- a/src/wasm/wrappers.cc
++++ b/src/wasm/wrappers.cc
+@@ -212,9 +212,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+           case HeapType::kNone:
+           case HeapType::kNoFunc:
+           case HeapType::kNoExtern:
++            return ret;
+           case HeapType::kExn:
+           case HeapType::kNoExn:
+-            return ret;
+           case HeapType::kBottom:
+           case HeapType::kTop:
+           case HeapType::kStringViewWtf8:
+@@ -250,12 +250,13 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+         switch (type.heap_representation_non_shared()) {
+           case HeapType::kExtern:
+           case HeapType::kNoExtern:
+-          case HeapType::kExn:
+-          case HeapType::kNoExn:
+             return ret;
+           case HeapType::kNone:
+           case HeapType::kNoFunc:
+             return LOAD_ROOT(NullValue);
++          case HeapType::kExn:
++          case HeapType::kNoExn:
++            UNREACHABLE();
+           case HeapType::kEq:
+           case HeapType::kStruct:
+           case HeapType::kArray:
+@@ -940,7 +941,6 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+         switch (type.heap_representation_non_shared()) {
+           // TODO(14034): Add more fast paths?
+           case HeapType::kExtern:
+-          case HeapType::kExn:
+             if (type.kind() == kRef) {
+               IF (UNLIKELY(__ TaggedEqual(input, LOAD_ROOT(NullValue)))) {
+                 CallRuntime(__ phase_zone(), Runtime::kWasmThrowJSTypeError, {},
+@@ -951,8 +951,11 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+             return input;
+           case HeapType::kString:
+             return BuildCheckString(input, context, type);
++          case HeapType::kExn:
++          case HeapType::kNoExn: {
++            UNREACHABLE();
++          }
+           case HeapType::kNoExtern:
+-          case HeapType::kNoExn:
+           case HeapType::kNone:
+           case HeapType::kNoFunc:
+           case HeapType::kI31:
+diff --git a/test/mjsunit/wasm/gc-casts-exnref.js b/test/mjsunit/wasm/gc-casts-exnref.js
+index 0460039f85c..1e13cb1ff34 100644
+--- a/test/mjsunit/wasm/gc-casts-exnref.js
++++ b/test/mjsunit/wasm/gc-casts-exnref.js
+@@ -117,32 +117,72 @@ let helper = (function () {
+       kExprThrowRef])
+   .exportFunc();
+ 
++  builder.addFunction('nullCastToExnRef', kSig_v_v)
++    .addLocals(kWasmExnRef, 1)
++    .addBody([
++        kExprLocalGet, 0,
++        kGCPrefix, kExprRefCast, kExnRefCode,
++        kExprThrowRef])
++    .exportFunc();
++  builder.addFunction('nullCastToNullExnRef', kSig_v_v)
++    .addLocals(kWasmExnRef, 1)
++    .addBody([
++      kExprLocalGet, 0,
++      kGCPrefix, kExprRefCast, kNullExnRefCode,
++      kExprDrop])
++    .exportFunc();
++  builder.addFunction('nullCastNullToExnRef', kSig_v_v)
++    .addLocals(kWasmExnRef, 1)
++    .addBody([
++      kExprLocalGet, 0,
++      kGCPrefix, kExprRefCastNull, kExnRefCode,
++      kExprThrowRef])
++    .exportFunc();
++  builder.addFunction('nullCastNullToNullExnRef', kSig_v_v)
++    .addLocals(kWasmExnRef, 1)
++    .addBody([
++      kExprLocalGet, 0,
++      kGCPrefix, kExprRefCastNull, kNullExnRefCode,
++      kGCPrefix, kExprRefCastNull, kExnRefCode,
++      kExprThrowRef])
++    .exportFunc();
++
+   let instance = builder.instantiate({m: {to_exnref: helper.exports.to_exnref}});
+   let wasm = instance.exports;
+ 
+-  let exnRef = getExnRef();
+-  assertTraps(kTrapIllegalCast, () => wasm.castToExnRef(null));
+-  assertThrowsEquals(() => wasm.castToExnRef(exnRef), exnRef);
+-  assertTraps(kTrapIllegalCast, () => wasm.castToNullExnRef(null));
+-  assertTraps(kTrapIllegalCast, () => wasm.castToNullExnRef(exnRef));
++  let obj = {};
++  assertTraps(kTrapIllegalCast, wasm.nullCastToExnRef);
++  assertThrowsEquals(() => wasm.castToExnRef(obj), obj);
++  assertTraps(kTrapIllegalCast, wasm.nullCastToNullExnRef);
++  assertTraps(kTrapIllegalCast, () => wasm.castToNullExnRef(obj));
+ 
+-  assertThrows(() => wasm.castNullToExnRef(null), Error, /rethrowing null value/);
+-  assertThrowsEquals(() => wasm.castNullToExnRef(exnRef), exnRef);
+-  assertThrows(() => wasm.castNullToNullExnRef(null), Error, /rethrowing null value/);
+-  assertTraps(kTrapIllegalCast, () => wasm.castNullToNullExnRef(exnRef));
++  assertThrows(wasm.nullCastNullToExnRef, Error, /rethrowing null value/);
++  assertThrowsEquals(() => wasm.castNullToExnRef(obj), obj);
++  assertThrows(wasm.nullCastNullToNullExnRef, Error, /rethrowing null value/);
++  assertTraps(kTrapIllegalCast, () => wasm.castNullToNullExnRef(obj));
+ })();
+ 
+ (function BrOnCastExnRef() {
+   print(arguments.callee.name);
+   let builder = new WasmModuleBuilder();
+-  let to_exnref = builder.addImport('m', 'to_exnref', makeSig([kWasmExternRef], [kWasmExnRef]));
++  let get_exnref = builder.addImport('m', 'get_exnref', makeSig([], [kWasmExnRef]));
+ 
++  let get_exnref_if = builder.addFunction('getExnRefOrNull',
++    makeSig([kWasmI32], [kWasmExnRef]))
++    .addBody([
++      kExprLocalGet, 0,
++      kExprIf, kExnRefCode,
++        kExprCallFunction, get_exnref,
++      kExprElse,
++        kExprRefNull, kExnRefCode,
++      kExprEnd,
++    ]).index;
+   builder.addFunction('castToExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRef, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCast(
+           0, wasmRefNullType(kWasmExnRef), wasmRefType(kWasmExnRef)),
+       kExprI32Const, 0,
+@@ -154,11 +194,11 @@ let helper = (function () {
+   ])
+   .exportFunc();
+   builder.addFunction('castToNullExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRef, kNullExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCast(
+           0, wasmRefNullType(kWasmExnRef), wasmRefType(kWasmNullExnRef)),
+       kExprI32Const, 0,
+@@ -171,11 +211,11 @@ let helper = (function () {
+   .exportFunc();
+ 
+   builder.addFunction('castNullToExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRefNull, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCast(0,
+           wasmRefNullType(kWasmExnRef), wasmRefNullType(kWasmExnRef)),
+       kExprI32Const, 0,
+@@ -187,11 +227,11 @@ let helper = (function () {
+   ])
+   .exportFunc();
+   builder.addFunction('castNullToNullExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRefNull, kNullExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCast(0,
+           wasmRefNullType(kWasmExnRef), wasmRefNullType(kWasmNullExnRef)),
+       kExprI32Const, 0,
+@@ -204,11 +244,11 @@ let helper = (function () {
+   .exportFunc();
+ 
+   builder.addFunction('castFailToExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRefNull, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCastFail(0,
+           wasmRefNullType(kWasmExnRef), wasmRefType(kWasmExnRef)),
+       kExprI32Const, 0,
+@@ -220,11 +260,11 @@ let helper = (function () {
+   ])
+   .exportFunc();
+   builder.addFunction('castFailToNullExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRefNull, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCastFail(0,
+           wasmRefNullType(kWasmExnRef), wasmRefType(kWasmNullExnRef)),
+       kExprI32Const, 0,
+@@ -237,11 +277,11 @@ let helper = (function () {
+   .exportFunc();
+ 
+   builder.addFunction('castFailNullToExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRef, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCastFail(0,
+           wasmRefNullType(kWasmExnRef), wasmRefNullType(kWasmExnRef)),
+       kExprI32Const, 0,
+@@ -253,11 +293,11 @@ let helper = (function () {
+   ])
+   .exportFunc();
+   builder.addFunction('castFailNullToNullExnRef',
+-    makeSig([kWasmExternRef], [kWasmI32]))
++    makeSig([kWasmI32], [kWasmI32]))
+   .addBody([
+     kExprBlock, kWasmRef, kExnRefCode,
+       kExprLocalGet, 0,
+-      kExprCallFunction, to_exnref,
++      kExprCallFunction, get_exnref_if,
+       ...wasmBrOnCastFail(0,
+           wasmRefNullType(kWasmExnRef), wasmRefNullType(kWasmNullExnRef)),
+       kExprI32Const, 0,
+@@ -269,31 +309,31 @@ let helper = (function () {
+   ])
+   .exportFunc();
+ 
+-  let instance = builder.instantiate({m: {to_exnref: helper.exports.to_exnref}});
++  let instance = builder.instantiate({m: {get_exnref: helper.exports.get_exnref}});
+   let wasm = instance.exports;
+   let exnRef = getExnRef();
+ 
+-  assertEquals(0, wasm.castToExnRef(null));
+-  assertEquals(1, wasm.castToExnRef(exnRef));
++  assertEquals(0, wasm.castToExnRef(0));
++  assertEquals(1, wasm.castToExnRef(1));
+ 
+-  assertEquals(0, wasm.castToNullExnRef(null));
+-  assertEquals(0, wasm.castToNullExnRef(exnRef));
++  assertEquals(0, wasm.castToNullExnRef(0));
++  assertEquals(0, wasm.castToNullExnRef(1));
+ 
+-  assertEquals(1, wasm.castNullToExnRef(null));
+-  assertEquals(1, wasm.castNullToExnRef(exnRef));
++  assertEquals(1, wasm.castNullToExnRef(0));
++  assertEquals(1, wasm.castNullToExnRef(1));
+ 
+-  assertEquals(1, wasm.castNullToNullExnRef(null));
+-  assertEquals(0, wasm.castNullToNullExnRef(exnRef));
++  assertEquals(1, wasm.castNullToNullExnRef(0));
++  assertEquals(0, wasm.castNullToNullExnRef(1));
+ 
+-  assertEquals(1, wasm.castFailToExnRef(null));
+-  assertEquals(0, wasm.castFailToExnRef(exnRef));
++  assertEquals(1, wasm.castFailToExnRef(0));
++  assertEquals(0, wasm.castFailToExnRef(1));
+ 
+-  assertEquals(1, wasm.castFailToNullExnRef(null));
+-  assertEquals(1, wasm.castFailToNullExnRef(exnRef));
++  assertEquals(1, wasm.castFailToNullExnRef(0));
++  assertEquals(1, wasm.castFailToNullExnRef(1));
+ 
+-  assertEquals(0, wasm.castFailNullToExnRef(null));
+-  assertEquals(0, wasm.castFailNullToExnRef(exnRef));
++  assertEquals(0, wasm.castFailNullToExnRef(0));
++  assertEquals(0, wasm.castFailNullToExnRef(1));
+ 
+-  assertEquals(0, wasm.castFailNullToNullExnRef(null));
+-  assertEquals(1, wasm.castFailNullToNullExnRef(exnRef));
++  assertEquals(0, wasm.castFailNullToNullExnRef(0));
++  assertEquals(1, wasm.castFailNullToNullExnRef(1));
+ })();
+-- 
+2.43.0
+

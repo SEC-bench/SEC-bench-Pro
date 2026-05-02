@@ -1,0 +1,32 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: TRAP on unknown address 0x000000000000 (pc 0x72b7374b966a bp 0x7ffd3cbaa9d0 sp 0x7ffd3cbaa9b0 T0)
+    #0 0x72b7374b966a  (<unknown module>)
+    #1 0x72b73743cd96  (<unknown module>)
+    #2 0x72b73746e385  (<unknown module>)
+    #3 0x72b7373f9d80  (<unknown module>)
+    #4 0x5b6c42a6a30a in EnterBaseline(JSContext*, EnterJitData&) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:145:5
+    #5 0x5b6c42a6a30a in js::jit::EnterBaselineInterpreterAtBranch(JSContext*, js::InterpreterFrame*, unsigned char*) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:201:26
+    #6 0x5b6c40889324 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2040:17
+    #7 0x5b6c4086145d in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:464:13
+    #8 0x5b6c40867f0a in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:855:13
+    #9 0x5b6c40868874 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:888:10
+    #10 0x5b6c40ba48c4 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:601:10
+    #11 0x5b6c40ba4dd1 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:625:10
+    #12 0x5b6c406fce73 in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1309:10
+    #13 0x5b6c406fbc88 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #14 0x5b6c4067fbcf in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11647:10
+    #15 0x5b6c4067fbcf in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11901:12
+    #16 0x5b6c4066aabe in main /src/gecko-dev/js/src/shell/js.cpp:12316:12
+    #17 0x76b7ba1691c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #18 0x76b7ba16928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #19 0x5b6c4056f114 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x3610114) (BuildId: 1224a470585b3d59945d8e4e6385bac4)
+
+==13==Register values:
+rax = 0x00005b6c0000dc8f  rbx = 0x0000000000000000  rcx = 0x00000000ffffffff  rdx = 0x00007ffd3cbaa970  
+rdi = 0x000000000000dc8f  rsi = 0x0000000000000000  rbp = 0x00007ffd3cbaa9d0  rsp = 0x00007ffd3cbaa9b0  
+ r8 = 0x00005b6c463d5000   r9 = 0x0000000000000000  r10 = 0x00005b6c0000dc8f  r11 = 0x000000000001fff1  
+r12 = 0x0000000000000000  r13 = 0x0000000000000000  r14 = 0x00007427b95eaf80  r15 = 0x0000000000000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: TRAP (<unknown module>) 
+==13==ABORTING

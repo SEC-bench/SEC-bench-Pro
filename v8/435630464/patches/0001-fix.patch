@@ -1,0 +1,480 @@
+From 792c326e896020f74533e0d7b629b9a1b35e555a Mon Sep 17 00:00:00 2001
+From: Igor Sheludko <ishell@chromium.org>
+Date: Mon, 6 Oct 2025 12:27:29 +0200
+Subject: [PATCH] [sandbox] Don't allow to use disabled builtins, pt.2
+
+... i.e. the ones that belong to features that are not currently enabled.
+
+This CL:
+ - adds kDisabledBuiltinEntrypointTag,
+ - adds Code::is_disabled_builtin() flag which is set during RO heap
+   deserialization for disabled JS builtins,
+ - disables builtins by using kDisabledBuiltinEntrypointTag for them
+   instead of kJSEntrypointTag,
+ - initializes preallocated dispatch table entries for disabled
+   builtins with Illegal builtin's Code.
+
+Drive-by:
+ - add TEST_WITH_FLAG macro for cctests which need to change flag
+   values before initializing the Isolate,
+ - fixed respective cctests.
+
+Bug: 435630464
+Change-Id: Ibfd8f66ede06210e79184fde027331775c80634b
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/7003083
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Commit-Queue: Igor Sheludko <ishell@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102936}
+---
+ src/builtins/builtins-internal.cc             |  3 +-
+ src/builtins/builtins.h                       | 13 ++++++++
+ src/diagnostics/objects-printer.cc            |  1 +
+ src/execution/isolate.cc                      | 27 +++++++++++++---
+ src/objects/code-inl.h                        | 18 ++++++++++-
+ src/objects/code.h                            |  4 +++
+ src/sandbox/code-entrypoint-tag.h             |  5 ++-
+ src/sandbox/js-dispatch-table-inl.h           |  4 +++
+ src/sandbox/testing.cc                        |  2 +-
+ src/snapshot/read-only-deserializer.cc        |  9 ++++--
+ src/snapshot/read-only-serializer.cc          |  4 +++
+ test/cctest/cctest.cc                         |  7 ++++-
+ test/cctest/cctest.h                          | 31 ++++++++++++-------
+ test/cctest/test-api.cc                       | 19 ++++++------
+ .../regress/regress-435630464-disabled.js     | 15 +++++++++
+ 15 files changed, 131 insertions(+), 31 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress/regress-435630464-disabled.js
+
+diff --git a/src/builtins/builtins-internal.cc b/src/builtins/builtins-internal.cc
+index 305ab81acb9..99ecc8bf986 100644
+--- a/src/builtins/builtins-internal.cc
++++ b/src/builtins/builtins-internal.cc
+@@ -12,7 +12,8 @@ namespace v8 {
+ namespace internal {
+ 
+ BUILTIN(Illegal) {
+-  UNREACHABLE();
++  // Make it distinguishable from other UNREACHABLE() calls for convenience.
++  FATAL("Called Illegal builtin");
+ }
+ 
+ BUILTIN(IllegalInvocationThrower) {
+diff --git a/src/builtins/builtins.h b/src/builtins/builtins.h
+index ddb4acb51b8..4215fcb5e20 100644
+--- a/src/builtins/builtins.h
++++ b/src/builtins/builtins.h
+@@ -533,6 +533,19 @@ class Builtins {
+   using JSBuiltinStateFlags = base::Flags<JSBuiltinStateFlag>;
+   static JSBuiltinStateFlags GetJSBuiltinState(Builtin builtin);
+ 
++  // Returns true for disabled builtins with JS linkage (all non-JS builtins
++  // are considered enabled).
++  static bool IsDisabled(Builtin builtin) {
++    auto flags = Builtins::GetJSBuiltinState(builtin);
++    DCHECK_EQ(Builtins::HasJSLinkage(builtin),
++              !(flags & Builtins::JSBuiltinStateFlag::kNonJSLinkage));
++    if (!(flags & Builtins::JSBuiltinStateFlag::kNonJSLinkage) &&
++        !(flags & Builtins::JSBuiltinStateFlag::kEnabled)) {
++      return true;
++    }
++    return false;
++  }
++
+ #ifdef DEBUG
+   // Verify correctness of GetJSBuiltinState() which has to be maintained
+   // manually. The idea is to iterate the heap to figure out which builtins
+diff --git a/src/diagnostics/objects-printer.cc b/src/diagnostics/objects-printer.cc
+index fb7b00b780d..301a33deb0a 100644
+--- a/src/diagnostics/objects-printer.cc
++++ b/src/diagnostics/objects-printer.cc
+@@ -2630,6 +2630,7 @@ void Code::CodePrint(std::ostream& os, const char* name, Address current_pc) {
+   os << "\n - instruction_stream: " << Brief(raw_instruction_stream());
+   os << "\n - instruction_start: "
+      << reinterpret_cast<void*>(instruction_start());
++  os << "\n - is_disabled_builtin: " << is_disabled_builtin();
+   os << "\n - is_turbofanned: " << is_turbofanned();
+   os << "\n - stack_slots: " << stack_slots();
+   os << "\n - marked_for_deoptimization: " << marked_for_deoptimization();
+diff --git a/src/execution/isolate.cc b/src/execution/isolate.cc
+index b8173156301..9f8672b148f 100644
+--- a/src/execution/isolate.cc
++++ b/src/execution/isolate.cc
+@@ -517,8 +517,16 @@ size_t Isolate::HashIsolateForEmbeddedBlob() {
+                   Code::kParameterCountOffset);
+     static_assert(Code::kParameterCountOffsetEnd + 1 == Code::kBuiltinIdOffset);
+     static_assert(Code::kBuiltinIdOffsetEnd + 1 == Code::kUnalignedSize);
+-    static constexpr int kStartOffset = Code::kFlagsOffset;
+ 
++    // Hash Code::flags field ignoring the Code::IsDisabledBuiltinField bit.
++    // This bit is set for certain builtins during RO heap deserialization
++    // and thus might differ from the default state.
++    uint32_t flags = code->flags(kRelaxedLoad);
++    flags &= ~Code::IsDisabledBuiltinField::kMask;
++    hash = base::hash_combine(hash, flags);
++
++    // Proceed past the flags field.
++    static constexpr int kStartOffset = Code::kInstructionSizeOffset;
+     for (int j = kStartOffset; j < Code::kUnalignedSize; j++) {
+       hash = base::hash_combine(hash, size_t{code_ptr[j]});
+     }
+@@ -7879,6 +7887,12 @@ void Isolate::InitializeBuiltinJSDispatchTable() {
+       Builtin builtin = JSBuiltinDispatchHandleRoot::to_builtin(idx);
+       DCHECK(Builtins::IsIsolateIndependent(builtin));
+       Tagged<Code> code = builtins_.code(builtin);
++      if (code->is_disabled_builtin()) {
++        // Initialize preallocated entry for disabled builtin with kIllegal
++        // builtin's Code to ensure that the actual builtin's code can't be
++        // called by reusing the dispatch table handle.
++        code = builtins_.code(Builtin::kIllegal);
++      }
+       DCHECK_EQ(code->entrypoint_tag(), CodeEntrypointTag::kJSEntrypointTag);
+       // Since we are sharing the dispatch handles we need all isolates to
+       // share the builtin code objects.
+@@ -7903,10 +7917,15 @@ void Isolate::InitializeBuiltinJSDispatchTable() {
+            static_cast<int>(idx) + 1)) {
+     Builtin builtin = JSBuiltinDispatchHandleRoot::to_builtin(idx);
+     Tagged<Code> code = builtins_.code(builtin);
+-    int parameter_count = code->parameter_count();
+     DCHECK_LT(idx, JSBuiltinDispatchHandleRoot::kTableSize);
+-    JSDispatchHandle handle = jdt->AllocateAndInitializeEntry(
+-        heap()->js_dispatch_table_space(), parameter_count, code);
++    JSDispatchHandle handle = kNullJSDispatchHandle;
++    // Don't allocate dispatch table entry for disabled builtin to ensure
++    // it's impossible to call it.
++    if (!code->is_disabled_builtin()) {
++      int parameter_count = code->parameter_count();
++      handle = jdt->AllocateAndInitializeEntry(
++          heap()->js_dispatch_table_space(), parameter_count, code);
++    }
+     isolate_data_.builtin_dispatch_table()[idx] = handle;
+   }
+ #endif  // !V8_STATIC_DISPATCH_HANDLES_BOOL
+diff --git a/src/objects/code-inl.h b/src/objects/code-inl.h
+index 8abcc41e00b..5efc05d6078 100644
+--- a/src/objects/code-inl.h
++++ b/src/objects/code-inl.h
+@@ -438,6 +438,17 @@ inline bool Code::has_tagged_outgoing_params() const {
+ #endif
+ }
+ 
++inline bool Code::is_disabled_builtin() const {
++  return IsDisabledBuiltinField::decode(flags(kRelaxedLoad));
++}
++
++inline void Code::set_is_disabled_builtin(bool value) {
++  DCHECK(is_builtin());
++  int32_t previous = flags(kRelaxedLoad);
++  int32_t updated = IsDisabledBuiltinField::update(previous, value);
++  set_flags(updated, kRelaxedStore);
++}
++
+ inline bool Code::is_context_specialized() const {
+   return IsContextSpecializedField::decode(flags(kRelaxedLoad));
+ }
+@@ -789,11 +800,16 @@ void Code::set_instruction_start(IsolateForSandbox isolate, Address value) {
+ }
+ 
+ CodeEntrypointTag Code::entrypoint_tag() const {
++  // TODO(40948502, sandbox): cache the unshifted entrypoint_tag value
++  // in the Code object to simplify things and avoid the need to execute
++  // multiple switches for builtin case.
+   switch (kind()) {
+     case CodeKind::BYTECODE_HANDLER:
+       return kBytecodeHandlerEntrypointTag;
+-    case CodeKind::BUILTIN:
++    case CodeKind::BUILTIN: {
++      if (is_disabled_builtin()) return kDisabledBuiltinEntrypointTag;
+       return Builtins::EntrypointTagFor(builtin_id());
++    }
+     case CodeKind::REGEXP:
+       return kRegExpEntrypointTag;
+     case CodeKind::WASM_FUNCTION:
+diff --git a/src/objects/code.h b/src/objects/code.h
+index 4828fa051a6..7f9d3952670 100644
+--- a/src/objects/code.h
++++ b/src/objects/code.h
+@@ -196,6 +196,9 @@ class Code : public ExposedTrustedObject {
+   inline Builtin builtin_id() const;
+   inline bool is_builtin() const;
+ 
++  inline bool is_disabled_builtin() const;
++  inline void set_is_disabled_builtin(bool value);
++
+   inline bool is_optimized_code() const;
+   inline bool is_wasm_code() const;
+ 
+@@ -462,6 +465,7 @@ class Code : public ExposedTrustedObject {
+   // Flags layout.
+ #define FLAGS_BIT_FIELDS(V, _)                \
+   V(KindField, CodeKind, 4, _)                \
++  V(IsDisabledBuiltinField, bool, 1, _)       \
+   V(IsTurbofannedField, bool, 1, _)           \
+   V(IsContextSpecializedField, bool, 1, _)    \
+   WITH_GEARBOX_FLAG(V, _)                     \
+diff --git a/src/sandbox/code-entrypoint-tag.h b/src/sandbox/code-entrypoint-tag.h
+index bf8fa6887b0..d6adabf54bd 100644
+--- a/src/sandbox/code-entrypoint-tag.h
++++ b/src/sandbox/code-entrypoint-tag.h
+@@ -53,7 +53,10 @@ enum CodeEntrypointTag : uint64_t {
+   // TODO(saelo): create more of these tags.
+ 
+   // Tag to use for Code objects with stub linkage created by unittests.
+-  kCodeEntrypointTagForTesting = uint64_t{0xfd} << kCodeEntrypointTagShift,
++  kCodeEntrypointTagForTesting = uint64_t{0xfc} << kCodeEntrypointTagShift,
++
++  // Tag to use for Code objects corresponding to currently disabled builtins.
++  kDisabledBuiltinEntrypointTag = uint64_t{0xfd} << kCodeEntrypointTagShift,
+ 
+   // Tag to use for uninitialized code pointer table entries. This ensures
+   // that the uninitialized value is unusable until the actual one is stored
+diff --git a/src/sandbox/js-dispatch-table-inl.h b/src/sandbox/js-dispatch-table-inl.h
+index 94ee761a158..b9312d3c74f 100644
+--- a/src/sandbox/js-dispatch-table-inl.h
++++ b/src/sandbox/js-dispatch-table-inl.h
+@@ -165,6 +165,10 @@ JSDispatchHandle JSDispatchTable::AllocateAndInitializeEntry(
+ std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
+     Space* space, uint16_t parameter_count, Tagged<Code> new_code) {
+   DCHECK(space->BelongsTo(this));
++  // Disabled builtins should be replaced with the kIllegal by the caller.
++  // This DCHECK is just for convenience, next SBXCHECK(IsCompatibleCode())
++  // will catch disabled builtins anyway.
++  DCHECK(!new_code->is_disabled_builtin());
+   SBXCHECK(IsCompatibleCode(new_code, parameter_count));
+ 
+   uint32_t index;
+diff --git a/src/sandbox/testing.cc b/src/sandbox/testing.cc
+index 5d2e513a448..b1741d31d52 100644
+--- a/src/sandbox/testing.cc
++++ b/src/sandbox/testing.cc
+@@ -423,7 +423,7 @@ void SandboxGetFieldOffset(const v8::FunctionCallbackInfo<v8::Value>& info) {
+   info.GetReturnValue().Set(offset);
+ }
+ 
+-// Returns an array of all builtin names, index of the name is the bulitin id.
++// Returns an array of all builtin names, index of the name is the builtin id.
+ //
+ // This can be used to determine the id of a specific builtin for use with
+ // Sandbox.setFunctionCodeToBuiltin().
+diff --git a/src/snapshot/read-only-deserializer.cc b/src/snapshot/read-only-deserializer.cc
+index aff430168d6..719b7fbda08 100644
+--- a/src/snapshot/read-only-deserializer.cc
++++ b/src/snapshot/read-only-deserializer.cc
+@@ -376,9 +376,14 @@ class ObjectPostProcessor final {
+     // attached InstructionStream.
+     DCHECK(o->is_builtin());
+     DCHECK(!o->has_instruction_stream());
++    Builtin builtin = o->builtin_id();
++    // Mark disabled bultins as such (RO space serializer resets this flag).
++    DCHECK(!o->is_disabled_builtin());
++    if (Builtins::IsDisabled(builtin)) {
++      o->set_is_disabled_builtin(true);
++    }
+     o->SetInstructionStartForOffHeapBuiltin(
+-        isolate_,
+-        EmbeddedData::FromBlob(isolate_).InstructionStartOf(o->builtin_id()));
++        isolate_, EmbeddedData::FromBlob(isolate_).InstructionStartOf(builtin));
+ 
+ #if V8_ENABLE_GEARBOX
+     UpdateGearboxPlaceholderBuiltin(o);
+diff --git a/src/snapshot/read-only-serializer.cc b/src/snapshot/read-only-serializer.cc
+index b128799c3b3..88534d56f69 100644
+--- a/src/snapshot/read-only-serializer.cc
++++ b/src/snapshot/read-only-serializer.cc
+@@ -138,6 +138,10 @@ class ObjectPreProcessor final {
+   }
+ #endif
+   void PreProcessCode(Tagged<Code> o) {
++    // Clear disabled builtin flag to make snapshot state predictable.
++    if (o->is_builtin()) {
++      o->set_is_disabled_builtin(false);
++    }
+     o->ClearInstructionStartForSerialization(isolate_);
+     CHECK(!o->has_source_position_table_or_bytecode_offset_table());
+     CHECK(!o->has_deoptimization_data_or_interpreter_data());
+diff --git a/test/cctest/cctest.cc b/test/cctest/cctest.cc
+index 923a78323bb..9842f650ba5 100644
+--- a/test/cctest/cctest.cc
++++ b/test/cctest/cctest.cc
+@@ -83,10 +83,11 @@ v8::Platform* CcTest::default_platform_ = nullptr;
+ bool CcTest::should_call_dispose_ = false;
+ 
+ CcTest::CcTest(TestFunction* callback, const char* file, const char* name,
+-               bool enabled, bool initialize,
++               bool enabled, bool initialize, const char* custom_v8_flags,
+                TestPlatformFactory* test_platform_factory)
+     : callback_(callback),
+       initialize_(initialize),
++      custom_v8_flags_(custom_v8_flags ? custom_v8_flags : ""),
+       test_platform_factory_(test_platform_factory) {
+   // Find the base name of this test (const_cast required on Windows).
+   char *basename = strrchr(const_cast<char *>(file), '/');
+@@ -130,6 +131,10 @@ void CcTest::Run(const char* snapshot_directory) {
+   cppgc::InitializeProcess(platform->GetPageAllocator());
+ 
+   // Allow changing flags in cctests.
++  if (!custom_v8_flags_.empty()) {
++    v8::V8::SetFlagsFromString(custom_v8_flags_.c_str(),
++                               custom_v8_flags_.length());
++  }
+   // TODO(12887): Fix tests to avoid changing flag values after initialization.
+   i::v8_flags.freeze_flags_after_init = false;
+ 
+diff --git a/test/cctest/cctest.h b/test/cctest/cctest.h
+index 5b99eb3af43..b0c6f581652 100644
+--- a/test/cctest/cctest.h
++++ b/test/cctest/cctest.h
+@@ -71,7 +71,7 @@ class JSHeapBroker;
+ #define TEST(Name)                                                     \
+   static void Test##Name();                                            \
+   CcTest register_test_##Name(Test##Name, __FILE__, #Name, true, true, \
+-                              nullptr);                                \
++                              nullptr, nullptr);                       \
+   static void Test##Name()
+ #endif
+ 
+@@ -79,7 +79,15 @@ class JSHeapBroker;
+ #define UNINITIALIZED_TEST(Name)                                        \
+   static void Test##Name();                                             \
+   CcTest register_test_##Name(Test##Name, __FILE__, #Name, true, false, \
+-                              nullptr);                                 \
++                              nullptr, nullptr);                        \
++  static void Test##Name()
++#endif
++
++#ifndef TEST_WITH_FLAGS
++#define TEST_WITH_FLAGS(Name, CustomCommandLineFlags)                  \
++  static void Test##Name();                                            \
++  CcTest register_test_##Name(Test##Name, __FILE__, #Name, true, true, \
++                              CustomCommandLineFlags);                 \
+   static void Test##Name()
+ #endif
+ 
+@@ -90,7 +98,7 @@ class JSHeapBroker;
+     Test##Name(*static_cast<PlatformClass*>(i::V8::GetCurrentPlatform())); \
+   }                                                                        \
+   CcTest register_test_##Name(TestWithoutPlatform##Name, __FILE__, #Name,  \
+-                              true, true,                                  \
++                              true, true, nullptr,                         \
+                               []() -> std::unique_ptr<TestPlatform> {      \
+                                 return std::make_unique<PlatformClass>();  \
+                               });                                          \
+@@ -98,10 +106,9 @@ class JSHeapBroker;
+ #endif
+ 
+ #ifndef DISABLED_TEST
+-#define DISABLED_TEST(Name)                                             \
+-  static void Test##Name();                                             \
+-  CcTest register_test_##Name(Test##Name, __FILE__, #Name, false, true, \
+-                              nullptr);                                 \
++#define DISABLED_TEST(Name)                                              \
++  static void Test##Name();                                              \
++  CcTest register_test_##Name(Test##Name, __FILE__, #Name, false, true); \
+   static void Test##Name()
+ #endif
+ 
+@@ -113,9 +120,9 @@ class JSHeapBroker;
+ //      to correctly associate the tests with the test suite using them.
+ //   2. To actually execute the tests, create an instance of the class
+ //      containing the MEMBER_TESTs.
+-#define MEMBER_TEST(Name)                                            \
+-  CcTest register_test_##Name =                                      \
+-      CcTest(Test##Name, kTestFileName, #Name, true, true, nullptr); \
++#define MEMBER_TEST(Name)                                   \
++  CcTest register_test_##Name =                             \
++      CcTest(Test##Name, kTestFileName, #Name, true, true); \
+   static void Test##Name()
+ 
+ #define EXTENSION_LIST(V)                                                      \
+@@ -144,8 +151,9 @@ class CcTest {
+  public:
+   using TestFunction = void();
+   using TestPlatformFactory = std::unique_ptr<TestPlatform>();
++  using InitFlagsCallback = void();
+   CcTest(TestFunction* callback, const char* file, const char* name,
+-         bool enabled, bool initialize,
++         bool enabled, bool initialize, const char* custom_v8_flags = nullptr,
+          TestPlatformFactory* platform_factory = nullptr);
+   void Run(const char* argv0);
+ 
+@@ -218,6 +226,7 @@ class CcTest {
+ 
+   TestFunction* callback_;
+   bool initialize_;
++  std::string custom_v8_flags_;
+   TestPlatformFactory* test_platform_factory_;
+ 
+   static bool should_call_dispose_;
+diff --git a/test/cctest/test-api.cc b/test/cctest/test-api.cc
+index b942053d547..672d519250d 100644
+--- a/test/cctest/test-api.cc
++++ b/test/cctest/test-api.cc
+@@ -27076,9 +27076,9 @@ MaybeLocal<Object> CheckResolveSource(Local<Context> context,
+   return {};
+ }
+ 
+-TEST(ImportSourceResolveModuleAndSource) {
+-  i::v8_flags.js_source_phase_imports = true;
+-
++TEST_WITH_FLAGS(ImportSourceResolveModuleAndSource,
++                "--js-source-phase-imports") {
++  DCHECK(i::v8_flags.js_source_phase_imports);
+   LocalContext context;
+   v8::Isolate* isolate = context.isolate();
+   v8::HandleScope scope(isolate);
+@@ -27247,8 +27247,9 @@ v8::MaybeLocal<v8::Context> HostCreateShadowRealmContextCallbackStatic(
+   return v8::Context::New(CcTest::isolate());
+ }
+ 
+-TEST(CreateShadowRealmContextHostNotSupported) {
+-  i::v8_flags.harmony_shadow_realm = true;
++TEST_WITH_FLAGS(CreateShadowRealmContextHostNotSupported,
++                "--harmony-shadow-realm") {
++  DCHECK(i::v8_flags.harmony_shadow_realm);
+   LocalContext context;
+   v8::Isolate* isolate = context.isolate();
+   v8::HandleScope scope(isolate);
+@@ -27273,8 +27274,8 @@ TEST(CreateShadowRealmContextHostNotSupported) {
+             .FromJust());
+ }
+ 
+-TEST(CreateShadowRealmContext) {
+-  i::v8_flags.harmony_shadow_realm = true;
++TEST_WITH_FLAGS(CreateShadowRealmContext, "--harmony-shadow-realm") {
++  DCHECK(i::v8_flags.harmony_shadow_realm);
+   LocalContext context;
+   v8::Isolate* isolate = context.isolate();
+   v8::HandleScope scope(isolate);
+@@ -27302,8 +27303,8 @@ v8::MaybeLocal<v8::Context> HostCreateShadowRealmContextCallbackThrow(
+   return v8::MaybeLocal<v8::Context>();
+ }
+ 
+-TEST(CreateShadowRealmContextThrow) {
+-  i::v8_flags.harmony_shadow_realm = true;
++TEST_WITH_FLAGS(CreateShadowRealmContextThrow, "--harmony-shadow-realm") {
++  DCHECK(i::v8_flags.harmony_shadow_realm);
+   LocalContext context;
+   v8::Isolate* isolate = context.isolate();
+   v8::HandleScope scope(isolate);
+diff --git a/test/mjsunit/sandbox/regress/regress-435630464-disabled.js b/test/mjsunit/sandbox/regress/regress-435630464-disabled.js
+new file mode 100644
+index 00000000000..dec31764331
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress/regress-435630464-disabled.js
+@@ -0,0 +1,15 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --sandbox-testing --no-verify-get-js-builtin-state
++
++const builtin_names = Sandbox.getBuiltinNames();
++
++var f0 = BigInt;  // constructor with kDontAdaptArgumentsSentinel.
++
++Sandbox.setFunctionCodeToBuiltin(f0, builtin_names.indexOf("SharedStructTypeConstructor"));
++// If this test starts to fail because we shipped --harmony-struct, the test
++// must be updated to use a builtin belonging to some other not-yet shipped
++// feature.
++assertUnreachable();
+-- 
+2.43.0
+

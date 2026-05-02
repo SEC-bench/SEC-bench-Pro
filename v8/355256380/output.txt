@@ -1,0 +1,39 @@
+
+
+#
+# Fatal error in ../../src/compiler/heap-refs.cc, line 1107
+# Debug check failed: IsJSObject().
+#
+#
+#
+#FailureMessage Object: 0x7f03e043e460
+==== C stack trace ===============================
+
+    out/x64.asan/d8(___interceptor_backtrace+0x46) [0x5611ddb018c6]
+    out/x64.asan/d8(+0x6efee93) [0x5611e2bd4e93]
+    out/x64.asan/d8(+0x6efcd6a) [0x5611e2bd2d6a]
+    out/x64.asan/d8(+0x6ed1670) [0x5611e2ba7670]
+    out/x64.asan/d8(+0x6ed0c0f) [0x5611e2ba6c0f]
+    out/x64.asan/d8(+0x55d1255) [0x5611e12a7255]
+    out/x64.asan/d8(+0x4130e6b) [0x5611dfe06e6b]
+    out/x64.asan/d8(+0x4131155) [0x5611dfe07155]
+    out/x64.asan/d8(+0x41313ce) [0x5611dfe073ce]
+    out/x64.asan/d8(+0x4131a15) [0x5611dfe07a15]
+    out/x64.asan/d8(+0x41081dc) [0x5611dfdde1dc]
+    out/x64.asan/d8(+0x4132587) [0x5611dfe08587]
+    out/x64.asan/d8(+0x4133b2e) [0x5611dfe09b2e]
+    out/x64.asan/d8(+0x4133ffb) [0x5611dfe09ffb]
+    out/x64.asan/d8(+0x3f87908) [0x5611dfc5d908]
+    out/x64.asan/d8(+0x3f7f9e6) [0x5611dfc559e6]
+    out/x64.asan/d8(+0x3f78fdc) [0x5611dfc4efdc]
+    out/x64.asan/d8(+0x3f761a8) [0x5611dfc4c1a8]
+    out/x64.asan/d8(+0x4088d6b) [0x5611dfd5ed6b]
+    out/x64.asan/d8(+0x23e6a89) [0x5611de0bca89]
+    out/x64.asan/d8(+0x408d583) [0x5611dfd63583]
+    out/x64.asan/d8(+0x6f031de) [0x5611e2bd91de]
+    out/x64.asan/d8(+0x6f0f593) [0x5611e2be5593]
+    out/x64.asan/d8(+0x6ef6d47) [0x5611e2bccd47]
+    out/x64.asan/d8(+0x1e801d7) [0x5611ddb561d7]
+    /lib/x86_64-linux-gnu/libc.so.6(+0x9caa4) [0x7f041b7c1aa4]
+    /lib/x86_64-linux-gnu/libc.so.6(__clone+0x44) [0x7f041b84ea64]
+Trace/breakpoint trap

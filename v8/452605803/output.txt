@@ -1,0 +1,17 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x1b600000000,0x2b600000000)
+[*] ExposedTrustedObject handle: stride = 0x200, newly created by wasm = 0x47
+[*] using target_ofs = 0x7
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 424242424242
+
+==== C stack trace ===============================
+
+out/x64.release/d8(_ZN2v84base5debug10StackTraceC1Ev+0x13)[0x5566f85ab0d3]
+out/x64.release/d8(+0x7281056)[0x5566f85ab056]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x729dad0a7330]
+[0x5fb8336fb23]
+[end of stack trace]
+Segmentation fault (core dumped)

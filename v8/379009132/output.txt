@@ -1,0 +1,368 @@
+abort: CSA_DCHECK failed: Torque assert 'Is<A>(o)' failed [src/builtins/cast.tq:846] [../../src/builtins/base.tq:612]
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x5c5f95584676]
+    1: join [0x7eb70040c54d](this=0x7eb70024545d <JSArray[6]>#0#)
+    2: toString [0x7eb7004034d9](this=0x7eb70024545d <JSArray[6]>#0#)
+    3: /* anonymous */ [0x7eb700416fb1] [/testcase/poc.js:62] [bytecode=0x7e950000025d offset=1853](this=0x7eb7004018e5 <JSGlobalProxy>#1#)
+    4: InternalFrame [pc: 0x5c5f954caf5c]
+    5: EntryFrame [pc: 0x5c5f954cac9f]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x5c5f95584676]
+[1]: join [0x7eb70040c54d](this=0x7eb70024545d <JSArray[6]>#0#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[2]: toString [0x7eb7004034d9](this=0x7eb70024545d <JSArray[6]>#0#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[3]: /* anonymous */ [0x7eb700416fb1] [/testcase/poc.js:62] [bytecode=0x7e950000025d offset=1853](this=0x7eb7004018e5 <JSGlobalProxy>#1#) {
+  // heap-allocated locals
+  var v5 = 0x7eb7003c28d1 <FixedArray[34]>#2#
+  var v7 = 0x7eb7003df70d <WasmModuleBuilder map = 0x7eb700429f65>#3#
+  var o11 = 0x7eb70040efa9 <JSFunction Memory (sfi = 0x7eb700144c95)>#4#
+  var v12 = 0x7eb7003df949 <Object map = 0x7eb70042a001>#5#
+  var v15 = 0x7eb70042a0a9 <Memory map = 0x7eb70040efc9>#6#
+  var v17 = 0x7eb7000c0081 <DataView map = 0x7eb7004070f1>#7#
+  var o21 = 0x7eb70040efa9 <JSFunction Memory (sfi = 0x7eb700144c95)>#4#
+  var v22 = 0x7eb7000c00b1 <Object map = 0x7eb70042a001>#8#
+  var v26 = 0x7eb7000c0119 <Memory map = 0x7eb70040efc9>#9#
+  var v27 = 0
+  var v53 = 1
+  var v65 = 2
+  var v67 = 1
+  var v69 = 0x7eb700240815 <WasmFunctionBuilder map = 0x7eb7000c102d>#10#
+  var v77 = 0x7eb700240ba9 <WasmFunctionBuilder map = 0x7eb7000c102d>#11#
+  var v80 = 0
+  var v89 = 0x7eb700241125 <JSArray[2]>#12#
+  var v106 = 0
+  var v110 = 0x7eb700241541 <JSArray[15]>#13#
+  var v120 = 0x7eb7002417b5 <Object map = 0x7eb7000c065d>#14#
+  var v123 = 0x7eb7002417d5 <Object map = 0x7eb7000c065d>#15#
+  var v139 = 0x7eb7002417f5 <Object map = 0x7eb7000c065d>#16#
+  var v140 = 0x7eb700240815 <WasmFunctionBuilder map = 0x7eb7000c102d>#10#
+  var v143 = 0x7eb700240815 <WasmFunctionBuilder map = 0x7eb7000c102d>#10#
+  var v147 = 0
+  var v167 = 0
+  var v171 = 0x7eb700241cb5 <JSArray[39]>#17#
+  var o187 = 0x7eb70024266d <Object map = 0x7eb7000c065d>#18#
+  var o188 = 0x7eb700242cc1 <Object map = 0x7eb7000c2dd1>#19#
+  var v192 = 0x7eb700242d19 <Object map = 0x7eb7000c2df9>#20#
+  var o193 = 0x7eb700242d59 <JSArray[3]>#21#
+  var v194 = 0x7eb700242d85 <Object map = 0x7eb7000c2e71>#22#
+  var v197 = 0x7eb7000c6795 <Instance map = 0x7eb70040ed6d>#23#
+  var v200 = 0x7eb700244c11 <Object map = 0x7eb7000c6a0d>#24#
+  // expression stack (top to bottom)
+  [13] : 0x7eb70024545d <JSArray[6]>#0#
+  [12] : 1
+  [11] : 3
+  [10] : 1
+  [09] : 1
+  [08] : 0
+  [07] : 1
+  [06] : 2
+  [05] : 0x7eb70024266d <Object map = 0x7eb7000c065d>#18#
+  [04] : 1
+  [03] : 0x7eb700242d19 <Object map = 0x7eb7000c2df9>#20#
+  [02] : 0x7eb70024545d <JSArray[6]>#0#
+  [01] : 0x7eb7004034d9 <JSFunction toString (sfi = 0x7eb70020b5b1)>#25#
+  [00] : 0x7eb700000011 <undefined>
+--------- s o u r c e   c o d e ---------
+d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");\x0aconst v5 = new WasmModuleBuilder();\x0aconst v7 = WebAssembly.Memory;\x0aconst o11 = {\x0a    "initial": 35391,\x0a    "maximum": 40722,\x0a    "shared": false,\x0a};\x0aconst v12 = new v7(o11);\x0aconst v15 = new DataView(v12.buffer);\x0aconst v17 = WebAssembly.Mem...
+
+-----------------------------------------
+}
+
+[4]: InternalFrame [pc: 0x5c5f954caf5c]
+[5]: EntryFrame [pc: 0x5c5f954cac9f]
+-- ObjectCacheKey --
+
+ #0# 0x7eb70024545d: 0x7eb70024545d <JSArray[6]>
+                 0: 0x7eb7000c692d <Other heap object (WASM_FUNC_REF_TYPE)>#26#
+                 1: 176
+                 2: 1
+                 3: 0x7eb70024548d <BigInt -752406821444559606>#27#
+                 4: 1
+                 5: 3
+ #1# 0x7eb7004018e5: 0x7eb7004018e5 <JSGlobalProxy>
+ #2# 0x7eb7003c28d1: 0x7eb7003c28d1 <FixedArray[34]>
+                 0: 0x7eb700000011 <undefined>
+                 1: 0x7eb700000011 <undefined>
+                 2: 0x7eb700000011 <undefined>
+                 3: 0x7eb700000011 <undefined>
+                 4: 0x7eb700000011 <undefined>
+                 5: 0x7eb700000011 <undefined>
+                 6: 0x7eb700000011 <undefined>
+                 7: 0x7eb700000011 <undefined>
+                 8: 0x7eb700000011 <undefined>
+                 9: 0x7eb700000011 <undefined>
+                  ...
+ #3# 0x7eb7003df70d: 0x7eb7003df70d <WasmModuleBuilder map = 0x7eb700429f65>
+             types: 0x7eb7003df781 <JSArray[3]>#28#
+           imports: 0x7eb7003df791 <JSArray[2]>#29#
+           exports: 0x7eb7003df7a1 <JSArray[3]>#30#
+        stringrefs: 0x7eb7003df7b1 <JSArray[0]>#31#
+           globals: 0x7eb7003df7c1 <JSArray[0]>#32#
+            tables: 0x7eb7003df7d1 <JSArray[1]>#33#
+              tags: 0x7eb7003df7e1 <JSArray[1]>#34#
+          memories: 0x7eb7003df7f1 <JSArray[1]>#35#
+         functions: 0x7eb7003df801 <JSArray[2]>#36#
+ compilation_hints: 0x7eb7003df811 <JSArray[0]>#37#
+  element_segments: 0x7eb7003df821 <JSArray[1]>#38#
+     data_segments: 0x7eb7003df831 <JSArray[0]>#39#
+          explicit: 0x7eb7003df841 <JSArray[0]>#40#
+        rec_groups: 0x7eb7003df851 <JSArray[0]>#41#
+num_imported_funcs: 0
+num_imported_globals: 0
+num_imported_tables: 0
+ num_imported_tags: 0
+ #4# 0x7eb70040efa9: 0x7eb70040efa9 <JSFunction Memory (sfi = 0x7eb700144c95)>
+ #5# 0x7eb7003df949: 0x7eb7003df949 <Object map = 0x7eb70042a001>
+           initial: 35391
+           maximum: 40722
+            shared: 0x7eb700000055 <false>
+ #6# 0x7eb70042a0a9: 0x7eb70042a0a9 <Memory map = 0x7eb70040efc9>
+ #7# 0x7eb7000c0081: 0x7eb7000c0081 <DataView map = 0x7eb7004070f1>
+ #8# 0x7eb7000c00b1: 0x7eb7000c00b1 <Object map = 0x7eb70042a001>
+           initial: 57557
+           maximum: 0x7eb700000011 <undefined>
+            shared: 0x7eb700000055 <false>
+ #9# 0x7eb7000c0119: 0x7eb7000c0119 <Memory map = 0x7eb70040efc9>
+ #10# 0x7eb700240815: 0x7eb700240815 <WasmFunctionBuilder map = 0x7eb7000c102d>
+            module: 0x7eb7003df70d <WasmModuleBuilder map = 0x7eb700429f65>#3#
+              name: 0x7eb700000011 <undefined>
+        type_index: 0
+              body: 0x7eb700241c75 <JSArray[16]>#42#
+            locals: 0x7eb700240969 <JSArray[10]>#43#
+       local_names: 0x7eb7002407b1 <JSArray[10]>#44#
+       body_offset: 181
+             index: 0
+ #11# 0x7eb700240ba9: 0x7eb700240ba9 <WasmFunctionBuilder map = 0x7eb7000c102d>
+            module: 0x7eb7003df70d <WasmModuleBuilder map = 0x7eb700429f65>#3#
+              name: 0x7eb700000011 <undefined>
+        type_index: 1
+              body: 0x7eb700242b91 <JSArray[40]>#45#
+            locals: 0x7eb700240c09 <JSArray[3]>#46#
+       local_names: 0x7eb700240b45 <JSArray[3]>#47#
+       body_offset: 206
+             index: 1
+ #12# 0x7eb700241125: 0x7eb700241125 <JSArray[2]>
+ #13# 0x7eb700241541: 0x7eb700241541 <JSArray[15]>
+ #14# 0x7eb7002417b5: 0x7eb7002417b5 <Object map = 0x7eb7000c065d>
+            opcode: 100
+         heap_type: 0
+         is_shared: 0x7eb700000055 <false>
+ #15# 0x7eb7002417d5: 0x7eb7002417d5 <Object map = 0x7eb7000c065d>
+            opcode: 100
+         heap_type: -16
+         is_shared: 0x7eb700000055 <false>
+ #16# 0x7eb7002417f5: 0x7eb7002417f5 <Object map = 0x7eb7000c065d>
+            opcode: 100
+         heap_type: 1
+         is_shared: 0x7eb700000055 <false>
+ #17# 0x7eb700241cb5: 0x7eb700241cb5 <JSArray[39]>
+ #18# 0x7eb70024266d: 0x7eb70024266d <Object map = 0x7eb7000c065d>
+            opcode: 100
+         heap_type: 0
+         is_shared: 0x7eb700000055 <false>
+ #19# 0x7eb700242cc1: 0x7eb700242cc1 <Object map = 0x7eb7000c2dd1>
+          imp_mem1: 0x7eb7000c0119 <Memory map = 0x7eb70040efc9>#9#
+          imp_mem0: 0x7eb70042a0a9 <Memory map = 0x7eb70040efc9>#6#
+ #20# 0x7eb700242d19: 0x7eb700242d19 <Object map = 0x7eb7000c2df9>
+           imp_mem: 0x7eb700242cc1 <Object map = 0x7eb7000c2dd1>#19#
+ #21# 0x7eb700242d59: 0x7eb700242d59 <JSArray[3]>
+ #22# 0x7eb700242d85: 0x7eb700242d85 <Object map = 0x7eb7000c2e71>
+          builtins: 0x7eb700242d59 <JSArray[3]>#21#
+ #23# 0x7eb7000c6795: 0x7eb7000c6795 <Instance map = 0x7eb70040ed6d>
+ #24# 0x7eb700244c11: 0x7eb700244c11 <Object map = 0x7eb7000c6a0d>
+          exp_mem1: 0x7eb7000c0119 <Memory map = 0x7eb70040efc9>#9#
+         exp_func1: 0x7eb7000c696d <JSFunction js-to-wasm:iiiiiiiiiiii:rifldi (sfi = 0x7eb7000c693d)>#48#
+         undefined: 0x7eb7000c69c9 <JSFunction js-to-wasm:iii:i (sfi = 0x7eb7000c6999)>#49#
+ #25# 0x7eb7004034d9: 0x7eb7004034d9 <JSFunction toString (sfi = 0x7eb70020b5b1)>
+ #26# 0x7eb7000c692d: 0x7eb7000c692d <Other heap object (WASM_FUNC_REF_TYPE)>
+ #27# 0x7eb70024548d: 0x7eb70024548d <BigInt -752406821444559606>
+ #28# 0x7eb7003df781: 0x7eb7003df781 <JSArray[3]>
+                 0: 0x7eb700240055 <Object map = 0x7eb7000c03fd>#50#
+                 1: 0x7eb70024041d <Object map = 0x7eb7000c03fd>#51#
+                 2: 0x7eb700240469 <Object map = 0x7eb7000c03fd>#52#
+ #29# 0x7eb7003df791: 0x7eb7003df791 <JSArray[2]>
+                 0: 0x7eb7002404d5 <Object map = 0x7eb7000c0ab9>#53#
+                 1: 0x7eb700240781 <Object map = 0x7eb7000c0ab9>#54#
+ #30# 0x7eb7003df7a1: 0x7eb7003df7a1 <JSArray[3]>
+                 0: 0x7eb700242bad <Object map = 0x7eb7000c2c6d>#55#
+                 1: 0x7eb700242c89 <Object map = 0x7eb7000c2c6d>#56#
+                 2: 0x7eb700242ca1 <Object map = 0x7eb7000c2c6d>#57#
+ #31# 0x7eb7003df7b1: 0x7eb7003df7b1 <JSArray[0]>
+ #32# 0x7eb7003df7c1: 0x7eb7003df7c1 <JSArray[0]>
+ #33# 0x7eb7003df7d1: 0x7eb7003df7d1 <JSArray[1]>
+                 0: 0x7eb700240dc5 <WasmTableBuilder map = 0x7eb7000c1725>#58#
+ #34# 0x7eb7003df7e1: 0x7eb7003df7e1 <JSArray[1]>
+ #35# 0x7eb7003df7f1: 0x7eb7003df7f1 <JSArray[1]>
+                 0: 0x7eb700240ca5 <Object map = 0x7eb7000c12ed>#59#
+ #36# 0x7eb7003df801: 0x7eb7003df801 <JSArray[2]>
+                 0: 0x7eb700240815 <WasmFunctionBuilder map = 0x7eb7000c102d>#10#
+                 1: 0x7eb700240ba9 <WasmFunctionBuilder map = 0x7eb7000c102d>#11#
+ #37# 0x7eb7003df811: 0x7eb7003df811 <JSArray[0]>
+ #38# 0x7eb7003df821: 0x7eb7003df821 <JSArray[1]>
+                 0: 0x7eb7002412a5 <WasmElemSegment map = 0x7eb7000c1da5>#60#
+ #39# 0x7eb7003df831: 0x7eb7003df831 <JSArray[0]>
+ #40# 0x7eb7003df841: 0x7eb7003df841 <JSArray[0]>
+ #41# 0x7eb7003df851: 0x7eb7003df851 <JSArray[0]>
+ #42# 0x7eb700241c75: 0x7eb700241c75 <JSArray[16]>
+ #43# 0x7eb700240969: 0x7eb700240969 <JSArray[10]>
+                 0: 0x7eb700241815 <Object map = 0x7eb7000c2119>#61#
+                 1: 0x7eb7002418d1 <Object map = 0x7eb7000c2119>#62#
+                 2: 0x7eb700241905 <Object map = 0x7eb7000c2119>#63#
+                 3: 0x7eb700241939 <Object map = 0x7eb7000c2119>#64#
+                 4: 0x7eb70024196d <Object map = 0x7eb7000c2119>#65#
+                 5: 0x7eb7002419a1 <Object map = 0x7eb7000c2119>#66#
+                 6: 0x7eb7002419d5 <Object map = 0x7eb7000c2119>#67#
+                 7: 0x7eb700241a09 <Object map = 0x7eb7000c2119>#68#
+                 8: 0x7eb700241a3d <Object map = 0x7eb7000c2119>#69#
+                 9: 0x7eb700241a71 <Object map = 0x7eb7000c2119>#70#
+                  ...
+ #44# 0x7eb7002407b1: 0x7eb7002407b1 <JSArray[10]>
+ #45# 0x7eb700242b91: 0x7eb700242b91 <JSArray[40]>
+ #46# 0x7eb700240c09: 0x7eb700240c09 <JSArray[3]>
+                 0: 0x7eb7002426a5 <Object map = 0x7eb7000c2119>#71#
+                 1: 0x7eb700242725 <Object map = 0x7eb7000c2119>#72#
+                 2: 0x7eb700242759 <Object map = 0x7eb7000c2119>#73#
+ #47# 0x7eb700240b45: 0x7eb700240b45 <JSArray[3]>
+ #48# 0x7eb7000c696d: 0x7eb7000c696d <JSFunction js-to-wasm:iiiiiiiiiiii:rifldi (sfi = 0x7eb7000c693d)>
+ #49# 0x7eb7000c69c9: 0x7eb7000c69c9 <JSFunction js-to-wasm:iii:i (sfi = 0x7eb7000c6999)>
+ #50# 0x7eb700240055: 0x7eb700240055 <Object map = 0x7eb7000c03fd>
+            params: 0x7eb7003d9b99 <JSArray[3]>#74#
+           results: 0x7eb7003d9bbd <JSArray[1]>#75#
+          is_final: 0x7eb700000071 <true>
+         is_shared: 0x7eb700000055 <false>
+         supertype: 0x7eb7002401e1 <HeapNumber 4294967295.0>
+ #51# 0x7eb70024041d: 0x7eb70024041d <Object map = 0x7eb7000c03fd>
+            params: 0x7eb7002402c5 <JSArray[12]>#76#
+           results: 0x7eb700240335 <JSArray[6]>#77#
+          is_final: 0x7eb700000071 <true>
+         is_shared: 0x7eb700000055 <false>
+         supertype: 0x7eb700240445 <HeapNumber 4294967295.0>
+ #52# 0x7eb700240469: 0x7eb700240469 <Object map = 0x7eb7000c03fd>
+            params: 0x7eb7003d9f5d <JSArray[0]>#78#
+           results: 0x7eb7003d9f6d <JSArray[0]>#79#
+          is_final: 0x7eb700000071 <true>
+         is_shared: 0x7eb700000055 <false>
+         supertype: 0x7eb700240491 <HeapNumber 4294967295.0>
+ #53# 0x7eb7002404d5: 0x7eb7002404d5 <Object map = 0x7eb7000c0ab9>
+            module: 0x7eb700416805 <String[7]: #imp_mem>
+              name: 0x7eb700416819 <String[8]: #imp_mem0>
+              kind: 2
+           initial: 0
+           maximum: 0x7eb700000011 <undefined>
+            shared: 0x7eb700000055 <false>
+       is_memory64: 0x7eb700000055 <false>
+ #54# 0x7eb700240781: 0x7eb700240781 <Object map = 0x7eb7000c0ab9>
+            module: 0x7eb700416805 <String[7]: #imp_mem>
+              name: 0x7eb70041683d <String[8]: #imp_mem1>
+              kind: 2
+           initial: 0
+           maximum: 0x7eb700000011 <undefined>
+            shared: 0x7eb700000055 <false>
+       is_memory64: 0x7eb700000055 <false>
+ #55# 0x7eb700242bad: 0x7eb700242bad <Object map = 0x7eb7000c2c6d>
+              name: 0x7eb700416acd <String[8]: #exp_mem1>
+              kind: 2
+             index: 1
+ #56# 0x7eb700242c89: 0x7eb700242c89 <Object map = 0x7eb7000c2c6d>
+              name: 0x7eb700416af9 <String[9]: #exp_func1>
+              kind: 0
+             index: 1
+ #57# 0x7eb700242ca1: 0x7eb700242ca1 <Object map = 0x7eb7000c2c6d>
+              name: 0x7eb700000011 <undefined>
+              kind: 0
+             index: 0x7eb700000011 <undefined>
+ #58# 0x7eb700240dc5: 0x7eb700240dc5 <WasmTableBuilder map = 0x7eb7000c1725>
+            module: 0x7eb7003df70d <WasmModuleBuilder map = 0x7eb700429f65>#3#
+              type: -16
+      initial_size: 0x7eb700000011 <undefined>
+           has_max: 0x7eb700000055 <false>
+          max_size: 0x7eb700000011 <undefined>
+         init_expr: 0x7eb700000011 <undefined>
+          has_init: 0x7eb700000055 <false>
+         is_shared: 0x7eb700000055 <false>
+        is_table64: 0x7eb700000055 <false>
+             index: 0
+ #59# 0x7eb700240ca5: 0x7eb700240ca5 <Object map = 0x7eb7000c12ed>
+               min: 0x7eb700000011 <undefined>
+               max: 0x7eb700000011 <undefined>
+            shared: 0x7eb700000055 <false>
+       is_memory64: 0x7eb700000055 <false>
+ #60# 0x7eb7002412a5: 0x7eb7002412a5 <WasmElemSegment map = 0x7eb7000c1da5>
+             table: 0
+            offset: 0x7eb700241125 <JSArray[2]>#12#
+              type: 0x7eb700000011 <undefined>
+          elements: 0x7eb700241239 <JSArray[0]>#80#
+           is_decl: 0x7eb700000055 <false>
+         is_shared: 0x7eb700000055 <false>
+ #61# 0x7eb700241815: 0x7eb700241815 <Object map = 0x7eb7000c2119>
+              type: 124
+             count: 1
+ #62# 0x7eb7002418d1: 0x7eb7002418d1 <Object map = 0x7eb7000c2119>
+              type: 127
+             count: 3
+ #63# 0x7eb700241905: 0x7eb700241905 <Object map = 0x7eb7000c2119>
+              type: 124
+             count: 1
+ #64# 0x7eb700241939: 0x7eb700241939 <Object map = 0x7eb7000c2119>
+              type: 0x7eb7002417f5 <Object map = 0x7eb7000c065d>#16#
+             count: 1
+ #65# 0x7eb70024196d: 0x7eb70024196d <Object map = 0x7eb7000c2119>
+              type: 0x7eb7002417d5 <Object map = 0x7eb7000c065d>#15#
+             count: 1
+ #66# 0x7eb7002419a1: 0x7eb7002419a1 <Object map = 0x7eb7000c2119>
+              type: 125
+             count: 1
+ #67# 0x7eb7002419d5: 0x7eb7002419d5 <Object map = 0x7eb7000c2119>
+              type: 127
+             count: 1
+ #68# 0x7eb700241a09: 0x7eb700241a09 <Object map = 0x7eb7000c2119>
+              type: 125
+             count: 1
+ #69# 0x7eb700241a3d: 0x7eb700241a3d <Object map = 0x7eb7000c2119>
+              type: 0x7eb7002417b5 <Object map = 0x7eb7000c065d>#14#
+             count: 1
+ #70# 0x7eb700241a71: 0x7eb700241a71 <Object map = 0x7eb7000c2119>
+              type: 127
+             count: 0x7eb700000011 <undefined>
+ #71# 0x7eb7002426a5: 0x7eb7002426a5 <Object map = 0x7eb7000c2119>
+              type: 127
+             count: 1
+ #72# 0x7eb700242725: 0x7eb700242725 <Object map = 0x7eb7000c2119>
+              type: 0x7eb70024266d <Object map = 0x7eb7000c065d>#18#
+             count: 2
+ #73# 0x7eb700242759: 0x7eb700242759 <Object map = 0x7eb7000c2119>
+              type: 124
+             count: 0x7eb700000011 <undefined>
+ #74# 0x7eb7003d9b99: 0x7eb7003d9b99 <JSArray[3]>
+ #75# 0x7eb7003d9bbd: 0x7eb7003d9bbd <JSArray[1]>
+ #76# 0x7eb7002402c5: 0x7eb7002402c5 <JSArray[12]>
+ #77# 0x7eb700240335: 0x7eb700240335 <JSArray[6]>
+                 0: 0x7eb70024036d <Object map = 0x7eb7000c065d>#81#
+                 1: 127
+                 2: 125
+                 3: 126
+                 4: 124
+                 5: 127
+ #78# 0x7eb7003d9f5d: 0x7eb7003d9f5d <JSArray[0]>
+ #79# 0x7eb7003d9f6d: 0x7eb7003d9f6d <JSArray[0]>
+ #80# 0x7eb700241239: 0x7eb700241239 <JSArray[0]>
+ #81# 0x7eb70024036d: 0x7eb70024036d <Object map = 0x7eb7000c065d>
+            opcode: 100
+         heap_type: 1
+         is_shared: 0x7eb700000055 <false>
+=====================
+
+Trace/breakpoint trap

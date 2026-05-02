@@ -1,0 +1,19 @@
+=== Run 1 ===
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+[*] osr_func BytecodeArray: 0x410a00
+[*] osr_func Sparkplug Code: 0x802a01
+[*] found TPT->CPT confusing entry: 0x802a00 vs 0x802a01
+[*] warmup...
+[*] exploit try 0
+Received signal 4 ILL_ILLOPN 5b24e0003ec1
+
+==== C stack trace ===============================
+
+/out/d8(+0x1a89e04)[0x5b24b414fe04]
+/lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x725128bb5420]
+[0x5b24e0003ec1]
+[end of stack trace]
+timeout: the monitored command dumped core
+bash: line 1:    11 Illegal instruction     timeout 60 /out/d8 --sandbox-testing /testcase/poc.js 2>&1
+Exit: 132
+SIGILL caught\!

@@ -1,0 +1,40 @@
+Assertion failure: zoneIsDead, at /src/gecko-dev/js/src/gc/GC.cpp:2083
+#01: ???[/out/js +0x3d2d519]
+#02: ???[/out/js +0x3d4275b]
+#03: ???[/out/js +0x3d4968e]
+#04: ???[/out/js +0x3d4c558]
+#05: ???[/out/js +0x3cf25d6]
+#06: JSRuntime::destroyRuntime()[/out/js +0x30733be]
+#07: ???[/out/js +0x2d24e03]
+#08: ???[/out/js +0x265e9ac]
+#09: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#10: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#11: ???[/out/js +0x255fd59]
+#12: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5cc388a3a54e bp 0x7ffc0a1faf30 sp 0x7ffc0a1fae70 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5cc388a3a54e in js::gc::GCRuntime::sweepZones(JS::GCContext*, bool) /src/gecko-dev/js/src/gc/GC.cpp:2083:7
+    #1 0x5cc388a4f75a in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3356:9
+    #2 0x5cc388a5668d in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3841:3
+    #3 0x5cc388a59557 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4029:9
+    #4 0x5cc3889ff5d5 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4106:3
+    #5 0x5cc387d803bd in JSRuntime::destroyRuntime() /src/gecko-dev/js/src/vm/Runtime.cpp:266:8
+    #6 0x5cc387a31e02 in js::DestroyContext(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:225:7
+    #7 0x5cc38736b9ab in main::$_2::operator()() const /src/gecko-dev/js/src/shell/js.cpp:12119:41
+    #8 0x5cc38736b9ab in mozilla::ScopeExit<main::$_2>::~ScopeExit() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/ScopeExit.h:106:7
+    #9 0x5cc38736b9ab in main /src/gecko-dev/js/src/shell/js.cpp:12329:1
+    #10 0x763f577211c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x763f5772128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x5cc38726cd58 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x255fd58)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x0000743f56be3080  rcx = 0x00005cc385b04bc0  rdx = 0x0000000000000000  
+rdi = 0x00005cc38af9a890  rsi = 0x00007ffc0a1fae28  rbp = 0x00007ffc0a1faf30  rsp = 0x00007ffc0a1fae70  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000230  r13 = 0x00000b987171c8a4  r14 = 0x0000000000000304  r15 = 0x0000000056c4d601  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/GC.cpp:2083:7 in js::gc::GCRuntime::sweepZones(JS::GCContext*, bool)
+==13==ABORTING

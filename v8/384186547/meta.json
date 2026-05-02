@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:384186547",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing --expose-gc --single-threaded",
+  "target_source_files": [
+    "src/objects/js-array-buffer.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A use-after-free vulnerability exists in V8's ArrayBuffer management due to a race condition between JSArrayBuffer::Setup and JSArrayBuffer::Attach in src/objects/js-array-buffer.cc. Setup calls init_extension() to initialize (nullify) the extension field, and later Attach calls EnsureExtension() which either returns the existing extension or allocates a new one, then registers it with the ArrayBufferSweeper. An attacker with sandbox control can exploit the window between these two steps by overwriting the JSArrayBuffer's extension field (via the external pointer table) after init_extension() runs but before Attach reads the field via EnsureExtension(). By pointing the extension field at an already-tracked ArrayBufferExtension (one already in the sweeper's young-generation list), the attacker causes the same extension to be appended to the old-generation list as well. A subsequent young-generation GC will then free the extension (deleting it from the young list), but the old-generation list retains a dangling pointer to the freed memory. The attacker can then reclaim the freed extension's memory to gain control over the dangling ArrayBufferExtension structure and escape the V8 sandbox. The fix requires merging the init_extension() call in Setup with the EnsureExtension() call in Attach to close the race window, and adding duplicate-insertion checks in ArrayBufferSweeper::Append and ArrayBufferList::Append.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Local patch generated from V8 commit 1d7b6d2d2d1c3fb18739405b6fd58ce801844f57 to make validation and patched-image builds independent of remote Gerrit fetches.",
+      "context": "local-format-patch",
+      "evidence_text": "1d7b6d2d2d1c3fb18739405b6fd58ce801844f57 [runtime] Fix ArrayBuffer creation attaching extension objects",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6149097",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6149097",
+      "source_cl": 6149097,
+      "cl": 6149097,
+      "source_commit": "1d7b6d2d2d1c3fb18739405b6fd58ce801844f57",
+      "commit": "1d7b6d2d2d1c3fb18739405b6fd58ce801844f57"
+    }
+  ]
+}

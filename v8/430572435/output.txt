@@ -1,0 +1,37 @@
+
+
+#
+# Fatal error in ../../src/base/bit-field.h, line 56
+# Debug check failed: is_valid(value).
+#
+#
+#
+#FailureMessage Object: 0x7f5395df9e80
+==== C stack trace ===============================
+
+    /src/v8/out/x64.debug/d8(+0x4544523) [0x55fe9b7cc523]
+    /src/v8/out/x64.debug/d8(+0x454368d) [0x55fe9b7cb68d]
+    /src/v8/out/x64.debug/d8(+0x4529df4) [0x55fe9b7b1df4]
+    /src/v8/out/x64.debug/d8(+0x45297e5) [0x55fe9b7b17e5]
+    /src/v8/out/x64.debug/d8(+0xfd7f57) [0x55fe9825ff57]
+    /src/v8/out/x64.debug/d8(+0x1fe735a) [0x55fe9926f35a]
+    /src/v8/out/x64.debug/d8(+0x1fe9764) [0x55fe99271764]
+    /src/v8/out/x64.debug/d8(+0x1fe8b8c) [0x55fe99270b8c]
+    /src/v8/out/x64.debug/d8(+0x1ffbd91) [0x55fe99283d91]
+    /src/v8/out/x64.debug/d8(+0x1fcbbaf) [0x55fe99253baf]
+    /src/v8/out/x64.debug/d8(+0x1fec63c) [0x55fe9927463c]
+    /src/v8/out/x64.debug/d8(+0x1ffdb76) [0x55fe99285b76]
+    /src/v8/out/x64.debug/d8(+0x1fff6ec) [0x55fe992876ec]
+    /src/v8/out/x64.debug/d8(+0x1ea7fbc) [0x55fe9912ffbc]
+    /src/v8/out/x64.debug/d8(+0x1ea32b0) [0x55fe9912b2b0]
+    /src/v8/out/x64.debug/d8(+0x1e9f67e) [0x55fe9912767e]
+    /src/v8/out/x64.debug/d8(+0x1e9d815) [0x55fe99125815]
+    /src/v8/out/x64.debug/d8(+0x1fa858a) [0x55fe9923058a]
+    /src/v8/out/x64.debug/d8(+0xeac0f2) [0x55fe981340f2]
+    /src/v8/out/x64.debug/d8(+0x1faa6cc) [0x55fe992326cc]
+    /src/v8/out/x64.debug/d8(+0x454602f) [0x55fe9b7ce02f]
+    /src/v8/out/x64.debug/d8(+0x454be3c) [0x55fe9b7d3e3c]
+    /src/v8/out/x64.debug/d8(+0x4540fe8) [0x55fe9b7c8fe8]
+    /lib/x86_64-linux-gnu/libc.so.6(+0x9caa4) [0x7f53b0b45aa4]
+    /lib/x86_64-linux-gnu/libc.so.6(__clone+0x44) [0x7f53b0bd2a64]
+Trace/breakpoint trap (core dumped)

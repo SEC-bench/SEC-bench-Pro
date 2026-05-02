@@ -1,0 +1,13 @@
+Verified on 2026-04-11 with `../../v8/crash_check.sh 435630467`.
+
+- Image: `hwiwonlee/v8.x86_64:435630467`
+- Binary: `out/x64.release/d8 --sandbox-testing`
+- PoC: local `poc.js`, identical to collector attachment `v8sbx-unlock-debugbreaktrampoline.js`
+- Result: `CONFIMRED: SANDBOX_VIOLATION`
+
+Fresh local `output.txt` shows:
+
+- `## V8 sandbox violation detected!`
+- `Received signal 11 SEGV_MAPERR 424242420061`
+
+The sandbox runtime notes that the immediate access was a read, but the crash address is the attacker-controlled `0x4242424200xx` pattern described in the report's Wasm stack spray / stack-pivot scenario. This is a convincing standalone repro of the same bug family.

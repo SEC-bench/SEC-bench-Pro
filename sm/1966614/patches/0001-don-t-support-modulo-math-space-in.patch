@@ -1,0 +1,26 @@
+From e51daa6f33122c66c59a9dc8080807ba1c003131 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Sat, 17 May 2025 08:17:13 -0400
+Subject: [PATCH] Bug 1966614 - Don't support modulo math space in
+ ExtractLinearSum. r=iain, a=dsmith
+
+Differential Revision: https://phabricator.services.mozilla.com/D249878
+---
+ js/src/jit/IonAnalysis.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 2d4ede1461ad6..d5733f5123d99 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -3726,6 +3726,10 @@ SimpleLinearSum jit::ExtractLinearSum(MDefinition* ins, MathSpace space,
+   }
+   MOZ_ASSERT(space == MathSpace::Modulo || space == MathSpace::Infinite);
+ 
++  if (space == MathSpace::Modulo) {
++    return SimpleLinearSum(ins, 0);
++  }
++
+   MDefinition* lhs = ins->getOperand(0);
+   MDefinition* rhs = ins->getOperand(1);
+   if (lhs->type() != MIRType::Int32 || rhs->type() != MIRType::Int32) {

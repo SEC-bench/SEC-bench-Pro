@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1804626",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CodeGenerator.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off --ion-warmup-threshold=0 --baseline-eager",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion MIR shape-tracing regression - missing GC edge from Ion code to a JS Shape, detected by endVerifyPreBarriers. Bug 1804626 is a use-after-free class bug (csectype-uaf): the regressing Ion optimization in js/src/jit/CodeGenerator.cpp assumed shapes were always tenured and did not need to be traced through MIR operations. During eager JIT compilation, verifyprebarriers() exposed an unmarked edge from a JSObject to a Shape; debug builds assert in the GC barrier verifier, while non-debug builds can retain a dangling Shape reference after GC. The fix backs out the incorrect CodeGenerator.cpp optimization so Ion code keeps the required GC edge alive.",
+    "fix_commits": [
+        "11a4da715e43daf8839a8220d1097fc489075f6f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-backed-out-changeset-77591550134c.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1804626 - Backed out changeset 77591550134c r=iain",
+            "source_commit": "11a4da715e43daf8839a8220d1097fc489075f6f",
+            "commit": "11a4da715e43daf8839a8220d1097fc489075f6f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/11a4da715e43daf8839a8220d1097fc489075f6f",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/11a4da715e43daf8839a8220d1097fc489075f6f",
+            "phabricator": "D164261"
+        }
+    ],
+    "vrp": null
+}

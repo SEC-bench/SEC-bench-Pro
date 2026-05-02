@@ -1,0 +1,688 @@
+From 8c815e898fe13f9ed436825a77399561597cd708 Mon Sep 17 00:00:00 2001
+From: Maksim Ivanov <emaxx@google.com>
+Date: Thu, 18 Dec 2025 15:46:48 +0100
+Subject: [PATCH] Reland-2 "[sandbox] Cage for ExternalStrings when memory
+ corruption API"
+
+Fix the original CL's mjsunit test slowness by using std::unique_ptr
+instead of std::vector for string resources - this makes the in-sandbox
+OOB reads detected as fast as before, without committing and
+initializing the backing storage for a potentially corrupted
+arbitrarily big size.
+
+Also increase the cage contents to 9 GB, to not prevent allocations
+of maximum-sized strings.
+
+Original change's description:
+> [sandbox] Cage for ExternalStrings when memory corruption API
+>
+> When fuzzing/testing with memory_corruption_api enabled, move all
+> external string resources into a separate cage with a large reserved
+> guard zone at the end. In testing crash/failure handlers, ignore OOB
+> reads within this cage.
+>
+> This allows us to skip such reports from being triaged for this known
+> issue in the sandbox attacker model.
+
+Bug: 329781444
+
+Change-Id: Id87df64cad76fbd89f4e1112de548f5fddca1da7
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/7269585
+Reviewed-by: Omer Katz <omerkatz@chromium.org>
+Commit-Queue: Maksim Ivanov <emaxx@chromium.org>
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#104426}
+---
+ BUILD.bazel                                   |  3 +
+ BUILD.gn                                      |  3 +
+ src/d8/d8.cc                                  | 21 +---
+ .../externalize-string-extension.cc           | 37 +-------
+ src/init/isolate-group.cc                     | 11 +++
+ src/init/isolate-group.h                      | 13 +++
+ src/sandbox/external-strings-cage.cc          | 90 ++++++++++++++++++
+ src/sandbox/external-strings-cage.h           | 95 +++++++++++++++++++
+ src/sandbox/testing.cc                        | 52 ++++++++--
+ src/strings/owning-external-string-resource.h | 91 ++++++++++++++++++
+ 10 files changed, 358 insertions(+), 58 deletions(-)
+ create mode 100644 src/sandbox/external-strings-cage.cc
+ create mode 100644 src/sandbox/external-strings-cage.h
+ create mode 100644 src/strings/owning-external-string-resource.h
+
+diff --git a/BUILD.bazel b/BUILD.bazel
+index c0e7f00069e..285f4581ef7 100644
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -2509,6 +2509,8 @@ filegroup(
+         "src/sandbox/code-sandboxing-mode.h",
+         "src/sandbox/compactible-external-entity-table-inl.h",
+         "src/sandbox/compactible-external-entity-table.h",
++        "src/sandbox/external-strings-cage.cc",
++        "src/sandbox/external-strings-cage.h",
+         "src/sandbox/isolate.h",
+         "src/sandbox/isolate-inl.h",
+         "src/sandbox/indirect-pointer.h",
+@@ -2577,6 +2579,7 @@ filegroup(
+         "src/snapshot/startup-serializer.h",
+         "src/strings/char-predicates.h",
+         "src/strings/char-predicates-inl.h",
++        "src/strings/owning-external-string-resource.h",
+         "src/strings/string-builder.cc",
+         "src/strings/string-builder.h",
+         "src/strings/string-builder-inl.h",
+diff --git a/BUILD.gn b/BUILD.gn
+index c4b1ddfc7c0..9325c5de9f5 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -4401,6 +4401,7 @@ v8_header_set("v8_internal_headers") {
+     "src/sandbox/external-pointer-table-inl.h",
+     "src/sandbox/external-pointer-table.h",
+     "src/sandbox/external-pointer.h",
++    "src/sandbox/external-strings-cage.h",
+     "src/sandbox/hardware-support.h",
+     "src/sandbox/indirect-pointer-inl.h",
+     "src/sandbox/indirect-pointer-tag.h",
+@@ -4445,6 +4446,7 @@ v8_header_set("v8_internal_headers") {
+     "src/snapshot/startup-serializer.h",
+     "src/strings/char-predicates-inl.h",
+     "src/strings/char-predicates.h",
++    "src/strings/owning-external-string-resource.h",
+     "src/strings/string-builder-inl.h",
+     "src/strings/string-builder.h",
+     "src/strings/string-case.h",
+@@ -6002,6 +6004,7 @@ v8_source_set("v8_base_without_compiler") {
+     "src/sandbox/code-pointer-table.cc",
+     "src/sandbox/cppheap-pointer-table.cc",
+     "src/sandbox/external-pointer-table.cc",
++    "src/sandbox/external-strings-cage.cc",
+     "src/sandbox/hardware-support.cc",
+     "src/sandbox/js-dispatch-table.cc",
+     "src/sandbox/sandbox.cc",
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index 613ee3a8efd..f3952ee3512 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -13,6 +13,7 @@
+ #include <iomanip>
+ #include <iterator>
+ #include <string>
++#include <string_view>
+ #include <tuple>
+ #include <type_traits>
+ #include <unordered_map>
+@@ -71,6 +72,7 @@
+ #include "src/parsing/scanner-character-streams.h"
+ #include "src/profiler/profile-generator.h"
+ #include "src/snapshot/snapshot.h"
++#include "src/strings/owning-external-string-resource.h"
+ #include "src/tasks/cancelable-task.h"
+ #include "src/tracing/perfetto-sdk.h"
+ #include "src/utils/ostreams.h"
+@@ -529,22 +531,6 @@ static platform::tracing::TraceConfig* CreateTraceConfigFromJSON(
+ 
+ }  // namespace tracing
+ 
+-class ExternalOwningOneByteStringResource
+-    : public String::ExternalOneByteStringResource {
+- public:
+-  ExternalOwningOneByteStringResource() = default;
+-  ExternalOwningOneByteStringResource(
+-      std::unique_ptr<base::OS::MemoryMappedFile> file)
+-      : file_(std::move(file)) {}
+-  const char* data() const override {
+-    return static_cast<char*>(file_->memory());
+-  }
+-  size_t length() const override { return file_->size(); }
+-
+- private:
+-  std::unique_ptr<base::OS::MemoryMappedFile> file_;
+-};
+-
+ // static variables:
+ CounterMap* Shell::counter_map_;
+ base::Mutex Shell::counter_mutex_;
+@@ -5261,7 +5247,8 @@ MaybeLocal<String> Shell::ReadFile(Isolate* isolate, const char* name,
+   char* chars = static_cast<char*>(file->memory());
+   if (i::v8_flags.use_external_strings && i::String::IsAscii(chars, size)) {
+     String::ExternalOneByteStringResource* resource =
+-        new ExternalOwningOneByteStringResource(std::move(file));
++        new i::OwningExternalOneByteStringResource(
++            std::string_view(chars, size));
+     return String::NewExternalOneByte(isolate, resource);
+   }
+   return String::NewFromUtf8(isolate, chars, NewStringType::kNormal, size);
+diff --git a/src/extensions/externalize-string-extension.cc b/src/extensions/externalize-string-extension.cc
+index 314cfb23f86..ead704027d4 100644
+--- a/src/extensions/externalize-string-extension.cc
++++ b/src/extensions/externalize-string-extension.cc
+@@ -12,34 +12,12 @@
+ #include "src/heap/heap-layout-inl.h"
+ #include "src/objects/heap-object-inl.h"
+ #include "src/objects/objects-inl.h"
++#include "src/objects/string.h"
++#include "src/strings/owning-external-string-resource.h"
+ 
+ namespace v8 {
+ namespace internal {
+ 
+-template <typename Char, typename Base>
+-class SimpleStringResource : public Base {
+- public:
+-  // Takes ownership of |data|.
+-  SimpleStringResource(Char* data, size_t length)
+-      : data_(data),
+-        length_(length) {}
+-
+-  ~SimpleStringResource() override { delete[] data_; }
+-
+-  const Char* data() const override { return data_; }
+-
+-  size_t length() const override { return length_; }
+-
+- private:
+-  Char* const data_;
+-  const size_t length_;
+-};
+-
+-using SimpleOneByteStringResource =
+-    SimpleStringResource<char, v8::String::ExternalOneByteStringResource>;
+-using SimpleTwoByteStringResource =
+-    SimpleStringResource<base::uc16, v8::String::ExternalStringResource>;
+-
+ static constexpr int kMinOneByteLength =
+     kExternalPointerSlotSize - kTaggedSize + 1;
+ static constexpr int kMinTwoByteLength =
+@@ -121,19 +99,12 @@ void ExternalizeStringExtension::Externalize(
+     }
+     return;
+   }
+-  uint32_t length = string->length();
+   if (externalize_as_one_byte) {
+-    uint8_t* data = new uint8_t[length];
+-    String::WriteToFlat(*string, data, 0, length);
+-    SimpleOneByteStringResource* resource =
+-        new SimpleOneByteStringResource(reinterpret_cast<char*>(data), length);
++    auto* resource = new OwningExternalOneByteStringResource(*string);
+     result = Utils::ToLocal(string)->MakeExternal(info.GetIsolate(), resource);
+     if (!result) delete resource;
+   } else {
+-    base::uc16* data = new base::uc16[length];
+-    String::WriteToFlat(*string, data, 0, length);
+-    SimpleTwoByteStringResource* resource =
+-        new SimpleTwoByteStringResource(data, length);
++    auto* resource = new OwningExternalStringResource(*string);
+     result = Utils::ToLocal(string)->MakeExternal(info.GetIsolate(), resource);
+     if (!result) delete resource;
+   }
+diff --git a/src/init/isolate-group.cc b/src/init/isolate-group.cc
+index 698a8a5c71e..1142c9b5f16 100644
+--- a/src/init/isolate-group.cc
++++ b/src/init/isolate-group.cc
+@@ -26,6 +26,10 @@
+ #include <partition_alloc/partition_alloc.h>
+ #endif
+ 
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++#include "src/sandbox/external-strings-cage.h"
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++
+ namespace v8 {
+ namespace internal {
+ 
+@@ -207,6 +211,13 @@ void IsolateGroup::Initialize(bool process_wide, Sandbox* sandbox) {
+   }
+ 
+   js_dispatch_table()->Initialize();
++
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++  if (!external_strings_cage_.Initialize()) {
++    V8::FatalProcessOutOfMemory(
++        nullptr, "Failed to reserve virtual memory for ExternalStringsCage");
++  }
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
+ }
+ #elif defined(V8_COMPRESS_POINTERS)
+ void IsolateGroup::Initialize(bool process_wide) {
+diff --git a/src/init/isolate-group.h b/src/init/isolate-group.h
+index 402f8214f24..3ea5ef4369d 100644
+--- a/src/init/isolate-group.h
++++ b/src/init/isolate-group.h
+@@ -28,6 +28,10 @@
+ #include "src/heap/trusted-range.h"
+ #endif  // V8_ENABLE_SANDBOX
+ 
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++#include "src/sandbox/external-strings-cage.h"
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++
+ namespace v8 {
+ 
+ namespace base {
+@@ -300,6 +304,12 @@ class V8_EXPORT_PRIVATE IsolateGroup final {
+   }
+ 
+   SandboxedArrayBufferAllocatorBase* GetSandboxedArrayBufferAllocator();
++
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++  ExternalStringsCage* external_strings_cage() {
++    return &external_strings_cage_;
++  }
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
+ #endif  // V8_ENABLE_SANDBOX
+ 
+   JSDispatchTable* js_dispatch_table() { return &js_dispatch_table_; }
+@@ -423,6 +433,9 @@ class V8_EXPORT_PRIVATE IsolateGroup final {
+   CodePointerTable code_pointer_table_;
+   MemoryChunkMetadataTableEntry metadata_pointer_table_
+       [MemoryChunkConstants::kMetadataPointerTableSize]{};
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++  ExternalStringsCage external_strings_cage_;
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
+ #ifdef V8_ENABLE_PARTITION_ALLOC
+   PABackedSandboxedArrayBufferAllocator backend_allocator_;
+ #else
+diff --git a/src/sandbox/external-strings-cage.cc b/src/sandbox/external-strings-cage.cc
+new file mode 100644
+index 00000000000..fe3c118e405
+--- /dev/null
++++ b/src/sandbox/external-strings-cage.cc
+@@ -0,0 +1,90 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "src/sandbox/external-strings-cage.h"
++
++#include <stddef.h>
++
++#include "include/v8-internal.h"
++#include "include/v8-platform.h"
++#include "src/base/bounded-page-allocator.h"
++#include "src/base/build_config.h"
++#include "src/base/logging.h"
++#include "src/base/sanitizer/asan.h"
++#include "src/base/sanitizer/msan.h"
++#include "src/base/virtual-address-space.h"
++#include "src/utils/allocation.h"
++
++namespace v8::internal {
++
++#if defined(V8_ENABLE_SANDBOX) && defined(V8_ENABLE_MEMORY_CORRUPTION_API)
++
++ExternalStringsCage::ExternalStringsCage()
++    : page_size_(GetPlatformPageAllocator()->AllocatePageSize()) {
++  CHECK_EQ(kMaxContentsSize % page_size_, 0);
++  CHECK_EQ(kGuardRegionSize % page_size_, 0);
++}
++
++ExternalStringsCage::~ExternalStringsCage() = default;
++
++bool ExternalStringsCage::Initialize() {
++  VirtualMemoryCage::ReservationParams params = {
++      .page_allocator = GetPlatformPageAllocator(),
++      .reservation_size = kMaxContentsSize + kGuardRegionSize,
++      .base_alignment = VirtualMemoryCage::ReservationParams::kAnyBaseAlignment,
++      .page_size = page_size_,
++      .requested_start_hint = kNullAddress,
++      .permissions = PageAllocator::Permission::kNoAccess,
++      .page_initialization_mode =
++          base::PageInitializationMode::kAllocatedPagesCanBeUninitialized,
++      .page_freeing_mode = base::PageFreeingMode::kMakeInaccessible,
++  };
++  if (!vm_cage_.InitReservation(params)) return false;
++
++  Address guard_region_begin = vm_cage_.base() + kMaxContentsSize;
++  CHECK(vm_cage_.page_allocator()->AllocatePagesAt(
++      guard_region_begin, kGuardRegionSize, PageAllocator::kNoAccess));
++  return true;
++}
++
++size_t ExternalStringsCage::GetAllocSize(size_t string_size) const {
++  CHECK_LE(string_size, kMaxContentsSize);
++  // Allocate whole pages as we're relying on BoundedPageAllocator (e.g.,
++  // PartitionAlloc would allow smaller granularity, but at the moment it's not
++  // possible as we'd need a second Configurable Pool).
++  size_t page_count = (string_size + page_size_ - 1) / page_size_;
++  return page_count * page_size_;
++}
++
++void* ExternalStringsCage::AllocateRaw(size_t size) {
++  size_t alloc_size = GetAllocSize(size);
++  void* ptr = vm_cage_.page_allocator()->AllocatePages(
++      nullptr, alloc_size, page_size_, PageAllocator::kReadWrite);
++  CHECK(ptr);
++  CHECK_LE(reinterpret_cast<Address>(ptr) + size,
++           vm_cage_.base() + kMaxContentsSize);
++#if defined(V8_USE_MEMORY_SANITIZER)
++  MSAN_ALLOCATED_UNINITIALIZED_MEMORY(ptr, alloc_size);
++#elif defined(V8_USE_ADDRESS_SANITIZER)
++  void* redzone_begin =
++      reinterpret_cast<void*>(reinterpret_cast<Address>(ptr) + size);
++  size_t redzone_size = alloc_size - size;
++  ASAN_POISON_MEMORY_REGION(redzone_begin, redzone_size);
++#endif
++  return ptr;
++}
++
++void ExternalStringsCage::Free(void* ptr, size_t size) {
++  size_t alloc_size = GetAllocSize(size);
++#if defined(V8_USE_ADDRESS_SANITIZER)
++  // Unpoison the memory before giving it back (as it may be reused later).
++  ASAN_UNPOISON_MEMORY_REGION(ptr, alloc_size);
++#endif
++  vm_cage_.page_allocator()->FreePages(ptr, alloc_size);
++}
++
++#endif  // defined(V8_ENABLE_SANDBOX) &&
++        // defined(V8_ENABLE_MEMORY_CORRUPTION_API)
++
++}  // namespace v8::internal
+diff --git a/src/sandbox/external-strings-cage.h b/src/sandbox/external-strings-cage.h
+new file mode 100644
+index 00000000000..8551be26a2f
+--- /dev/null
++++ b/src/sandbox/external-strings-cage.h
+@@ -0,0 +1,95 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef V8_SANDBOX_EXTERNAL_STRINGS_CAGE_H_
++#define V8_SANDBOX_EXTERNAL_STRINGS_CAGE_H_
++
++#include <stddef.h>
++
++#include <memory>
++
++#include "include/v8-internal.h"
++#include "src/base/address-region.h"
++#include "src/base/compiler-specific.h"
++#include "src/base/logging.h"
++#include "src/utils/allocation.h"
++
++namespace v8::internal {
++
++#if defined(V8_ENABLE_SANDBOX) && defined(V8_ENABLE_MEMORY_CORRUPTION_API)
++
++// Manages a virtual memory range for hosting external string contents, with an
++// extra reservation at the end in order to fit any read past a string's buffer
++// end using a corrupted length.
++//
++// Currently only used in memory_corruption_api-enabled builds, in order to
++// distinguish external string OOB reads from other issues.
++//
++// Note: There's an additional memory overhead per each string, since we append
++// a redzone and occupy whole pages for a string at the moment.
++class ExternalStringsCage final {
++ public:
++  // The maximum total length of strings (and additional redzones) that the cage
++  // can fit. Chosen to fit a maximum UTF-16 string of length 2^32 and some
++  // amount of extra space; increase this if it turns out to be insufficient for
++  // testing of important use cases.
++  static constexpr size_t kMaxContentsSize = (size_t{1} << 33) + GB;
++  // The size of the guard region at the end of the cage. Chosen to cover an
++  // arbitrary 32-bit offset for a UTF-16 string.
++  static constexpr size_t kGuardRegionSize = size_t{1} << 33;
++
++  template <typename T>
++  class Deleter final {
++   public:
++    Deleter(ExternalStringsCage* cage, size_t size)
++        : cage_(cage), size_(size) {}
++
++    Deleter(const Deleter&) = delete;
++    Deleter& operator=(const Deleter&) = delete;
++
++    Deleter(Deleter&&) V8_NOEXCEPT = default;
++    Deleter& operator=(Deleter&&) V8_NOEXCEPT = default;
++
++    void operator()(T* p) const { cage_->Free(p, size_ * sizeof(T)); }
++
++   private:
++    ExternalStringsCage* const cage_;
++    const size_t size_;
++  };
++
++  ExternalStringsCage();
++  ~ExternalStringsCage();
++
++  ExternalStringsCage(const ExternalStringsCage&) = delete;
++  ExternalStringsCage& operator=(const ExternalStringsCage&) = delete;
++
++  bool Initialize();
++
++  template <typename T>
++  std::unique_ptr<T[], Deleter<T>> Allocate(size_t size) {
++    CHECK_LE(size, kMaxContentsSize / sizeof(T));
++    return std::unique_ptr<T[], Deleter<T>>(
++        static_cast<T*>(AllocateRaw(size * sizeof(T))), Deleter<T>(this, size));
++  }
++
++  base::AddressRegion reservation_region() const {
++    CHECK(vm_cage_.IsReserved());
++    return vm_cage_.region();
++  }
++
++ private:
++  size_t GetAllocSize(size_t string_size) const;
++  void* AllocateRaw(size_t size);
++  void Free(void* ptr, size_t size);
++
++  const size_t page_size_;
++  VirtualMemoryCage vm_cage_;
++};
++
++#endif  // defined(V8_ENABLE_SANDBOX) &&
++        // defined(V8_ENABLE_MEMORY_CORRUPTION_API)
++
++}  // namespace v8::internal
++
++#endif  // V8_SANDBOX_EXTERNAL_STRINGS_CAGE_H_
+diff --git a/src/sandbox/testing.cc b/src/sandbox/testing.cc
+index a0207c7c3fa..f2b3dfeda93 100644
+--- a/src/sandbox/testing.cc
++++ b/src/sandbox/testing.cc
+@@ -10,6 +10,7 @@
+ #include "src/builtins/builtins.h"
+ #include "src/common/globals.h"
+ #include "src/execution/isolate-inl.h"
++#include "src/extensions/externalize-string-extension.h"
+ #include "src/heap/factory.h"
+ #include "src/objects/backing-store.h"
+ #include "src/objects/instance-type.h"
+@@ -49,6 +50,8 @@ SandboxTesting::Mode SandboxTesting::mode_ = SandboxTesting::Mode::kDisabled;
+ 
+ namespace {
+ 
++base::AddressRegion g_external_strings_cage_region;
++
+ // Sandbox.base
+ void SandboxGetBase(const v8::FunctionCallbackInfo<v8::Value>& info) {
+   DCHECK(ValidateCallbackInfo(info));
+@@ -684,6 +687,15 @@ void SandboxTesting::InstallMemoryCorruptionApi(Isolate* isolate) {
+   Handle<String> name =
+       isolate->factory()->NewStringFromAsciiChecked("Sandbox");
+   JSObject::AddProperty(isolate, global, name, sandbox, DONT_ENUM);
++
++  // Remember the address range belonging to the external strings cage, to be
++  // used for crash filters.
++  Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
++  g_external_strings_cage_region =
++      i_isolate->isolate_group()->external_strings_cage()->reservation_region();
++  fprintf(stderr, "External strings cage bounds: [%p,%p)\n",
++          reinterpret_cast<void*>(g_external_strings_cage_region.begin()),
++          reinterpret_cast<void*>(g_external_strings_cage_region.end()));
+ }
+ 
+ #endif  // V8_ENABLE_MEMORY_CORRUPTION_API
+@@ -745,6 +757,19 @@ void UninstallCrashFilter() {
+ #endif  // V8_USE_ANY_SANITIZER
+ }
+ 
++bool IsNonWriteCrash(void* context) {
++#ifdef V8_HOST_ARCH_X64
++  ucontext_t* ctx = reinterpret_cast<ucontext_t*>(context);
++  // Matches X86_PF_WRITE in x86_pf_error_code.
++  static constexpr greg_t kWriteAccessBit = 1;
++  const bool write_access =
++      ctx->uc_mcontext.gregs[REG_ERR] & (1 << kWriteAccessBit);
++  return !write_access;
++#else   // V8_HOST_ARCH_X64
++  return false;  // we don't know for sure
++#endif  // V8_HOST_ARCH_X64
++}
++
+ void CrashFilter(int signal, siginfo_t* info, void* context) {
+   // NOTE: This code MUST be async-signal safe.
+   // NO malloc or stdio is allowed here.
+@@ -896,6 +921,15 @@ void CrashFilter(int signal, siginfo_t* info, void* context) {
+             "violation).");
+       }
+ 
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++      if (g_external_strings_cage_region.contains(faultaddr) &&
++          IsNonWriteCrash(context)) {
++        FilterCrash(
++            "Caught harmless ASan fault (read access inside external strings "
++            "cage).");
++      }
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++
+       break;
+     }
+     default:
+@@ -913,18 +947,11 @@ void CrashFilter(int signal, siginfo_t* info, void* context) {
+ 
+   PrintToStderr("\n## V8 sandbox violation detected!\n\n");
+ 
+-#ifdef V8_HOST_ARCH_X64
+-  ucontext_t* ctx = reinterpret_cast<ucontext_t*>(context);
+-  // Matches X86_PF_WRITE in x86_pf_error_code.
+-  static constexpr greg_t kWriteAccessBit = 1;
+-  const bool write_access =
+-      ctx->uc_mcontext.gregs[REG_ERR] & (1 << kWriteAccessBit);
+-  if (!write_access) {
++  if (IsNonWriteCrash(context)) {
+     PrintToStderr(
+         "The sandbox violation was a *read* access which is technically not a "
+         "sandbox violation. This requires manual investigation.\n");
+   }
+-#endif  // V8_HOST_ARCH_X64
+ }
+ 
+ #ifdef V8_USE_ANY_SANITIZER
+@@ -942,6 +969,15 @@ void SanitizerFaultHandler() {
+     if (Sandbox::current()->Contains(faultaddr)) {
+       FilterCrash("Caught harmless ASan fault (inside sandbox).");
+     }
++
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++    if (g_external_strings_cage_region.contains(faultaddr) &&
++        __asan_get_report_access_type() == 0 /* READ */) {
++      FilterCrash(
++          "Caught harmless ASan fault (read access inside external strings "
++          "cage).");
++    }
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
+   }
+ #endif  // V8_USE_ADDRESS_SANITIZER
+ 
+diff --git a/src/strings/owning-external-string-resource.h b/src/strings/owning-external-string-resource.h
+new file mode 100644
+index 00000000000..53e1b6c70c7
+--- /dev/null
++++ b/src/strings/owning-external-string-resource.h
+@@ -0,0 +1,91 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef V8_STRINGS_OWNING_EXTERNAL_STRING_RESOURCE_H_
++#define V8_STRINGS_OWNING_EXTERNAL_STRING_RESOURCE_H_
++
++#include <stddef.h>
++#include <stdint.h>
++
++#include <memory>
++#include <string_view>
++
++#include "include/v8-primitive.h"
++#include "src/objects/string.h"
++#include "src/objects/tagged.h"
++
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++#include "src/init/isolate-group.h"
++#include "src/sandbox/external-strings-cage.h"
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++
++namespace v8::internal {
++
++// A simple implementation of an external string resource that uniquely owns the
++// string buffer.
++//
++// In fuzzing builds with memory corruption API, allocates the buffer from
++// ExternalStringsCage.
++
++template <typename CharT, typename StdCharT, typename FlatStringCharT,
++          typename Base>
++class OwningExternalStringResourceImpl : public Base {
++ public:
++  static_assert(sizeof(CharT) == sizeof(StdCharT));
++  static_assert(sizeof(CharT) == sizeof(FlatStringCharT));
++
++  explicit OwningExternalStringResourceImpl(
++      std::basic_string_view<StdCharT> source)
++      : length_(source.size()), storage_(CreateUninitializedStorage(length_)) {
++    source.copy(storage_.get(), length_);
++  }
++
++  explicit OwningExternalStringResourceImpl(Tagged<String> source)
++      : length_(source->length()),
++        storage_(CreateUninitializedStorage(length_)) {
++    String::WriteToFlat(source,
++                        reinterpret_cast<FlatStringCharT*>(storage_.get()), 0,
++                        static_cast<uint32_t>(length_));
++  }
++
++  OwningExternalStringResourceImpl(const OwningExternalStringResourceImpl&) =
++      delete;
++  OwningExternalStringResourceImpl& operator=(
++      const OwningExternalStringResourceImpl&) = delete;
++
++  ~OwningExternalStringResourceImpl() override = default;
++
++  const CharT* data() const override { return storage_.get(); }
++  size_t length() const override { return length_; }
++
++ private:
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++  using Storage = std::unique_ptr<CharT[], ExternalStringsCage::Deleter<CharT>>;
++#else   // V8_ENABLE_MEMORY_CORRUPTION_API
++  using Storage = std::unique_ptr<CharT[]>;
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++
++  static Storage CreateUninitializedStorage(size_t length) {
++#ifdef V8_ENABLE_MEMORY_CORRUPTION_API
++    return IsolateGroup::current()->external_strings_cage()->Allocate<CharT>(
++        length);
++#else   // V8_ENABLE_MEMORY_CORRUPTION_API
++    return std::make_unique_for_overwrite<CharT[]>(length);
++#endif  // V8_ENABLE_MEMORY_CORRUPTION_API
++  }
++
++  const size_t length_;
++  const Storage storage_;
++};
++
++using OwningExternalOneByteStringResource =
++    OwningExternalStringResourceImpl<char, char, uint8_t,
++                                     v8::String::ExternalOneByteStringResource>;
++using OwningExternalStringResource =
++    OwningExternalStringResourceImpl<base::uc16, char16_t, base::uc16,
++                                     v8::String::ExternalStringResource>;
++
++}  // namespace v8::internal
++
++#endif  // V8_STRINGS_OWNING_EXTERNAL_STRING_RESOURCE_H_
+-- 
+2.43.0
+

@@ -1,0 +1,3 @@
+Verified with `../../v8/crash_check.sh 430572435` using `out/x64.debug/d8` from `meta.json`.
+
+`output.txt` was refreshed from the canonical docker invocation and shows the expected debug check failure in `../../src/base/bit-field.h`, line 56, `is_valid(value)`, matching the reported Maglev inlining-metadata corruption crash.

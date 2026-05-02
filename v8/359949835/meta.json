@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:359949835",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--expose-gc --omit-quit --allow-natives-syntax --fuzzing --jit-fuzzing",
+  "target_source_files": [
+    "src/builtins/js-to-wasm.tq"
+  ],
+  "target_subdir": [
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's generic WebAssembly-to-JavaScript wrapper. The `WasmToJSObject` Torque macro in `src/builtins/js-to-wasm.tq` is responsible for converting wasm reference values into JavaScript objects when wasm calls an imported JS function. For the `anyref` (kAny) heap type, both in the nullable (kRefNull) and non-nullable (kRef) variants, the macro returns the wasm value as-is via `UnsafeCast<JSAny>(value)` without any runtime type checking. In WebAssembly's GC type system, `funcref` is a valid subtype of `anyref`, so a `WasmFuncRef` heap object (V8's internal representation of a wasm function reference) can legally appear as an anyref value at runtime. When wasm code calls an imported JavaScript function with an `anyref`-typed parameter and passes a funcref value, the WasmFuncRef escapes to JavaScript without being converted to a proper JSFunction via `WasmInternalFunction::GetOrCreateExternal`. JavaScript operations such as the `typeof` operator do not handle the `WASM_FUNC_REF_TYPE` instance type, causing V8 to abort with 'Unexpected instance type encountered'. The same logical flaw exists in the Turboshaft wrapper (`src/wasm/wrappers.cc`) and Turbofan wrapper (`src/compiler/wasm-compiler.cc`) `ToJS` functions, but the crash is triggered through the generic wrapper path (WasmToJsWrapperAsm -> WasmToJsWrapperCSA -> WasmToJSWrapper -> WasmToJSObject) which is active by default.",
+  "vrp": 8000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "aa2cbd9e4ed70238694e07f1c525941aa1e04429 [wasm][wrapper] Don't store converted references in arguments",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5804141",
+      "cl": 5804141,
+      "source_commit": "aa2cbd9e4ed70238694e07f1c525941aa1e04429",
+      "commit": "aa2cbd9e4ed70238694e07f1c525941aa1e04429",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/5804141 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5804141",
+      "source_cl": 5804141,
+      "source_ref": "refs/changes/41/5804141/4",
+      "source_patchset": 4
+    }
+  ]
+}

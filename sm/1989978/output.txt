@@ -1,0 +1,32 @@
+[10] Assertion failure: vp.isString(), at /src/gecko-dev/js/src/builtin/RawJSONObject.cpp:44
+#01: ???[/out/js +0x357674a]
+#02: ???[/out/js +0x30715a7]
+#03: ???[/out/js +0x3078eeb]
+#04: ???[/out/js +0x2f90293]
+#05: ???[/out/js +0x2f53316]
+#06: ???[/out/js +0x481a1c9]
+#07: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5fcd52167776 bp 0x7ffe5a377cb0 sp 0x7ffe5a377be0 T0)
+==10==The signal is caused by a WRITE memory access.
+==10==Hint: address points to the zero page.
+    #0 0x5fcd52167776 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:238:3
+    #1 0x5fcd52167776 in js::RawJSONObject::rawJSON(JSContext*) /src/gecko-dev/js/src/builtin/RawJSONObject.cpp:44:3
+    #2 0x5fcd51c625a6 in MaybeGetRawJSON(JSContext*, JSObject*) /src/gecko-dev/js/src/builtin/JSON.cpp:442:37
+    #3 0x5fcd51c625a6 in FastSerializeJSONProperty(JSContext*, JS::Handle<JS::Value>, (anonymous namespace)::StringifyContext*, BailReason*) /src/gecko-dev/js/src/builtin/JSON.cpp:1203:27
+    #4 0x5fcd51c625a6 in js::Stringify(JSContext*, JS::MutableHandle<JS::Value>, JSObject*, JS::Value const&, js::StringBuilder&, js::StringifyBehavior) /src/gecko-dev/js/src/builtin/JSON.cpp:1645:12
+    #5 0x5fcd51c69eea in json_stringify(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/JSON.cpp:2090:8
+    #6 0x5fcd51b81292 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #7 0x5fcd51b44315 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #8 0x5fcd5340b1c8 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1695:10
+    #9 0x19a58d15027e  (<unknown module>)
+
+==10==Register values:
+rax = 0x0000000000000000  rbx = 0x00000fffcb46ef7c  rcx = 0x000000000000002c  rdx = 0x0000000000000000  
+rdi = 0x00005fcd559fa890  rsi = 0x00007ffe5a377b98  rbp = 0x00007ffe5a377cb0  rsp = 0x00007ffe5a377be0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007ffe5a377c40  r13 = 0x00006f50fd2e0080  r14 = 0x00001cdb89800bf0  r15 = 0x00006d60fa82b960  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:238:3 in MOZ_CrashSequence(void*, long)
+==10==ABORTING

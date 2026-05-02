@@ -1,0 +1,3 @@
+Verified with `out/x64.asan/d8 --experimental-wasm-custom-descriptors poc.js` in `hwiwonlee/v8.x86_64:446122633`.
+
+`../../v8/crash_check.sh 446122633` eventually reports `CONFIMRED: RUNTIME_CRASH`, and a direct run reproduces `SEGV_ACCERR 0x4242424242...` from the Wasm type-confusion PoC under the exact report flag. `output.txt` is refreshed from that standalone run.

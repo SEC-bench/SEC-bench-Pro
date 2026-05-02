@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446124893",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--experimental-wasm-custom-descriptors",
+  "target_source_files": [
+    "src/wasm/function-body-decoder-impl.h"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's implementation of `ref.get_desc` because it propagates the exactness of the input reference while deriving the result type from the encoded immediate type's descriptor. This unsound rule can type a descriptor of subtype `y'` as exact supertype `y`, letting attackers instantiate one described struct as if it carried another type's descriptor and then cast between unrelated Wasm types. The resulting type confusion can be exploited for arbitrary caged writes within the sandbox.",
+  "vrp": "55000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 220,
+      "evidence_text": "Fixed: 446124893; Reviewed-on: CL 6973586",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973586",
+      "cl": 6973586,
+      "commit": "48c3551179299151b044b2c161566465497c0407",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6973586 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973586",
+      "source_cl": 6973586,
+      "source_commit": "48c3551179299151b044b2c161566465497c0407",
+      "source_ref": "refs/changes/86/6973586/5",
+      "source_patchset": 5
+    }
+  ]
+}

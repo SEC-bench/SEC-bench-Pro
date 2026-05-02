@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:401732698",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-fuzzing",
+  "target_source_files": [
+    "src/common/ptr-compr-inl.h",
+    "src/common/ptr-compr.h",
+    "src/objects/tagged-field-inl.h"
+  ],
+  "target_subdir": [
+    "src/common",
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A type confusion vulnerability exists in V8's pointer-compression helpers because they used `V8_ASSUME` on tag conditions for values loaded from sandbox memory. If an attacker corrupts a field that is assumed to contain a Smi-tagged compressed value, helpers in `src/common/ptr-compr*.h` and `src/objects/tagged-field-inl.h` can enter undefined behavior during decompression and then dereference an invalid pointer without a real bounds or type check. The root cause is trusting sandbox-controlled tag bits in these low-level pointer and tagged-field decoding helpers.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6402513 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "b887b9161acac9d1b13dee460d045e8a55d93b27 [ptr-compr] Replace V8_ASSUME with DCHECK",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6402513",
+      "source_cl": 6402513,
+      "source_commit": "b887b9161acac9d1b13dee460d045e8a55d93b27"
+    }
+  ]
+}

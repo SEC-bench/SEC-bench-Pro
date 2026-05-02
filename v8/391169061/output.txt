@@ -1,0 +1,16 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 424242424240
+
+==== C stack trace ===============================
+
+out/x64.release/d8(+0x191fa97)[0x5a1c7c08ba97]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7fbd123ae330]
+out/x64.release/d8(+0x91c2f3)[0x5a1c7b0882f3]
+out/x64.release/d8(+0x955e6d)[0x5a1c7b0c1e6d]
+out/x64.release/d8(+0xbd8574)[0x5a1c7b344574]
+out/x64.release/d8(+0x177ca76)[0x5a1c7bee8a76]
+[end of stack trace]
+Segmentation fault (core dumped)

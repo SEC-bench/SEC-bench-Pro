@@ -1,0 +1,24 @@
+[13] Assertion failure: isNativeProperty(), at /src/gecko-dev/js/src/vm/PropertyResult.h:66
+#01: ???[/out/js +0x36337cd]
+#02: ???[/out/js +0x4ee0399]
+#03: ???[/out/js +0x480f9ea]
+#04: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5c6b59f1d7f5 bp 0x7ffd153b7d10 sp 0x7ffd153b7d10 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5c6b59f1d7f5 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x5c6b59f1d7f5 in js::PropertyResult::propertyInfo() const /src/gecko-dev/js/src/vm/PropertyResult.h:66:5
+    #2 0x5c6b5b7ca398 in js::jit::SetPropIRGenerator::tryAttachAddSlotStub(JS::Handle<js::Shape*>) /src/gecko-dev/js/src/jit/CacheIR.cpp:5604:32
+    #3 0x5c6b5b0f99e9 in js::jit::DoSetPropFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Value*, JS::Handle<JS::Value>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1539:35
+    #4 0x6d34786c60e5  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffd153b83b0  rcx = 0x0000000000000042  rdx = 0x0000000000000000  
+rdi = 0x00005c6b5d6dde90  rsi = 0x00007ffd153b7cc8  rbp = 0x00007ffd153b7d10  rsp = 0x00007ffd153b7d10  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fffa2a76fb0  r13 = 0x00000fffa2a770a9  r14 = 0x00007ffd153b7da0  r15 = 0x00007ffd153b8548  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

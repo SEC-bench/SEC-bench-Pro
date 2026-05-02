@@ -1,0 +1,162 @@
+From 0995847692570d46684b778af517a08c09748184 Mon Sep 17 00:00:00 2001
+From: Matthew Gaudet <mgaudet@mozilla.com>
+Date: Tue, 4 Feb 2025 16:21:20 +0000
+Subject: [PATCH] Bug 1945318 - Don't try to reparent an empty stack r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D236587
+---
+ js/src/jit-test/tests/errors/bug1945318.js    | 21 ++++
+ .../tests/errors/capture-stack-async.js       | 96 +++++++++++++++++++
+ js/src/vm/SavedStacks.cpp                     |  6 +-
+ 3 files changed, 122 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/errors/bug1945318.js
+ create mode 100644 js/src/jit-test/tests/errors/capture-stack-async.js
+
+diff --git a/js/src/jit-test/tests/errors/bug1945318.js b/js/src/jit-test/tests/errors/bug1945318.js
+new file mode 100644
+index 0000000000000..892ef9e69b21a
+--- /dev/null
++++ b/js/src/jit-test/tests/errors/bug1945318.js
+@@ -0,0 +1,21 @@
++// |jit-test| --setpref=experimental.error_capture_stack_trace
++function not_called() {
++
++}
++
++let obj = {};
++function* a() {
++    yield {}; // Need to be past initial yield
++    Error.captureStackTrace(obj, not_called);
++}
++
++async function b() {
++    let g = a();
++    await g.next();
++    await g.next();
++}
++
++b().then(() => {
++    assertEq('stack' in obj, true);
++    assertEq(obj.stack, "");
++})
+diff --git a/js/src/jit-test/tests/errors/capture-stack-async.js b/js/src/jit-test/tests/errors/capture-stack-async.js
+new file mode 100644
+index 0000000000000..cc0330c5bc83e
+--- /dev/null
++++ b/js/src/jit-test/tests/errors/capture-stack-async.js
+@@ -0,0 +1,96 @@
++// |jit-test|  --setpref=experimental.error_capture_stack_trace;
++
++function test_async_reparenting_with_filter() {
++    let obj = {};
++    let err = undefined;
++
++    async function caller(callee) {
++        return callee();
++    }
++
++
++    async function* a() {
++        yield {};
++        Error.captureStackTrace(obj, caller)
++        err = new Error;
++        yield {};
++    }
++
++    async function b() {
++        return { a: 10 }
++    }
++
++
++    b().then(async () => {
++        caller(async () => {
++            let g = a();
++            await g.next();
++            await g.next();
++            await g.next();
++        })
++    }).then(() => {
++        // Note: No browser is re-parenting a stack and then filtering.
++        //       So Safari & Chrome both report empty stacks for obj, where
++        //       the stack obtained through Error is re-parented.
++        //
++        // Chrome 132:
++        // Error
++        //    at a (<anonymous>:12:11)
++        //    at a.next (<anonymous>)
++        //    at <anonymous>:24:17
++        //
++        // Safari
++        //  @
++        //  @
++        //
++        console.log("Capture: ")
++        console.log(obj.stack);
++        console.log("Stack")
++        console.log(err.stack);
++        assertEq(obj.stack, "");
++        assertEq(err.stack == "", false);
++    })
++}
++test_async_reparenting_with_filter();
++
++
++
++function test_async_reparenting_without_filter() {
++    let obj = {};
++    let err = undefined;
++
++    async function caller(callee) {
++        return callee();
++    }
++
++
++    async function* a() {
++        yield {};
++        Error.captureStackTrace(obj)
++        err = new Error;
++        yield {};
++    }
++
++    async function b() {
++        return { a: 10 }
++    }
++
++
++    b().then(async () => {
++        caller(async () => {
++            let g = a();
++            await g.next();
++            await g.next();
++            await g.next();
++        })
++    }).then(() => {
++        // Note: In the shell we re-parent this stack and so get the same
++        // stack as the Error getter.
++        console.log("Capture: ")
++        console.log(obj.stack);
++        console.log("Stack")
++        console.log(err.stack);
++        assertEq(obj.stack.length, err.stack.length);
++    })
++}
++test_async_reparenting_without_filter();
+diff --git a/js/src/vm/SavedStacks.cpp b/js/src/vm/SavedStacks.cpp
+index 5ef9b5312c725..c7e9b54e3ebc4 100644
+--- a/js/src/vm/SavedStacks.cpp
++++ b/js/src/vm/SavedStacks.cpp
+@@ -1594,9 +1594,13 @@ bool SavedStacks::insertFrames(JSContext* cx, MutableHandle<SavedFrame*> frame,
+     // stack.
+     //
+     // Captures using FirstSubsumedFrame expect us to ignore async parents.
++    //
++    // If we're censoring the stack for Error.captureStackTrace we also
++    // don't want to re-parent an empty stack trace, so make sure
++    // we actually saw a frame.
+     if (iter.activation() != &activation && activation.asyncStack() &&
+         (activation.asyncCallIsExplicit() || iter.done()) &&
+-        !capture.is<JS::FirstSubsumedFrame>()) {
++        !capture.is<JS::FirstSubsumedFrame>() && seenStartAt) {
+       // Atomize the async cause string. There should only be a few
+       // different strings used.
+       const char* cause = activation.asyncCause();

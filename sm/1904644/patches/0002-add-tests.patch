@@ -1,0 +1,101 @@
+From ceb01a751fdebfaf366348a78f84db48fc4d46f5 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 11 Sep 2024 15:55:19 +0000
+Subject: [PATCH] Bug 1904644 - Add tests. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D214960
+---
+ .../tests/wasm/exceptions/bug1904644-1.js     | 37 ++++++++++++++++++
+ .../tests/wasm/exceptions/bug1904644-2.js     | 39 +++++++++++++++++++
+ 2 files changed, 76 insertions(+)
+ create mode 100644 js/src/jit-test/tests/wasm/exceptions/bug1904644-1.js
+ create mode 100644 js/src/jit-test/tests/wasm/exceptions/bug1904644-2.js
+
+diff --git a/js/src/jit-test/tests/wasm/exceptions/bug1904644-1.js b/js/src/jit-test/tests/wasm/exceptions/bug1904644-1.js
+new file mode 100644
+index 0000000000000..7eedab0164fcf
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/exceptions/bug1904644-1.js
+@@ -0,0 +1,37 @@
++function test() {
++    var throwExc = false;
++    var e = {m: {foreign() {
++        if (throwExc) {
++            throw new TypeError("hi");
++        }
++    }}};
++    var bin = wasmTextToBinary(`
++    (module
++        (import "m" "foreign" (func $foreign))
++        (func
++            (export "f")
++            try
++                (call $foreign)
++            end
++        )
++    )`);
++    var mod = new WebAssembly.Module(bin);
++    var inst = new WebAssembly.Instance(mod, e);
++    for (var i = 0; i < 30; i++) {
++        if (i === 20) {
++            throwExc = true;
++        }
++        var ex = null;
++        try {
++            inst.exports.f();
++        } catch (e) {
++            ex = e;
++        }
++        if (i >= 20) {
++            assertEq(ex.message, "hi");
++        } else {
++            assertEq(ex, null);
++        }
++    }
++}
++test();
+diff --git a/js/src/jit-test/tests/wasm/exceptions/bug1904644-2.js b/js/src/jit-test/tests/wasm/exceptions/bug1904644-2.js
+new file mode 100644
+index 0000000000000..02312f3df87ca
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/exceptions/bug1904644-2.js
+@@ -0,0 +1,39 @@
++function test() {
++    var throwExc = false;
++    var e = {m: {foreign() {
++        if (throwExc) {
++            throw new TypeError("hi");
++        }
++    }}};
++    var bin = wasmTextToBinary(`
++    (module
++        (import "m" "foreign" (func $foreign))
++        (func
++            (export "f")
++            (param i32)
++            (result i32)
++            (local i32)
++            try
++                call $foreign
++                local.get 0
++                local.set 1
++            catch_all
++                i32.const 12345
++                local.get 0
++                i32.add
++                local.set 1
++            end
++            local.get 1
++        )
++    )`);
++    var mod = new WebAssembly.Module(bin);
++    var inst = new WebAssembly.Instance(mod, e);
++    for (var i = 0; i < 30; i++) {
++        if (i === 20) {
++            throwExc = true;
++        }
++        var res = inst.exports.f(i);
++        assertEq(res, throwExc ? (12345 + i) : i);
++    }
++}
++test();

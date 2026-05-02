@@ -1,0 +1,89 @@
+Assertion failure: this->flags() == 0, at /src/gecko-dev/js/src/gc/Cell.h:836
+#01: JSObject::zoneFromAnyThread() const[/out/js +0x2713046]
+#02: js::MovableCellHasher<JSObject*>::match(JSObject* const&, JSObject* const&)[/out/js +0x3da99fc]
+#03: ???[/out/js +0x34ba6b8]
+#04: ???[/out/js +0x34ba166]
+#05: ???[/out/js +0x3db6221]
+#06: ???[/out/js +0x3d520a4]
+#07: ???[/out/js +0x3d54963]
+#08: ???[/out/js +0x3d53da5]
+#09: ???[/out/js +0x3d4cac0]
+#10: ???[/out/js +0x3d45ad2]
+#11: ???[/out/js +0x3d4437d]
+#12: ???[/out/js +0x3d8b2d7]
+#13: ???[/out/js +0x3d91dae]
+#14: ???[/out/js +0x3d94c78]
+#15: ???[/out/js +0x3d3a2c6]
+#16: JSRuntime::onOutOfMemoryCanGC(js::AllocFunction, unsigned long, unsigned long, void*)[/out/js +0x30a9b3b]
+#17: ???[/out/js +0x345b2a1]
+#18: ???[/out/js +0x28e6592]
+#19: ???[/out/js +0x28c6749]
+#20: ???[/out/js +0x28ac599]
+#21: ???[/out/js +0x2898b90]
+#22: ???[/out/js +0x28cc2b0]
+#23: ???[/out/js +0x28ccc7a]
+#24: ???[/out/js +0x2ba8271]
+#25: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x2ba87ac]
+#26: ???[/out/js +0x270663a]
+#27: ???[/out/js +0x2705171]
+#28: ???[/out/js +0x2681e60]
+#29: ???[/out/js +0x26771b6]
+#30: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#31: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#32: ???[/out/js +0x257a309]
+#33: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5cc6a07f818f bp 0x7ffe45c18dd0 sp 0x7ffe45c18dd0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5cc6a07f818f in js::gc::CellWithTenuredGCPointer<js::gc::Cell, js::Shape>::headerPtr() const /src/gecko-dev/js/src/gc/Cell.h:836:5
+    #1 0x5cc6a07f818f in JSObject::shape() const /src/gecko-dev/js/src/vm/JSObject.h:91:37
+    #2 0x5cc6a07f818f in JSObject::zoneFromAnyThread() const /src/gecko-dev/js/src/vm/JSObject.h
+    #3 0x5cc6a1e8e9fb in js::MovableCellHasher<JSObject*>::match(JSObject* const&, JSObject* const&) /src/gecko-dev/js/src/gc/Barrier.cpp:120:19
+    #4 0x5cc6a159f6b7 in js::MovableCellHasher<js::HeapPtr<JSObject*>>::match(js::HeapPtr<JSObject*> const&, JSObject* const&) /src/gecko-dev/js/src/gc/Barrier.h:1165:12
+    #5 0x5cc6a159f6b7 in mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>, js::MovableCellHasher<js::HeapPtr<JSObject*>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::match(mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>&, JSObject* const&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:1737:12
+    #6 0x5cc6a159f6b7 in mozilla::detail::EntrySlot<mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>> mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>, js::MovableCellHasher<js::HeapPtr<JSObject*>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::lookup<(mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>, js::MovableCellHasher<js::HeapPtr<JSObject*>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::LookupReason)1>(JSObject* const&, unsigned int) const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:1767:37
+    #7 0x5cc6a159f165 in mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>, js::MovableCellHasher<js::HeapPtr<JSObject*>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::lookupForAdd(JSObject* const&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2106:19
+    #8 0x5cc6a1e9b220 in mozilla::HashMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>, js::MovableCellHasher<js::HeapPtr<JSObject*>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::lookupForAdd(JSObject* const&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:337:18
+    #9 0x5cc6a1e9b220 in js::WeakMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>::lookupForAdd(JSObject* const&) /src/gecko-dev/js/src/gc/WeakMap.h:222:22
+    #10 0x5cc6a1e370a3 in js::gc::FinalizationObservers::removeCrossZoneWrapper(js::WeakMap<js::HeapPtr<JSObject*>, js::HeapPtr<JS::Value>>&, JSObject*) /src/gecko-dev/js/src/gc/FinalizationObservers.cpp:141:22
+    #11 0x5cc6a1e39962 in js::gc::FinalizationObservers::updateForRemovedRecord(JSObject*, js::FinalizationRecordObject*) /src/gecko-dev/js/src/gc/FinalizationObservers.cpp:268:5
+    #12 0x5cc6a1e38da4 in js::gc::FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer*)::$_0::operator()(js::HeapPtr<JSObject*>&) const /src/gecko-dev/js/src/gc/FinalizationObservers.cpp:224:9
+    #13 0x5cc6a1e38da4 in void JS::GCVector<js::HeapPtr<JSObject*>, 1ul, js::TrackedAllocPolicy<(js::TrackingKind)1>>::mutableEraseIf<js::gc::FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer*)::$_0>(js::gc::FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer*)::$_0) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:183:12
+    #14 0x5cc6a1e38da4 in js::gc::FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer*) /src/gecko-dev/js/src/gc/FinalizationObservers.cpp:215:13
+    #15 0x5cc6a1e31abf in js::gc::GCRuntime::sweepZoneAfterCompacting(js::gc::MovingTracer*, JS::Zone*) /src/gecko-dev/js/src/gc/Compacting.cpp:458:3
+    #16 0x5cc6a1e2aad1 in js::gc::GCRuntime::updateZonePointersToRelocatedCells(JS::Zone*) /src/gecko-dev/js/src/gc/Compacting.cpp:778:3
+    #17 0x5cc6a1e2937c in js::gc::GCRuntime::compactPhase(JS::GCReason, js::SliceBudget&, js::gc::AutoGCSession&) /src/gecko-dev/js/src/gc/Compacting.cpp:90:7
+    #18 0x5cc6a1e702d6 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3748:13
+    #19 0x5cc6a1e76dad in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4212:3
+    #20 0x5cc6a1e79c77 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4400:9
+    #21 0x5cc6a1e1f2c5 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4477:3
+    #22 0x5cc6a118eb3a in JSRuntime::onOutOfMemoryCanGC(js::AllocFunction, unsigned long, unsigned long, void*) /src/gecko-dev/js/src/vm/Runtime.cpp:703:5
+    #23 0x5cc6a15402a0 in ReportLargeAllocationFailure(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:5720:30
+    #24 0x5cc6a09cb591 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:459:13
+    #25 0x5cc6a09ab748 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:553:12
+    #26 0x5cc6a0991598 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:625:10
+    #27 0x5cc6a0991598 in Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3368:16
+    #28 0x5cc6a097db8f in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:431:13
+    #29 0x5cc6a09b12af in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:818:13
+    #30 0x5cc6a09b1c79 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #31 0x5cc6a0c8d270 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:472:10
+    #32 0x5cc6a0c8d7ab in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:496:10
+    #33 0x5cc6a07eb639 in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1098:10
+    #34 0x5cc6a07ea170 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #35 0x5cc6a0766e5f in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10577:10
+    #36 0x5cc6a0766e5f in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10801:12
+    #37 0x5cc6a075c1b5 in main /src/gecko-dev/js/src/shell/js.cpp:11233:12
+    #38 0x73a8145d01c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #39 0x73a8145d028a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #40 0x5cc6a065f308 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x257a308) (BuildId: ad472893580b4737b95e5f9f54e30596)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffe45c18e60  rcx = 0x00005cc69ea84a20  rdx = 0x0000000000000000  
+rdi = 0x00005cc6a4484ad0  rsi = 0x00007ffe45c18d88  rbp = 0x00007ffe45c18dd0  rsp = 0x00007ffe45c18dd0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000002  r13 = 0x00000fffc8b83220  r14 = 0x00007ffe45c18de0  r15 = 0x00000fffc8b831bc  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Cell.h:836:5 in js::gc::CellWithTenuredGCPointer<js::gc::Cell, js::Shape>::headerPtr() const
+==13==ABORTING

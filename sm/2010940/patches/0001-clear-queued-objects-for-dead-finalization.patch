@@ -1,0 +1,111 @@
+From 2e29a3d3d930453174717fd963413492a80b31ec Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Mon, 26 Jan 2026 12:50:32 +0000
+Subject: [PATCH] Bug 2010940 - Clear queued objects for dead finalization
+ registries during sweep r=sfink
+
+What's happening here is that a FinalizationQueueObject is surviving a GC in
+which its owning FinalizationRegistryObject object dies. I think this happens
+because it gets queued for cleanup but the next GC happens before this runs.
+The queue ends up containing dangling pointers to dead
+FinalizationRecordObjects and this causes a UAF when we attempt to access them.
+
+The problem is that we don't have a read barrier when we take a weak pointer to
+a finalization record and make it strong by adding it to the queue of records
+to clean up. It's not really feasible to add one here either since we may have
+finished marking at this point. Instead we can clear any queued records when we
+notice that a registy is dead, removing any that may be about to die. (The
+records are in the same zone as the registry so they won't be destroyed before
+this happens).
+
+Differential Revision: https://phabricator.services.mozilla.com/D279644
+---
+ js/src/builtin/FinalizationRegistryObject.cpp | 11 ++++++++++-
+ js/src/builtin/FinalizationRegistryObject.h   |  1 +
+ js/src/gc/FinalizationObservers.cpp           | 14 ++++++++++++++
+ 3 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/js/src/builtin/FinalizationRegistryObject.cpp b/js/src/builtin/FinalizationRegistryObject.cpp
+index cfe546ec5fb66..480cd28284f4b 100644
+--- a/js/src/builtin/FinalizationRegistryObject.cpp
++++ b/js/src/builtin/FinalizationRegistryObject.cpp
+@@ -720,6 +720,13 @@ void FinalizationQueueObject::setHasRegistry(bool newValue) {
+   setReservedSlot(HasRegistrySlot, BooleanValue(newValue));
+ }
+ 
++void FinalizationQueueObject::clear() {
++  MOZ_ASSERT(!hasRegistry());
++  if (FinalizationRecordVector* records = recordsToBeCleanedUp()) {
++    records->clear();
++  }
++}
++
+ bool FinalizationQueueObject::hasRegistry() const {
+   return getReservedSlot(HasRegistrySlot).toBoolean();
+ }
+@@ -825,9 +832,11 @@ bool FinalizationQueueObject::cleanupQueuedRecords(
+   //    b. Remove cell from finalizationRegistry.[[Cells]].
+   //    c. Perform ? Call(callback, undefined, « cell.[[HeldValue]] »).
+ 
++  FinalizationRecordVector* records = queue->recordsToBeCleanedUp();
++  MOZ_ASSERT_IF(!queue->hasRegistry(), records->empty());
++
+   RootedValue heldValue(cx);
+   RootedValue rval(cx);
+-  FinalizationRecordVector* records = queue->recordsToBeCleanedUp();
+   while (!records->empty()) {
+     FinalizationRecordObject* record = records->popCopy();
+     MOZ_ASSERT(!record->isInRecordMap());
+diff --git a/js/src/builtin/FinalizationRegistryObject.h b/js/src/builtin/FinalizationRegistryObject.h
+index 42c2781ca5795..b19d2cb04fdc7 100644
+--- a/js/src/builtin/FinalizationRegistryObject.h
++++ b/js/src/builtin/FinalizationRegistryObject.h
+@@ -233,6 +233,7 @@ class FinalizationQueueObject : public NativeObject {
+   void setQueuedForCleanup(bool value);
+ 
+   void setHasRegistry(bool newValue);
++  void clear();
+ 
+   static FinalizationQueueObject* create(JSContext* cx,
+                                          HandleObject cleanupCallback);
+diff --git a/js/src/gc/FinalizationObservers.cpp b/js/src/gc/FinalizationObservers.cpp
+index b67f07890a92c..47112af8abd0e 100644
+--- a/js/src/gc/FinalizationObservers.cpp
++++ b/js/src/gc/FinalizationObservers.cpp
+@@ -375,6 +375,11 @@ void FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer* trc) {
+     if (result.isDead()) {
+       auto* registry = result.initialTarget();
+       registry->queue()->setHasRegistry(false);
++
++      // Remove any queued records. These might be dead since the registry was
++      // not marked.
++      registry->queue()->clear();
++
+       e.removeFront();
+     } else {
+       FinalizationRegistryObject* registry = result.finalTarget();
+@@ -414,8 +419,16 @@ void FinalizationObservers::traceWeakFinalizationRegistryEdges(JSTracer* trc) {
+         auto* record = &iter->as<FinalizationRecordObject>();
+         record->setInRecordMap(false);
+         record->unlink();
++
++        // Move the record to the queue object. In theory this requires a read
++        // barrier since the record pointer is weak. However we have may have
++        // finished marking the record's zone at this point so this is not
++        // possible. Instead note that the record will be marked if the registry
++        // is alive. If not then we clear any queued records when we discover
++        // the the registry is dead above.
+         FinalizationQueueObject* queue = record->queue();
+         queue->queueRecordToBeCleanedUp(record);
++
+         if (shouldQueueFinalizationRegistryForCleanup(queue)) {
+           gc->queueFinalizationRegistryForCleanup(queue);
+         }
+@@ -435,6 +448,7 @@ bool FinalizationObservers::shouldQueueFinalizationRegistryForCleanup(
+   //
+   // In this case we defer queuing the registry and this happens when the
+   // registry is swept.
++  MOZ_ASSERT(queue->hasRegistry());
+   Zone* zone = queue->zone();
+   return !zone->wasGCStarted() || zone->gcState() >= Zone::Sweep;
+ }

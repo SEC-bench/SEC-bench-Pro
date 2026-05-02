@@ -1,0 +1,36 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1942648",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CodeGenerator.cpp",
+        "js/src/jit/LIROps.yaml",
+        "js/src/jit/Lowering.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off --fast-warmup",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion MSign lowering type confusion - Int32-input/Double-output Math.sign lowering could allocate the result in the wrong register class. The fix spans js/src/jit/Lowering.cpp, LIROps.yaml, and CodeGenerator.cpp, adding an explicit LIR/codegen path for the Int32-to-Double MSign case. Before the fix, lowering could use a general-purpose register where a floating-point result was expected, leaving stale xmm data to be interpreted as a JS::Value and producing type confusion.",
+    "fix_commits": [
+        "5b061cdc4d40d44988dc61aa941cfbd98e31791f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-support-msign-with-int32-input-and-double.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1942648: Support MSign with Int32 input and Double",
+            "source_commit": "5b061cdc4d40d44988dc61aa941cfbd98e31791f",
+            "commit": "5b061cdc4d40d44988dc61aa941cfbd98e31791f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/5b061cdc4d40d44988dc61aa941cfbd98e31791f",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/5b061cdc4d40d44988dc61aa941cfbd98e31791f",
+            "phabricator": "D234936"
+        }
+    ],
+    "vrp": null
+}

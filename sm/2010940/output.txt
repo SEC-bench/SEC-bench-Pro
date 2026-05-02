@@ -1,0 +1,88 @@
+[13] Assertion failure: kind == JS::TracerKind::Tenuring || kind == JS::TracerKind::MinorSweeping || kind == JS::TracerKind::Moving || kind == JS::TracerKind::HeapCheck, at /src/gecko-dev/js/src/gc/Marking.cpp:144
+#01: ???[/out/js +0x3c5357a]
+#02: ???[/out/js +0x3169aab]
+#03: ???[/out/js +0x3c420f3]
+#04: ???[/out/js +0x3cc3941]
+#05: ???[/out/js +0x3cc22fc]
+#06: ???[/out/js +0x3c6760f]
+#07: ???[/out/js +0x3bd662c]
+#08: ???[/out/js +0x3bd39c7]
+#09: ???[/out/js +0x3bdecc9]
+#10: ???[/out/js +0x3be6eaa]
+#11: ???[/out/js +0x3bea018]
+#12: ???[/out/js +0x3bbba4d]
+#13: ???[/out/js +0x3b69f1f]
+#14: ???[/out/js +0x30a912e]
+#15: ???[/out/js +0x30a8a48]
+#16: ???[/out/js +0x30a8249]
+#17: ???[/out/js +0x560796b]
+#18: ???[/out/js +0x5607e42]
+#19: ???[/out/js +0x3164f06]
+#20: ???[/out/js +0x4f4d823]
+#21: ???[/out/js +0x4f53b9f]
+#22: ???[/out/js +0x4f15406]
+#23: ???[/out/js +0x4f16016]
+#24: js::ForwardingProxyHandler::construct(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x4ee2eec]
+#25: js::CrossCompartmentWrapper::construct(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x4eb2e62]
+#26: ???[/out/js +0x4ec1e95]
+#27: ???[/out/js +0x4f1550a]
+#28: ???[/out/js +0x4f16016]
+#29: ???[/out/js +0x4303671]
+#30: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x654dcb40c5a6 bp 0x7ffc978a6c60 sp 0x7ffc978a6c10 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x654dcb40c5a6 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x654dcb40c5a6 in void js::CheckTracedThing<JSObject>(JSTracer*, JSObject*) /src/gecko-dev/js/src/gc/Marking.cpp:141:5
+    #2 0x654dca922aaa in js::gc::TraceEdgeInternal(JSTracer*, JSObject**, char const*) /src/gecko-dev/js/src/gc/Tracer.h:110:1
+    #3 0x654dca922aaa in void js::TraceEdge<js::FinalizationRecordObject*>(JSTracer*, js::WriteBarriered<js::FinalizationRecordObject*> const*, char const*) /src/gecko-dev/js/src/gc/Tracer.h:148:3
+    #4 0x654dca922aaa in void js::TraceNullableEdge<js::FinalizationRecordObject*>(JSTracer*, js::WriteBarriered<js::FinalizationRecordObject*> const*, char const*) /src/gecko-dev/js/src/gc/Tracer.h:186:5
+    #5 0x654dca922aaa in JS::GCPolicy<js::HeapPtr<js::FinalizationRecordObject*>>::trace(JSTracer*, js::HeapPtr<js::FinalizationRecordObject*>*, char const*) /src/gecko-dev/js/src/gc/Policy.h:54:5
+    #6 0x654dca922aaa in JS::GCVector<js::HeapPtr<js::FinalizationRecordObject*>, 1ul, js::TrackedAllocPolicy<(js::TrackingKind)0>>::trace(JSTracer*) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:175:7
+    #7 0x654dca922aaa in js::FinalizationQueueObject::trace(JSTracer*, JSObject*) /src/gecko-dev/js/src/builtin/FinalizationRegistryObject.cpp:702:14
+    #8 0x654dcb3fb0f2 in JSClass::doTrace(JSTracer*, JSObject*) const /src/gecko-dev/obj-debug-asan/dist/include/js/Class.h:667:5
+    #9 0x654dcb3fb0f2 in CallTraceHook(JSTracer*, JSObject*) /src/gecko-dev/js/src/gc/Marking.cpp:1247:12
+    #10 0x654dcb47c940 in bool js::GCMarker::processMarkStackTop<0u>(JS::SliceBudget&) /src/gecko-dev/js/src/gc/Marking.cpp:1639:3
+    #11 0x654dcb47b2fb in bool js::GCMarker::markOneColor<0u, (js::gc::MarkColor)2>(JS::SliceBudget&) /src/gecko-dev/js/src/gc/Marking.cpp:1347:10
+    #12 0x654dcb42060e in bool js::GCMarker::doMarking<0u>(JS::SliceBudget&, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/Marking.cpp:1314:29
+    #13 0x654dcb38f62b in js::GCMarker::markUntilBudgetExhausted(JS::SliceBudget&, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/Marking.cpp:1305:10
+    #14 0x654dcb38c9c6 in js::gc::GCRuntime::markUntilBudgetExhausted(JS::SliceBudget&, js::gc::GCRuntime::ParallelMarking, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/GC.cpp:3344:19
+    #15 0x654dcb397cc8 in js::gc::GCRuntime::incrementalSlice(JS::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:4034:13
+    #16 0x654dcb39fea9 in js::gc::GCRuntime::gcCycle(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4634:3
+    #17 0x654dcb3a3017 in js::gc::GCRuntime::collect(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4823:9
+    #18 0x654dcb374a4c in js::gc::GCRuntime::gcIfRequestedImpl(bool) /src/gecko-dev/js/src/gc/GC.cpp:5137:5
+    #19 0x654dcb322f1e in js::gc::GCRuntime::gcIfRequested() /src/gecko-dev/js/src/gc/GCRuntime.h:332:33
+    #20 0x654dcb322f1e in MajorGCIfRequested(JSContext*) /src/gecko-dev/js/src/gc/Allocator.cpp:136:23
+    #21 0x654dcb322f1e in void* js::gc::CellAllocator::AllocTenuredCellForNurseryAlloc<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:144:5
+    #22 0x654dca86212d in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:221:10
+    #23 0x654dca861a47 in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:112:16
+    #24 0x654dca861248 in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #25 0x654dca861248 in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:379:10
+    #26 0x654dca861248 in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:482:28
+    #27 0x654dccdc096a in NewObject(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/JSObject.cpp:764:23
+    #28 0x654dccdc0e41 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject.cpp:809:10
+    #29 0x654dca91df05 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject-inl.h:433:10
+    #30 0x654dca91df05 in js::FinalizationRegistryObject* js::NewObjectWithClassProto<js::FinalizationRegistryObject>(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/JSObject-inl.h:439:19
+    #31 0x654dca91df05 in js::FinalizationRegistryObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/FinalizationRegistryObject.cpp:233:11
+    #32 0x654dcc706822 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #33 0x654dcc70cb9e in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:508:8
+    #34 0x654dcc6ce405 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:714:14
+    #35 0x654dcc6cf015 in js::Construct(JSContext*, JS::Handle<JS::Value>, js::AnyConstructArgs const&, JS::Handle<JS::Value>, JS::MutableHandle<JSObject*>) /src/gecko-dev/js/src/vm/Interpreter.cpp:774:8
+    #36 0x654dcc69beeb in js::ForwardingProxyHandler::construct(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/Wrapper.cpp:186:8
+    #37 0x654dcc66be61 in js::CrossCompartmentWrapper::construct(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:252:19
+    #38 0x654dcc67ae94 in js::Proxy::construct(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) /src/gecko-dev/js/src/proxy/Proxy.cpp:723:19
+    #39 0x654dcc6ce509 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:727:12
+    #40 0x654dcc6cf015 in js::Construct(JSContext*, JS::Handle<JS::Value>, js::AnyConstructArgs const&, JS::Handle<JS::Value>, JS::MutableHandle<JSObject*>) /src/gecko-dev/js/src/vm/Interpreter.cpp:774:8
+    #41 0x654dcbabc670 in js::jit::InvokeFunction(JSContext*, JS::Handle<JSObject*>, bool, bool, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/VMFunctions.cpp:542:12
+    #42 0x30cb02c1f71d  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x000015bae1cb0040  rcx = 0x0000000000000090  rdx = 0x0000000000000000  
+rdi = 0x0000654dce790590  rsi = 0x00007ffc978a6bc8  rbp = 0x00007ffc978a6c60  rsp = 0x00007ffc978a6c10  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007a1812ce0200  r13 = 0xfffffffffffffff0  r14 = 0x00000f218259cf3f  r15 = 0xfffffffffffffff8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

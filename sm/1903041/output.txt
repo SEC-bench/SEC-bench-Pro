@@ -1,0 +1,66 @@
+[13] Assertion failure: superSTV, at /src/gecko-dev/js/src/wasm/WasmTypeDef.h:872
+#01: ???[/out/js +0x5735944]
+#02: ???[/out/js +0x573493e]
+#03: ???[/out/js +0x5d9719f]
+#04: ???[/out/js +0x5dc858d]
+#05: ???[/out/js +0x5d7ea78]
+#06: ???[/out/js +0x5a87d23]
+#07: ???[/out/js +0x5b53c2f]
+#08: ???[/out/js +0x2e922f8]
+#09: ???[/out/js +0x2ea8c20]
+#10: ???[/out/js +0x2e47218]
+#11: ???[/out/js +0x2e61dcd]
+#12: ???[/out/js +0x2e42a1a]
+#13: ???[/out/js +0x2e49495]
+#14: ???[/out/js +0x2e49e4a]
+#15: ???[/out/js +0x31ef28b]
+#16: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x31ef710]
+#17: ???[/out/js +0x2cb922b]
+#18: ???[/out/js +0x2cb7a51]
+#19: ???[/out/js +0x2c34b6d]
+#20: ???[/out/js +0x2c26a6c]
+#21: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#22: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#23: _start[/out/js +0x2b29505]
+#24: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5b9f77c7a979 bp 0x7ffd14883f70 sp 0x7ffd14883f60 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5b9f77c7a979 in js::wasm::TypeDef::isSubTypeOf(js::wasm::TypeDef const*, js::wasm::TypeDef const*) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:872:5
+    #1 0x5b9f77c7993d in js::wasm::RefType::isSubTypeOf(js::wasm::RefType, js::wasm::RefType) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:1464:12
+    #2 0x5b9f782dc19e in js::wasm::PackedType<js::wasm::StorageTypeTraits>::isSubTypeOf(js::wasm::PackedType<js::wasm::StorageTypeTraits>, js::wasm::PackedType<js::wasm::StorageTypeTraits>) /src/gecko-dev/js/src/wasm/WasmValType.h:891:14
+    #3 0x5b9f7830d58c in js::wasm::StructField::canBeSubTypeOf(js::wasm::StructField const&, js::wasm::StructField const&) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:281:14
+    #4 0x5b9f7830d58c in js::wasm::StructType::canBeSubTypeOf(js::wasm::StructType const&, js::wasm::StructType const&) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:366:12
+    #5 0x5b9f782c3a77 in DecodeTypeSection(js::wasm::Decoder&, js::wasm::CodeMetadata*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:1844:14
+    #6 0x5b9f782c3a77 in js::wasm::DecodeModuleEnvironment(js::wasm::Decoder&, js::wasm::CodeMetadata*, js::wasm::ModuleMetadata*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:3001:8
+    #7 0x5b9f77fccd22 in js::wasm::CompileBuffer(js::wasm::CompileArgs const&, js::wasm::ShareableBytes const&, mozilla::UniquePtr<char [], JS::FreePolicy>*, mozilla::Vector<mozilla::UniquePtr<char [], JS::FreePolicy>, 0ul, js::SystemAllocPolicy>*, JS::OptimizedEncodingListener*) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:814:8
+    #8 0x5b9f78098c2e in js::WasmModuleObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1521:7
+    #9 0x5b9f753d72f7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:491:13
+    #10 0x5b9f753edc1f in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:507:8
+    #11 0x5b9f7538c217 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:713:14
+    #12 0x5b9f753a6dcc in js::ConstructFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:760:10
+    #13 0x5b9f753a6dcc in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3379:16
+    #14 0x5b9f75387a19 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:463:13
+    #15 0x5b9f7538e494 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:13
+    #16 0x5b9f7538ee49 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:882:10
+    #17 0x5b9f7573428a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:493:10
+    #18 0x5b9f7573470f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:517:10
+    #19 0x5b9f751fe22a in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1195:10
+    #20 0x5b9f751fca50 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #21 0x5b9f75179b6c in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11269:10
+    #22 0x5b9f75179b6c in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11521:12
+    #23 0x5b9f7516ba6b in main /src/gecko-dev/js/src/shell/js.cpp:12047:12
+    #24 0x7b1965bee1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #25 0x7b1965bee28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x5b9f7506e504 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b29504) (BuildId: cf3a11560eb866a4548dee9cbfde627d)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x0000000000000000  rcx = 0x00005b9f737dd300  rdx = 0x0000000000000000  
+rdi = 0x00005b9f79278850  rsi = 0x00007ffd14883f18  rbp = 0x00007ffd14883f70  rsp = 0x00007ffd14883f60  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007899650e48b8  r13 = 0x00007899650e48c0  r14 = 0x0000ffffffffffff  r15 = 0x00000f132ca1c947  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/wasm/WasmTypeDef.h:872:5 in js::wasm::TypeDef::isSubTypeOf(js::wasm::TypeDef const*, js::wasm::TypeDef const*)
+==13==ABORTING

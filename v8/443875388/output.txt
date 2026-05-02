@@ -1,0 +1,33 @@
+
+
+#
+# Fatal error in ../../src/base/bit-field.h, line 56
+# Debug check failed: is_valid(value).
+#
+#
+#
+#FailureMessage Object: 0x7b30fdd8e460
+==== C stack trace ===============================
+
+    out/x64.asan/d8(__interceptor_backtrace+0x46) [0x5649e59fc8a6]
+    out/x64.asan/d8(+0x8654543) [0x5649ebb95543]
+    out/x64.asan/d8(+0x8651f9a) [0x5649ebb92f9a]
+    out/x64.asan/d8(+0x8626020) [0x5649ebb67020]
+    out/x64.asan/d8(+0x862556f) [0x5649ebb6656f]
+    out/x64.asan/d8(+0x2c4aedf) [0x5649e618bedf]
+    out/x64.asan/d8(+0x37fccb2) [0x5649e6d3dcb2]
+    out/x64.asan/d8(+0x36d26ee) [0x5649e6c136ee]
+    out/x64.asan/d8(+0x3752af2) [0x5649e6c93af2]
+    out/x64.asan/d8(+0x380069d) [0x5649e6d4169d]
+    out/x64.asan/d8(+0x380025e) [0x5649e6d4125e]
+    out/x64.asan/d8(+0x2bc432b) [0x5649e610532b]
+    out/x64.asan/d8(+0x2c01f9d) [0x5649e6142f9d]
+    out/x64.asan/d8(+0x2bdfec7) [0x5649e6120ec7]
+    out/x64.asan/d8(+0x2be404f) [0x5649e612504f]
+    out/x64.asan/d8(+0x2be9209) [0x5649e612a209]
+    out/x64.asan/d8(+0x2bebb4a) [0x5649e612cb4a]
+    out/x64.asan/d8(+0x2af232f) [0x5649e603332f]
+    out/x64.asan/d8(+0x2aed6a0) [0x5649e602e6a0]
+    out/x64.asan/d8(+0x2aecfcf) [0x5649e602dfcf]
+    out/x64.asan/d8(+0x83543fd) [0x5649eb8953fd]
+Trace/breakpoint trap

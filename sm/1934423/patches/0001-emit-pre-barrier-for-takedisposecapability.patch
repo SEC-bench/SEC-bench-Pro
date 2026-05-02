@@ -1,0 +1,66 @@
+From 9ff87bbb1f97706895070ab1c8cc68fff4997cb1 Mon Sep 17 00:00:00 2001
+From: Debadree Chatterjee <debadree333@gmail.com>
+Date: Thu, 5 Dec 2024 18:19:19 +0000
+Subject: [PATCH] Bug 1934423 - Emit pre-barrier for TakeDisposeCapability
+ opcode in baseline and ion. r=arai,iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D231207
+---
+ .../bug1934423.js                             | 22 +++++++++++++++++++
+ js/src/jit/BaselineCodeGen.cpp                |  1 +
+ js/src/jit/CodeGenerator.cpp                  |  1 +
+ 3 files changed, 24 insertions(+)
+ create mode 100644 js/src/jit-test/tests/explicit-resource-management/bug1934423.js
+
+diff --git a/js/src/jit-test/tests/explicit-resource-management/bug1934423.js b/js/src/jit-test/tests/explicit-resource-management/bug1934423.js
+new file mode 100644
+index 0000000000000..9d79a5c93845e
+--- /dev/null
++++ b/js/src/jit-test/tests/explicit-resource-management/bug1934423.js
+@@ -0,0 +1,22 @@
++// |jit-test| skip-if: !getBuildConfiguration("explicit-resource-management"); --enable-explicit-resource-management
++
++gczeal(8,18);
++{
++  const values = [];
++  async function* gen() {
++    await using a65 = {
++      [Symbol.asyncDispose]() {}
++    }
++    await using b61 = {
++
++    }
++  }
++  async function testDisposalDuringForcedThrowInGenerator() {
++    let x91 = gen();
++    values.push((await x91.next()).value);
++    try {} catch (e6) {}
++  }
++  for (let i = 0; i < 20; i++) {
++    testDisposalDuringForcedThrowInGenerator().catch(() => {});
++  }
++}
+diff --git a/js/src/jit/BaselineCodeGen.cpp b/js/src/jit/BaselineCodeGen.cpp
+index cebdb4337a363..90294bb0a9cff 100644
+--- a/js/src/jit/BaselineCodeGen.cpp
++++ b/js/src/jit/BaselineCodeGen.cpp
+@@ -4973,6 +4973,7 @@ bool BaselineCodeGen<Handler>::emit_TakeDisposeCapability() {
+   masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+   Address capAddr(R0.scratchReg(),
+                   DisposableEnvironmentObject::offsetOfDisposeCapability());
++  masm.guardedCallPreBarrierAnyZone(capAddr, MIRType::Value, R2.scratchReg());
+   masm.loadValue(capAddr, R1);
+   masm.storeValue(UndefinedValue(), capAddr);
+ 
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index 4029dd2c53819..9c2bedf749a40 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -22175,6 +22175,7 @@ void CodeGenerator::visitTakeDisposeCapability(LTakeDisposeCapability* lir) {
+ 
+   Address capabilityAddr(
+       environment, DisposableEnvironmentObject::offsetOfDisposeCapability());
++  emitPreBarrier(capabilityAddr);
+   masm.loadValue(capabilityAddr, output);
+   masm.storeValue(JS::UndefinedValue(), capabilityAddr);
+ }

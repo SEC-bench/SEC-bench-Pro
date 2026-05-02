@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# OS/editor noise
+.DS_Store
+
+# Generated evaluation outputs
+output/
+results/
+trajectories/
+harness/output/
+harness/results/
+
+fix_validation
+fixed_build_logs
+final_validation_logs
+fix.json
+fix_commit_inventory.csv

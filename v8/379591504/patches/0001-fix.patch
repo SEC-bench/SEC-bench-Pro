@@ -1,0 +1,549 @@
+From 47c50e8013d9061ca113e66514568debc4dfb133 Mon Sep 17 00:00:00 2001
+From: Michael Lippautz <mlippautz@chromium.org>
+Date: Mon, 18 Nov 2024 18:50:46 +0100
+Subject: [PATCH] [heap, builtins] Check bucket bounds for remembered set
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+SlotSet used to only store the number of allocated buckets in debug
+builds. This CL enables the counter also on release builds and also
+uses the counter in bottlenecks that compute bucket indicies. This
+solves a heap sandbox issue with OOB access on corrupted slot offsets.
+
+The CL reuses the existing debug counter for the CHECK. This already
+turns out to be neutral on competitive benchmarks.
+
+We can improve this by moving the counter next to the actual bucket
+array pointer. This would make SlotSet roughly similar to a vector
+(size + dynamic backing) and make sure that size is always in L1 this
+way. The refactoring is left for future work as this requires adopting
+how SlotSet works on background threads which currently only uses CAS
+on the SlotSet pointer (which at this point includes the bucket
+counter).
+
+Bug: 329345899, 379591504
+Change-Id: Iceb522f3313d7e9f57f511d1b60c8983502ed955
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6011212
+Commit-Queue: Michael Lippautz <mlippautz@chromium.org>
+Reviewed-by: Anton Bikineev <bikineev@chromium.org>
+Reviewed-by: Dominik Inführ <dinfuehr@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#97247}
+---
+ src/builtins/builtins-internal-gen.cc         |  10 +-
+ src/heap/base/basic-slot-set.h                | 100 ++++++++++--------
+ src/heap/cppgc/heap-page.cc                   |   2 +-
+ src/heap/large-page-metadata.cc               |   2 +-
+ src/heap/minor-mark-sweep-inl.h               |   4 +-
+ src/heap/minor-mark-sweep.cc                  |  12 +--
+ src/heap/mutable-page-metadata.cc             |   6 +-
+ src/heap/mutable-page-metadata.h              |   2 +-
+ src/heap/remembered-set.h                     |  20 ++--
+ test/mjsunit/sandbox/regress-329345899.js     |  28 +++++
+ .../heap/base/basic-slot-set-unittest.cc      |  14 +--
+ 11 files changed, 122 insertions(+), 78 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress-329345899.js
+
+diff --git a/src/builtins/builtins-internal-gen.cc b/src/builtins/builtins-internal-gen.cc
+index 01c066ec4d4..0c4f38d6c69 100644
+--- a/src/builtins/builtins-internal-gen.cc
++++ b/src/builtins/builtins-internal-gen.cc
+@@ -166,9 +166,14 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
+     // Load address of SlotSet
+     TNode<IntPtrT> slot_set = LoadSlotSet(page, &slow_path);
+     TNode<IntPtrT> slot_offset = IntPtrSub(slot, chunk);
++    TNode<IntPtrT> num_buckets_address =
++        IntPtrSub(slot_set, IntPtrConstant(SlotSet::kNumBucketsSize));
++    TNode<IntPtrT> num_buckets = UncheckedCast<IntPtrT>(
++        Load(MachineType::Pointer(), num_buckets_address, IntPtrConstant(0)));
+ 
+     // Load bucket
+-    TNode<IntPtrT> bucket = LoadBucket(slot_set, slot_offset, &slow_path);
++    TNode<IntPtrT> bucket =
++        LoadBucket(slot_set, slot_offset, num_buckets, &slow_path);
+ 
+     // Update cell
+     SetBitInCell(bucket, slot_offset);
+@@ -198,9 +203,10 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
+   }
+ 
+   TNode<IntPtrT> LoadBucket(TNode<IntPtrT> slot_set, TNode<WordT> slot_offset,
+-                            Label* slow_path) {
++                            TNode<IntPtrT> num_buckets, Label* slow_path) {
+     TNode<WordT> bucket_index =
+         WordShr(slot_offset, SlotSet::kBitsPerBucketLog2 + kTaggedSizeLog2);
++    CSA_CHECK(this, IntPtrLessThan(bucket_index, num_buckets));
+     TNode<IntPtrT> bucket = UncheckedCast<IntPtrT>(
+         Load(MachineType::Pointer(), slot_set,
+              WordShl(bucket_index, kSystemPointerSizeLog2)));
+diff --git a/src/heap/base/basic-slot-set.h b/src/heap/base/basic-slot-set.h
+index 25eedb9f6d1..430092a2b23 100644
+--- a/src/heap/base/basic-slot-set.h
++++ b/src/heap/base/basic-slot-set.h
+@@ -12,16 +12,21 @@
+ #include "src/base/bits.h"
+ #include "src/base/platform/memory.h"
+ 
++namespace v8::internal {
++class WriteBarrierCodeStubAssembler;
++}  // namespace v8::internal
++
+ namespace heap {
+ namespace base {
+ 
+ enum SlotCallbackResult { KEEP_SLOT, REMOVE_SLOT };
+ 
+-// Data structure for maintaining a set of slots in a standard (non-large)
+-// page.
+-// The data structure assumes that the slots are pointer size aligned and
+-// splits the valid slot offset range into buckets.
+-// Each bucket is a bitmap with a bit corresponding to a single slot offset.
++// Data structure for maintaining a set of slots.
++//
++// On a high-level the set implements a 2-level bitmap. The set assumes that the
++// slots are `SlotGranularity`-aligned and splits the valid slot offset range
++// into buckets. Each bucket is a bitmap with a bit corresponding to a single
++// slot offset.
+ template <size_t SlotGranularity>
+ class BasicSlotSet {
+   static constexpr auto kSystemPointerSize = sizeof(void*);
+@@ -46,48 +51,39 @@ class BasicSlotSet {
+     //                           |
+     //                           v
+     //         +-----------------+-------------------------+
+-    //         | initial buckets |     buckets array       |
++    //         |    num buckets  |     buckets array       |
+     //         +-----------------+-------------------------+
+-    //            pointer-sized    pointer-sized * buckets
++    //                size_t          Bucket* buckets
+     //
+     //
+     // The BasicSlotSet pointer points to the beginning of the buckets array for
+-    // faster access in the write barrier. The number of buckets is needed for
+-    // calculating the size of this data structure.
+-    size_t buckets_size = buckets * sizeof(Bucket*);
+-    size_t size = kInitialBucketsSize + buckets_size;
++    // faster access in the write barrier. The number of buckets is maintained
++    // for checking bounds for the heap sandbox.
++    const size_t buckets_size = buckets * sizeof(Bucket*);
++    const size_t size = kNumBucketsSize + buckets_size;
+     void* allocation = v8::base::AlignedAlloc(size, kSystemPointerSize);
+     CHECK(allocation);
+     BasicSlotSet* slot_set = reinterpret_cast<BasicSlotSet*>(
+-        reinterpret_cast<uint8_t*>(allocation) + kInitialBucketsSize);
++        reinterpret_cast<uint8_t*>(allocation) + kNumBucketsSize);
+     DCHECK(
+         IsAligned(reinterpret_cast<uintptr_t>(slot_set), kSystemPointerSize));
+-#ifdef DEBUG
+-    *slot_set->initial_buckets() = buckets;
+-#endif
++    slot_set->set_num_buckets(buckets);
+     for (size_t i = 0; i < buckets; i++) {
+       *slot_set->bucket(i) = nullptr;
+     }
+     return slot_set;
+   }
+ 
+-  static void Delete(BasicSlotSet* slot_set, size_t buckets) {
+-    if (slot_set == nullptr) return;
+-
+-    for (size_t i = 0; i < buckets; i++) {
+-      slot_set->ReleaseBucket(i);
++  static void Delete(BasicSlotSet* slot_set) {
++    if (slot_set == nullptr) {
++      return;
+     }
+ 
+-#ifdef DEBUG
+-    size_t initial_buckets = *slot_set->initial_buckets();
+-
+-    for (size_t i = buckets; i < initial_buckets; i++) {
+-      DCHECK_NULL(*slot_set->bucket(i));
++    for (size_t i = 0; i < slot_set->num_buckets(); i++) {
++      slot_set->ReleaseBucket(i);
+     }
+-#endif
+-
+     v8::base::AlignedFree(reinterpret_cast<uint8_t*>(slot_set) -
+-                          kInitialBucketsSize);
++                          kNumBucketsSize);
+   }
+ 
+   constexpr static size_t BucketsForSize(size_t size) {
+@@ -169,7 +165,18 @@ class BasicSlotSet {
+     SlotToIndices(start_offset, &start_bucket, &start_cell, &start_bit);
+     size_t end_bucket;
+     int end_cell, end_bit;
+-    SlotToIndices(end_offset, &end_bucket, &end_cell, &end_bit);
++    // SlotToIndices() checks that bucket index is within `size`. Since the API
++    // allow for an exclusive end interval, we compute  the inclusive index and
++    // then increment the bit again (with overflows).
++    SlotToIndices(end_offset - SlotGranularity, &end_bucket, &end_cell,
++                  &end_bit);
++    if (++end_bit >= kBitsPerCell) {
++      end_bit = 0;
++      if (++end_cell >= kCellsPerBucket) {
++        end_cell = 0;
++        end_bucket++;
++      }
++    }
+     uint32_t start_mask = (1u << start_bit) - 1;
+     uint32_t end_mask = ~((1u << end_bit) - 1);
+     Bucket* bucket;
+@@ -273,14 +280,8 @@ class BasicSlotSet {
+       kCellsPerBucketLog2 + kBitsPerCellLog2;
+ 
+   class Bucket final {
+-    uint32_t cells_[kCellsPerBucket];
+-
+    public:
+-    Bucket() {
+-      for (int i = 0; i < kCellsPerBucket; i++) {
+-        cells_[i] = 0;
+-      }
+-    }
++    Bucket() = default;
+ 
+     uint32_t* cells() { return cells_; }
+     const uint32_t* cells() const { return cells_; }
+@@ -326,8 +327,15 @@ class BasicSlotSet {
+       }
+       return true;
+     }
++
++   private:
++    uint32_t cells_[kCellsPerBucket] = {0};
+   };
+ 
++  size_t num_buckets() const {
++    return *(reinterpret_cast<const size_t*>(this) - 1);
++  }
++
+  protected:
+   template <AccessMode access_mode = AccessMode::ATOMIC, typename Callback,
+             typename EmptyBucketCallback>
+@@ -441,11 +449,13 @@ class BasicSlotSet {
+   }
+ 
+   // Converts the slot offset into bucket/cell/bit index.
+-  static void SlotToIndices(size_t slot_offset, size_t* bucket_index,
+-                            int* cell_index, int* bit_index) {
++  void SlotToIndices(size_t slot_offset, size_t* bucket_index, int* cell_index,
++                     int* bit_index) {
+     DCHECK(IsAligned(slot_offset, SlotGranularity));
+     size_t slot = slot_offset / SlotGranularity;
+     *bucket_index = slot >> kBitsPerBucketLog2;
++    // No SBXCHECK() in base.
++    CHECK(*bucket_index < (num_buckets()));
+     *cell_index =
+         static_cast<int>((slot >> kBitsPerCellLog2) & (kCellsPerBucket - 1));
+     *bit_index = static_cast<int>(slot & (kBitsPerCell - 1));
+@@ -454,12 +464,14 @@ class BasicSlotSet {
+   Bucket** buckets() { return reinterpret_cast<Bucket**>(this); }
+   Bucket** bucket(size_t bucket_index) { return buckets() + bucket_index; }
+ 
+-#ifdef DEBUG
+-  size_t* initial_buckets() { return reinterpret_cast<size_t*>(this) - 1; }
+-  static const int kInitialBucketsSize = sizeof(size_t);
+-#else
+-  static const int kInitialBucketsSize = 0;
+-#endif
++  void set_num_buckets(size_t num_buckets) {
++    *(reinterpret_cast<size_t*>(this) - 1) = num_buckets;
++  }
++
++  static constexpr int kNumBucketsSize = sizeof(size_t);
++
++  // For kNumBucketsSize.
++  friend class v8::internal::WriteBarrierCodeStubAssembler;
+ };
+ 
+ }  // namespace base
+diff --git a/src/heap/cppgc/heap-page.cc b/src/heap/cppgc/heap-page.cc
+index 146d510e0f7..93713675893 100644
+--- a/src/heap/cppgc/heap-page.cc
++++ b/src/heap/cppgc/heap-page.cc
+@@ -140,7 +140,7 @@ void BasePage::AllocateSlotSet() {
+ 
+ void BasePage::SlotSetDeleter::operator()(SlotSet* slot_set) const {
+   DCHECK_NOT_NULL(slot_set);
+-  SlotSet::Delete(slot_set, SlotSet::BucketsForSize(page_size_));
++  SlotSet::Delete(slot_set);
+ }
+ 
+ void BasePage::ResetSlotSet() { slot_set_.reset(); }
+diff --git a/src/heap/large-page-metadata.cc b/src/heap/large-page-metadata.cc
+index 4d5af37d4a0..5085ac5207e 100644
+--- a/src/heap/large-page-metadata.cc
++++ b/src/heap/large-page-metadata.cc
+@@ -60,7 +60,7 @@ void LargePageMetadata::ClearOutOfLiveRangeSlots(Address free_start) {
+   // Align it to bucket size such that the following RemoveRange invocation just
+   // drops the whole bucket and the bucket is reset to nullptr.
+   Address aligned_area_end =
+-      ChunkAddress() + SlotSet::OffsetForBucket(buckets());
++      ChunkAddress() + SlotSet::OffsetForBucket(BucketsInSlotSet());
+   DCHECK_LE(area_end(), aligned_area_end);
+   RememberedSet<OLD_TO_SHARED>::RemoveRange(this, free_start, aligned_area_end,
+                                             SlotSet::FREE_EMPTY_BUCKETS);
+diff --git a/src/heap/minor-mark-sweep-inl.h b/src/heap/minor-mark-sweep-inl.h
+index 77250fa1060..a2f627636ab 100644
+--- a/src/heap/minor-mark-sweep-inl.h
++++ b/src/heap/minor-mark-sweep-inl.h
+@@ -102,7 +102,7 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
+         RememberedSet<OLD_TO_NEW>::template Iterate<AccessMode::NON_ATOMIC>(
+             slot_set_, chunk_, callback, SlotSet::FREE_EMPTY_BUCKETS);
+     if (slot_count == 0) {
+-      SlotSet::Delete(slot_set_, chunk_->buckets());
++      SlotSet::Delete(slot_set_);
+       slot_set_ = nullptr;
+     }
+   }
+@@ -112,7 +112,7 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
+             AccessMode::NON_ATOMIC>(background_slot_set_, chunk_, callback,
+                                     SlotSet::FREE_EMPTY_BUCKETS);
+     if (slot_count == 0) {
+-      SlotSet::Delete(background_slot_set_, chunk_->buckets());
++      SlotSet::Delete(background_slot_set_);
+       background_slot_set_ = nullptr;
+     }
+   }
+diff --git a/src/heap/minor-mark-sweep.cc b/src/heap/minor-mark-sweep.cc
+index 24d8100c8cc..fd5e527dc81 100644
+--- a/src/heap/minor-mark-sweep.cc
++++ b/src/heap/minor-mark-sweep.cc
+@@ -218,9 +218,8 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
+     DeleteRememberedSets() {
+   DCHECK(IsAcquired());
+   if (slots_type_ == SlotsType::kRegularSlots) {
+-    if (slot_set_) SlotSet::Delete(slot_set_, chunk_->buckets());
+-    if (background_slot_set_)
+-      SlotSet::Delete(background_slot_set_, chunk_->buckets());
++    if (slot_set_) SlotSet::Delete(slot_set_);
++    if (background_slot_set_) SlotSet::Delete(background_slot_set_);
+   } else {
+     DCHECK_EQ(slots_type_, SlotsType::kTypedSlots);
+     DCHECK_NULL(background_slot_set_);
+@@ -232,9 +231,8 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
+ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
+     DeleteSetsOnTearDown() {
+   if (slots_type_ == SlotsType::kRegularSlots) {
+-    if (slot_set_) SlotSet::Delete(slot_set_, chunk_->buckets());
+-    if (background_slot_set_)
+-      SlotSet::Delete(background_slot_set_, chunk_->buckets());
++    if (slot_set_) SlotSet::Delete(slot_set_);
++    if (background_slot_set_) SlotSet::Delete(background_slot_set_);
+ 
+   } else {
+     DCHECK_EQ(slots_type_, SlotsType::kTypedSlots);
+@@ -900,7 +898,7 @@ void MinorMarkSweepCollector::EvacuateExternalPointerReferences(
+     return KEEP_SLOT;
+   };
+   auto slot_count = slots->Iterate<BasicSlotSet::AccessMode::NON_ATOMIC>(
+-      p->ChunkAddress(), 0, p->buckets(), callback,
++      p->ChunkAddress(), 0, p->BucketsInSlotSet(), callback,
+       BasicSlotSet::EmptyBucketMode::FREE_EMPTY_BUCKETS);
+   DCHECK(slot_count);
+   USE(slot_count);
+diff --git a/src/heap/mutable-page-metadata.cc b/src/heap/mutable-page-metadata.cc
+index 1f8ee3cae4c..66e50c35c87 100644
+--- a/src/heap/mutable-page-metadata.cc
++++ b/src/heap/mutable-page-metadata.cc
+@@ -161,11 +161,11 @@ void MutablePageMetadata::ReleaseAllAllocatedMemory() {
+ }
+ 
+ SlotSet* MutablePageMetadata::AllocateSlotSet(RememberedSetType type) {
+-  SlotSet* new_slot_set = SlotSet::Allocate(buckets());
++  SlotSet* new_slot_set = SlotSet::Allocate(BucketsInSlotSet());
+   SlotSet* old_slot_set = base::AsAtomicPointer::AcquireRelease_CompareAndSwap(
+       &slot_set_[type], nullptr, new_slot_set);
+   if (old_slot_set) {
+-    SlotSet::Delete(new_slot_set, buckets());
++    SlotSet::Delete(new_slot_set);
+     new_slot_set = old_slot_set;
+   }
+   DCHECK_NOT_NULL(new_slot_set);
+@@ -176,7 +176,7 @@ void MutablePageMetadata::ReleaseSlotSet(RememberedSetType type) {
+   SlotSet* slot_set = slot_set_[type];
+   if (slot_set) {
+     slot_set_[type] = nullptr;
+-    SlotSet::Delete(slot_set, buckets());
++    SlotSet::Delete(slot_set);
+   }
+ }
+ 
+diff --git a/src/heap/mutable-page-metadata.h b/src/heap/mutable-page-metadata.h
+index a8db789f964..c6c84a8314e 100644
+--- a/src/heap/mutable-page-metadata.h
++++ b/src/heap/mutable-page-metadata.h
+@@ -91,7 +91,7 @@ class MutablePageMetadata : public MemoryChunkMetadata {
+ 
+   MemoryChunk::MainThreadFlags InitialFlags(Executability executable) const;
+ 
+-  size_t buckets() const { return SlotSet::BucketsForSize(size()); }
++  size_t BucketsInSlotSet() const { return SlotSet::BucketsForSize(size()); }
+ 
+   V8_INLINE void SetOldGenerationPageFlags(MarkingMode marking_mode);
+   void SetYoungGenerationPageFlags(MarkingMode marking_mode) {
+diff --git a/src/heap/remembered-set.h b/src/heap/remembered-set.h
+index 1729d8fc6bb..c249f0c0470 100644
+--- a/src/heap/remembered-set.h
++++ b/src/heap/remembered-set.h
+@@ -39,8 +39,8 @@ class RememberedSetOperations {
+                      Callback callback, SlotSet::EmptyBucketMode mode) {
+     int slots = 0;
+     if (slot_set != nullptr) {
+-      slots += slot_set->Iterate<access_mode>(chunk->ChunkAddress(), 0,
+-                                              chunk->buckets(), callback, mode);
++      slots += slot_set->Iterate<access_mode>(
++          chunk->ChunkAddress(), 0, chunk->BucketsInSlotSet(), callback, mode);
+     }
+     return slots;
+   }
+@@ -62,8 +62,8 @@ class RememberedSetOperations {
+       uintptr_t end_offset = chunk->OffsetMaybeOutOfRange(end);
+       DCHECK_LE(start_offset, end_offset);
+       slot_set->RemoveRange(static_cast<int>(start_offset),
+-                            static_cast<int>(end_offset), page->buckets(),
+-                            mode);
++                            static_cast<int>(end_offset),
++                            page->BucketsInSlotSet(), mode);
+     }
+   }
+ 
+@@ -113,8 +113,8 @@ class RememberedSet : public AllStatic {
+       chunk->set_slot_set<type, AccessMode::NON_ATOMIC>(&other_slot_set);
+       return;
+     }
+-    slot_set->Merge(&other_slot_set, chunk->buckets());
+-    SlotSet::Delete(&other_slot_set, chunk->buckets());
++    slot_set->Merge(&other_slot_set, chunk->BucketsInSlotSet());
++    SlotSet::Delete(&other_slot_set);
+   }
+ 
+   // Given a page and a slot set, this function merges the slot set to the set
+@@ -217,9 +217,9 @@ class RememberedSet : public AllStatic {
+     if (slot_set != nullptr) {
+       PossiblyEmptyBuckets* possibly_empty_buckets =
+           chunk->possibly_empty_buckets();
+-      slots += slot_set->IterateAndTrackEmptyBuckets(chunk->ChunkAddress(), 0,
+-                                                     chunk->buckets(), callback,
+-                                                     possibly_empty_buckets);
++      slots += slot_set->IterateAndTrackEmptyBuckets(
++          chunk->ChunkAddress(), 0, chunk->BucketsInSlotSet(), callback,
++          possibly_empty_buckets);
+       if (!possibly_empty_buckets->IsEmpty()) empty_chunks->Push(chunk);
+     }
+     return slots;
+@@ -229,7 +229,7 @@ class RememberedSet : public AllStatic {
+     DCHECK(type == OLD_TO_NEW || type == OLD_TO_NEW_BACKGROUND);
+     SlotSet* slot_set = chunk->slot_set<type, AccessMode::NON_ATOMIC>();
+     if (slot_set != nullptr &&
+-        slot_set->CheckPossiblyEmptyBuckets(chunk->buckets(),
++        slot_set->CheckPossiblyEmptyBuckets(chunk->BucketsInSlotSet(),
+                                             chunk->possibly_empty_buckets())) {
+       chunk->ReleaseSlotSet(type);
+       return true;
+diff --git a/test/mjsunit/sandbox/regress-329345899.js b/test/mjsunit/sandbox/regress-329345899.js
+new file mode 100644
+index 00000000000..db3c592279f
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress-329345899.js
+@@ -0,0 +1,28 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++//
++// Flags: --expose-gc --sandbox-testing
++
++const kJSArrayType = Sandbox.getInstanceTypeIdFor("JS_ARRAY_TYPE");
++const kJSArrayLengthOffset = Sandbox.getFieldOffset(kJSArrayType, "length");
++const kMaxRegularHeapObjectSize = 131072;
++
++const memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++
++// Allocate an array and promote it to the old generation.
++const array = Array();
++gc();
++// Allocate a value in the young generation.
++const value = new Number();
++
++// Corrupt the length to still look like a regular heap object.
++memory.setUint32(
++  Sandbox.getAddressOf(array) + kJSArrayLengthOffset,
++  kMaxRegularHeapObjectSize,
++  true);
++
++// OOB write to the JS array also triggering the write barrier for an old->new
++// write with an offset that's too large for the remembered set. This should not
++// crash with OOB in malloc'ed memory.
++array[array.length - 1] = value;
+diff --git a/test/unittests/heap/base/basic-slot-set-unittest.cc b/test/unittests/heap/base/basic-slot-set-unittest.cc
+index ea493de3f02..5b2f9e5ec7d 100644
+--- a/test/unittests/heap/base/basic-slot-set-unittest.cc
++++ b/test/unittests/heap/base/basic-slot-set-unittest.cc
+@@ -29,7 +29,7 @@ TEST(BasicSlotSet, InsertAndLookup1) {
+   for (size_t i = 0; i < kTestPageSize; i += kTestGranularity) {
+     EXPECT_TRUE(set->Lookup(i));
+   }
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ TEST(BasicSlotSet, InsertAndLookup2) {
+@@ -46,7 +46,7 @@ TEST(BasicSlotSet, InsertAndLookup2) {
+       EXPECT_FALSE(set->Lookup(i));
+     }
+   }
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ TEST(BasicSlotSet, Iterate) {
+@@ -77,7 +77,7 @@ TEST(BasicSlotSet, Iterate) {
+     }
+   }
+ 
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ TEST(BasicSlotSet, IterateFromHalfway) {
+@@ -110,7 +110,7 @@ TEST(BasicSlotSet, IterateFromHalfway) {
+     }
+   }
+ 
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ TEST(BasicSlotSet, Remove) {
+@@ -136,7 +136,7 @@ TEST(BasicSlotSet, Remove) {
+     }
+   }
+ 
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ namespace {
+@@ -160,7 +160,7 @@ void CheckRemoveRangeOn(uint32_t start, uint32_t end) {
+       EXPECT_FALSE(set->Lookup(i));
+     }
+   }
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ }  // namespace
+ 
+@@ -191,7 +191,7 @@ TEST(BasicSlotSet, RemoveRange) {
+       EXPECT_FALSE(set->Lookup(i));
+     }
+   }
+-  TestSlotSet::Delete(set, kBucketsTestPage);
++  TestSlotSet::Delete(set);
+ }
+ 
+ }  // namespace base
+-- 
+2.43.0
+

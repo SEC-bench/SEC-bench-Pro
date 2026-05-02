@@ -1,0 +1,108 @@
+From 5b061cdc4d40d44988dc61aa941cfbd98e31791f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Wed, 22 Jan 2025 10:15:06 +0000
+Subject: [PATCH] Bug 1942648: Support MSign with Int32 input and Double
+ output. r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D234936
+---
+ .../jit-test/tests/auto-regress/bug1942648.js |  8 ++++++
+ js/src/jit/CodeGenerator.cpp                  |  9 +++++++
+ js/src/jit/LIROps.yaml                        |  7 ++++++
+ js/src/jit/Lowering.cpp                       | 25 +++++++++++--------
+ 4 files changed, 38 insertions(+), 11 deletions(-)
+ create mode 100644 js/src/jit-test/tests/auto-regress/bug1942648.js
+
+diff --git a/js/src/jit-test/tests/auto-regress/bug1942648.js b/js/src/jit-test/tests/auto-regress/bug1942648.js
+new file mode 100644
+index 0000000000000..fa669f0ca3130
+--- /dev/null
++++ b/js/src/jit-test/tests/auto-regress/bug1942648.js
+@@ -0,0 +1,8 @@
++const inputs = [NaN, "0"];
++
++for (let j = 0; j < inputs.length; ++j) {
++  for (let k = 0; k < 10; ++k) {
++    let x = +inputs[j];
++    assertEq(Math.sign(x), x);
++  }
++}
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index 6b023277bccf4..a07fb5ccd1cce 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -11304,6 +11304,15 @@ void CodeGenerator::visitSignDI(LSignDI* ins) {
+   bailoutFrom(&bail, ins->snapshot());
+ }
+ 
++void CodeGenerator::visitSignID(LSignID* ins) {
++  Register input = ToRegister(ins->input());
++  Register temp = ToRegister(ins->temp0());
++  FloatRegister output = ToFloatRegister(ins->output());
++
++  masm.signInt32(input, temp);
++  masm.convertInt32ToDouble(temp, output);
++}
++
+ void CodeGenerator::visitMathFunctionD(LMathFunctionD* ins) {
+   FloatRegister input = ToFloatRegister(ins->input());
+   MOZ_ASSERT(ToFloatRegister(ins->output()) == ReturnDoubleReg);
+diff --git a/js/src/jit/LIROps.yaml b/js/src/jit/LIROps.yaml
+index adea75a67b521..667b901fe6df5 100644
+--- a/js/src/jit/LIROps.yaml
++++ b/js/src/jit/LIROps.yaml
+@@ -1161,6 +1161,13 @@
+     input: WordSized
+   num_temps: 1
+ 
++# Sign value of a int32 with expected double result.
++- name: SignID
++  result_type: WordSized
++  operands:
++    input: WordSized
++  num_temps: 1
++
+ - name: MathFunctionD
+   gen_boilerplate: false
+ 
+diff --git a/js/src/jit/Lowering.cpp b/js/src/jit/Lowering.cpp
+index 9b35e23036774..9e8f761cb668c 100644
+--- a/js/src/jit/Lowering.cpp
++++ b/js/src/jit/Lowering.cpp
+@@ -2087,22 +2087,25 @@ void LIRGenerator::visitPow(MPow* ins) {
+ }
+ 
+ void LIRGenerator::visitSign(MSign* ins) {
++  MOZ_ASSERT(ins->type() == MIRType::Int32 || ins->type() == MIRType::Double);
++  MOZ_ASSERT(ins->input()->type() == MIRType::Int32 ||
++             ins->input()->type() == MIRType::Double);
++
+   if (ins->type() == ins->input()->type()) {
+-    LInstructionHelper<1, 1, 0>* lir;
+     if (ins->type() == MIRType::Int32) {
+-      lir = new (alloc()) LSignI(useRegister(ins->input()));
++      define(new (alloc()) LSignI(useRegister(ins->input())), ins);
+     } else {
+-      MOZ_ASSERT(ins->type() == MIRType::Double);
+-      lir = new (alloc()) LSignD(useRegister(ins->input()));
++      define(new (alloc()) LSignD(useRegister(ins->input())), ins);
+     }
+-    define(lir, ins);
+   } else {
+-    MOZ_ASSERT(ins->type() == MIRType::Int32);
+-    MOZ_ASSERT(ins->input()->type() == MIRType::Double);
+-
+-    auto* lir = new (alloc()) LSignDI(useRegister(ins->input()), tempDouble());
+-    assignSnapshot(lir, ins->bailoutKind());
+-    define(lir, ins);
++    if (ins->type() == MIRType::Int32) {
++      auto* lir =
++          new (alloc()) LSignDI(useRegister(ins->input()), tempDouble());
++      assignSnapshot(lir, ins->bailoutKind());
++      define(lir, ins);
++    } else {
++      define(new (alloc()) LSignID(useRegister(ins->input()), temp()), ins);
++    }
+   }
+ }
+ 

@@ -1,0 +1,11 @@
+Verified against the original collector report in `../../collector/output/general/Blink/JavaScript/WebAssembly/374790906/Report.md`.
+
+Collector artifacts checked:
+- `poc.js`
+- `poc_1.js`
+
+Local `poc.js` matches the collector exploit logic. Reproduced with:
+
+`out/x64.asan/d8 --turboshaft-wasm --experimental-wasm-exnref --disable-in-process-stack-traces /testcase/poc.js`
+
+`output.txt` captures an ASan SEGV on an address ending in `0x42424242` from the arbitrary caged write, matching the reported non-nullable `exnref` nullability confusion and Turboshaft-based type confusion.

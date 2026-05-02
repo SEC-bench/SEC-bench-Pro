@@ -1,0 +1,44 @@
+From f6b32f7328122f4b5c7e79be66825ec06796c06a Mon Sep 17 00:00:00 2001
+From: Yury Delendik <ydelendik@mozilla.com>
+Date: Wed, 26 Jun 2024 03:53:20 +0000
+Subject: [PATCH] Bug 1903219 - Allow wasm builtin functions to be used in ref.
+ r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D214635
+---
+ .../wasm/builtin-modules/js-string/bug1903219.js      | 11 +++++++++++
+ js/src/wasm/WasmBuiltinModule.cpp                     |  3 ++-
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/wasm/builtin-modules/js-string/bug1903219.js
+
+diff --git a/js/src/jit-test/tests/wasm/builtin-modules/js-string/bug1903219.js b/js/src/jit-test/tests/wasm/builtin-modules/js-string/bug1903219.js
+new file mode 100644
+index 0000000000000..5dc7e74a51f00
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/builtin-modules/js-string/bug1903219.js
+@@ -0,0 +1,11 @@
++// Check if we can expose builtin function.
++
++var ins = wasmEvalText(`
++(module
++  (import "wasm:js-string" "charCodeAt"
++    (func $charCodeAt (param externref i32) (result i32)))
++  (table (export "t") 1 1 funcref ref.func $charCodeAt)
++)
++`, {}, { builtins: ["js-string"] });
++
++assertEq(ins.exports.t.get(0)("abc", 1), 98);
+diff --git a/js/src/wasm/WasmBuiltinModule.cpp b/js/src/wasm/WasmBuiltinModule.cpp
+index 863ecc526fc2a..d6447bfa66a0d 100644
+--- a/js/src/wasm/WasmBuiltinModule.cpp
++++ b/js/src/wasm/WasmBuiltinModule.cpp
+@@ -198,7 +198,8 @@ bool CompileBuiltinModule(JSContext* cx,
+       ReportOutOfMemory(cx);
+       return false;
+     }
+-    codeMeta->declareFuncExported(funcIndex, true, false);
++    codeMeta->declareFuncExported(funcIndex, /* eager */ true,
++                                  /* canRefFunc */ true);
+   }
+ 
+   // Add (export "$name" (func $i)) declarations.

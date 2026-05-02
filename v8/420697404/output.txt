@@ -1,0 +1,22 @@
+
+
+#
+# Fatal error in ../../src/objects/js-regexp.cc, line 234
+# Debug check failed: escapes >= 0 (-2005397586 vs. 0).
+#
+#
+#
+#FailureMessage Object: 0x703fbb50d060
+==== C stack trace ===============================
+
+    out/x64.asan/d8(__interceptor_backtrace+0x46) [0x63472b9f9856]
+    out/x64.asan/d8(+0x8305cf3) [0x634731adacf3]
+    out/x64.asan/d8(+0x830370a) [0x634731ad870a]
+    out/x64.asan/d8(+0x82d8490) [0x634731aad490]
+    out/x64.asan/d8(+0x82d796f) [0x634731aac96f]
+    out/x64.asan/d8(+0x3bea90c) [0x63472d3bf90c]
+    out/x64.asan/d8(+0x3beb8fb) [0x63472d3c08fb]
+    out/x64.asan/d8(+0x43279b9) [0x63472dafc9b9]
+    out/x64.asan/d8(+0x4327193) [0x63472dafc193]
+    out/x64.asan/d8(+0x8003a7d) [0x6347317d8a7d]
+Trace/breakpoint trap

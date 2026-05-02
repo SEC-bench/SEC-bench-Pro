@@ -1,0 +1,29 @@
+diff --git a/src/runtime/runtime-wasm.cc b/src/runtime/runtime-wasm.cc
+index aadefa1..cc1c7b8 100644
+--- a/src/runtime/runtime-wasm.cc
++++ b/src/runtime/runtime-wasm.cc
+@@ -699,6 +699,7 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+       import_data->instance_data(), isolate);
+   Handle<WasmTrustedInstanceData> call_origin_instance_data =
+       defining_instance_data;
++  bool cross_instance_table_origin = false;
+   if (IsTuple2(*origin)) {
+     auto tuple = Cast<Tuple2>(origin);
+     // Note: This link is unsafe (via the untrusted WasmInstanceObject). We only
+@@ -708,10 +709,16 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+         handle(Cast<WasmInstanceObject>(tuple->value1())->trusted_data(isolate),
+                isolate);
+     origin = direct_handle(tuple->value2(), isolate);
++    cross_instance_table_origin = true;
+   }
+   CHECK(IsSmi(*origin));
+   Tagged<Smi> call_origin_index = Cast<Smi>(*origin);
+ 
++  // A cross-instance call origin is only valid for table slots. Do not allow
++  // in-sandbox Tuple2 corruption to turn it into an import-table origin.
++  SBXCHECK(!cross_instance_table_origin ||
++           WasmImportData::CallOriginIsIndexInTable(call_origin_index));
++
+   // The signature is stored in trusted WasmImportData. Do not recover the
+   // wrapper cache key from call_origin, which may contain in-sandbox data.
+   wasm::CanonicalTypeIndex sig_index =

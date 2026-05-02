@@ -1,0 +1,25 @@
+From ac781d872218601ed9f93a2660c1c3f2e430f9d0 Mon Sep 17 00:00:00 2001
+From: Tooru Fujisawa <arai_a@mac.com>
+Date: Wed, 19 Jun 2024 16:31:26 +0000
+Subject: [PATCH] Bug 1901411 - Part 2: Fix sanity check for debugger.
+ r=mgaudet
+
+Differential Revision: https://phabricator.services.mozilla.com/D213352
+---
+ js/src/vm/AsyncIteration.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/js/src/vm/AsyncIteration.cpp b/js/src/vm/AsyncIteration.cpp
+index fc30ecd4e564a..dec7a77500a8c 100644
+--- a/js/src/vm/AsyncIteration.cpp
++++ b/js/src/vm/AsyncIteration.cpp
+@@ -800,8 +800,7 @@ class MOZ_STACK_CLASS MaybeEnterAsyncGeneratorRealm {
+ 
+ [[nodiscard]] static bool AsyncGeneratorMethodSanityCheck(
+     JSContext* cx, Handle<AsyncGeneratorObject*> generator) {
+-  if (generator->isCompleted() || generator->isSuspendedStart() ||
+-      generator->isSuspendedYield()) {
++  if (generator->isSuspendedStart() || generator->isSuspendedYield()) {
+     // The spec assumes the queue is empty when async generator methods are
+     // called with those state, but our debugger allows calling those methods
+     // in unexpected state, such as before suspendedStart.

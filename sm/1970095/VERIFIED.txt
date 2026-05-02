@@ -1,0 +1,4 @@
+Verified on 2026-04-26.
+Reproduced with ../../spidermonkey/crash_check.sh using dataset poc.js and meta.json command flags.
+Result: CONFIMRED: ASAN_CRASH (note: PoC takes ~6 minutes to trigger; orchestrator default 180s timeout is too short — verified manually with 600s timeout).
+Fix patches applied via Dockerfile.fixed; ../../spidermonkey/patch_check.py confirms PoC is mitigated (3/3 attempts BLOCKED_NO_REPRO with --timeout 600).

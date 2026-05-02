@@ -1,0 +1,120 @@
+From 2414b1c31a87d40de79acfcd2a3b0c068f27442e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Olivier=20Fl=C3=BCckiger?= <olivf@chromium.org>
+Date: Tue, 30 Jan 2024 10:51:02 +0100
+Subject: [PATCH] [maglev] CSE: clear available expressions for exception
+ handlers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Available expressions are not preserved across exceptions.
+
+Fixed: chromium:1521770, chromium:1521643
+Change-Id: Ieae7ef9ed685ef2f682083ff3cc279e9e11395cb
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5245405
+Commit-Queue: Olivier Flückiger <olivf@chromium.org>
+Auto-Submit: Olivier Flückiger <olivf@chromium.org>
+Reviewed-by: Darius Mercadier <dmercadier@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#92081}
+---
+ src/maglev/maglev-graph-builder.h           |  4 ++
+ src/maglev/maglev-interpreter-frame-state.h |  2 +
+ test/mjsunit/maglev/regress-cse.js          | 58 +++++++++++++++++++++
+ 3 files changed, 64 insertions(+)
+ create mode 100644 test/mjsunit/maglev/regress-cse.js
+
+diff --git a/src/maglev/maglev-graph-builder.h b/src/maglev/maglev-graph-builder.h
+index 4160f84c345..01b5b960ca4 100644
+--- a/src/maglev/maglev-graph-builder.h
++++ b/src/maglev/maglev-graph-builder.h
+@@ -540,6 +540,10 @@ class MaglevGraphBuilder {
+ 
+     // Copy state.
+     current_interpreter_frame_.CopyFrom(*compilation_unit_, merge_state);
++    // Expressions would have to be explicitly preserved across exceptions.
++    // However, at this point we do not know which ones might be used.
++    current_interpreter_frame_.known_node_aspects()
++        ->ClearAvailableExpressions();
+ 
+     // Merges aren't simple fallthroughs, so we should reset the checkpoint
+     // validity.
+diff --git a/src/maglev/maglev-interpreter-frame-state.h b/src/maglev/maglev-interpreter-frame-state.h
+index 09b0e99104f..78a2401572d 100644
+--- a/src/maglev/maglev-interpreter-frame-state.h
++++ b/src/maglev/maglev-interpreter-frame-state.h
+@@ -311,6 +311,8 @@ struct KnownNodeAspects {
+     any_map_for_any_node_is_unstable = false;
+   }
+ 
++  void ClearAvailableExpressions() { available_expressions.clear(); }
++
+   NodeInfos::iterator FindInfo(ValueNode* node) {
+     return node_infos.find(node);
+   }
+diff --git a/test/mjsunit/maglev/regress-cse.js b/test/mjsunit/maglev/regress-cse.js
+new file mode 100644
+index 00000000000..e92fcb8ec60
+--- /dev/null
++++ b/test/mjsunit/maglev/regress-cse.js
+@@ -0,0 +1,58 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++//
++// Flags: --maglev --allow-natives-syntax --maglev-cse
++
++// CheckValueEqualsFloat64 with NaN
++const o22 = {
++};
++let v34 = o22.__proto__;
++var b;
++function foo() {
++  v34 = o22.__proto__;
++  b = v34++;
++  class C37 {};
++}
++%PrepareFunctionForOptimization(foo);
++foo();
++%OptimizeMaglevOnNextCall(foo);
++foo();
++
++// Skipped exceptions
++var __caught = 0;
++class __c_0 {
++}
++class __c_1 extends __c_0 {
++  constructor() {
++    try {
++      this;
++    } catch (e) {}
++    try {
++      this;
++    } catch (e) {
++      __caught++;
++    }
++      super();
++  }
++}
++%PrepareFunctionForOptimization(__c_1);
++new __c_1();
++%OptimizeMaglevOnNextCall(__c_1);
++new __c_1();
++assertEquals(__caught, 2);
++
++// Expressions across exception handlers.
++function main() {
++    function func() {
++      return '' + '<div><div><di';
++    }
++    try {
++      func();
++    } catch (e) {}
++    /./.test(func());
++}
++%PrepareFunctionForOptimization(main);
++main();
++%OptimizeMaglevOnNextCall(main);
++main();
+-- 
+2.43.0
+

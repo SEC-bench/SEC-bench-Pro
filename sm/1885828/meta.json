@@ -1,0 +1,47 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1885828",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MIR.h",
+        "js/src/jit/MIROps.yaml"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fast-warmup --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds read",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion MIR MSubstr Movable Flag Regression \u2014 LICM Hoists String.slice SubstringKernel Above Negative-Index Guard \u2192 OOB Read. CVE-2024-3855 (sec-high). An out-of-bounds read vulnerability exists in SpiderMonkey's Ion JIT compiler due to the MSubstr MIR instruction being incorrectly marked as movable, allowing Loop Invariant Code Motion (LICM) to hoist it out of loops in js/src/jit/MIR.h. The bug was introduced by bug 1861983 which made MSubstr movable. In the PoC, String.prototype.slice is called inside a loop with a parameter that changes sign between iterations. The JIT hoists the std_Math_max, std_Math_min, and SubstringKernel calls (which implement slice) outside the loop, but keeps the guard (a10 < 0) inside. When f9(-1) is called, the hoisted code computes SubstringKernel(str, -1, str.length+1), performing an out-of-bounds read before the guard can bail out. The crash manifests as a wild pointer dereference from JIT-compiled code when accessing memory at invalid addresses like 0x9cc00d6602f. The fix (changeset 1267c0f83a66) makes MSubstr non-movable again, reverting the change from D192220, which prevents LICM from hoisting it before guard instructions that validate the input parameters.",
+    "fix_commits": [
+        "691384c30df2",
+        "4375a963137f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-make-msubstr-non-movable.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1885828 fix part 1",
+            "source_commit": "691384c30df2",
+            "commit": "691384c30df2",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/691384c30df2",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/691384c30df2"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-case.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1885828 fix part 2",
+            "source_commit": "4375a963137f",
+            "commit": "4375a963137f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/4375a963137f",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/4375a963137f"
+        }
+    ],
+    "vrp": null
+}

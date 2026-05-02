@@ -1,0 +1,36 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1911909",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmTypeDef.h",
+        "js/src/wasm/WasmTypeDef.cpp",
+        "js/src/wasm/WasmValidate.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "WasmTypeDef ArrayType::canBeSubtypeOf — Unconditionally Returns True When Mutability Differs, Admits anyref↔i64 / struct(i64) Subtyping For addrof/fakeobj/Arbitrary R/W (CVE-2024-8385). CVE-2024-8385 (sec-high). js::wasm::ArrayType::canBeSubtypeOf() always returns true when array mutability differs between subtype and supertype, enabling arbitrary type confusion between WASM GC array element types. An attacker can confuse anyref with i64 to obtain addrof/fakeobj primitives, and i64 with struct(i64) for arbitrary read/write. The fix refactors structs and arrays to share a common FieldType, matching the spec, which correctly handles the mutability check. Exploited in Firefox for RCE with shellcode injection via RWX WASM code regions.",
+    "fix_commits": [
+        "7a57964c63f520aef9d0c46731d94fd55680e81f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-wasm-refactor-structs-and-arrays-to-more.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1911909 - wasm: Refactor structs and arrays to more",
+            "source_commit": "7a57964c63f520aef9d0c46731d94fd55680e81f",
+            "commit": "7a57964c63f520aef9d0c46731d94fd55680e81f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/7a57964c63f520aef9d0c46731d94fd55680e81f",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/7a57964c63f520aef9d0c46731d94fd55680e81f",
+            "phabricator": "D218753"
+        }
+    ],
+    "vrp": null
+}

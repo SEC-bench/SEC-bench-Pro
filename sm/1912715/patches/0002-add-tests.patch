@@ -1,0 +1,67 @@
+From 0ca509a3a7fbf4ff5d34cf25083a4427f3205549 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 29 Oct 2024 18:10:15 +0000
+Subject: [PATCH] Bug 1912715: Add tests r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D219199
+---
+ js/src/jit-test/tests/environments/bug1912715-1.js | 10 ++++++++++
+ js/src/jit-test/tests/environments/bug1912715-2.js | 12 ++++++++++++
+ js/src/jit-test/tests/environments/bug1912715-3.js | 12 ++++++++++++
+ 3 files changed, 34 insertions(+)
+ create mode 100644 js/src/jit-test/tests/environments/bug1912715-1.js
+ create mode 100644 js/src/jit-test/tests/environments/bug1912715-2.js
+ create mode 100644 js/src/jit-test/tests/environments/bug1912715-3.js
+
+diff --git a/js/src/jit-test/tests/environments/bug1912715-1.js b/js/src/jit-test/tests/environments/bug1912715-1.js
+new file mode 100644
+index 0000000000000..d4155c1b42f3d
+--- /dev/null
++++ b/js/src/jit-test/tests/environments/bug1912715-1.js
+@@ -0,0 +1,10 @@
++const obj = {
++  get prop() {
++    Object.defineProperty(this, "prop", { enumerable: true, value: 0});
++    return false;
++  },
++};
++obj[Symbol.unscopables] = obj;
++with (obj) {
++  assertEq(prop, 0);
++}
+diff --git a/js/src/jit-test/tests/environments/bug1912715-2.js b/js/src/jit-test/tests/environments/bug1912715-2.js
+new file mode 100644
+index 0000000000000..62f6af1db3e6e
+--- /dev/null
++++ b/js/src/jit-test/tests/environments/bug1912715-2.js
+@@ -0,0 +1,12 @@
++var obj;
++const proto = {
++  get prop() {
++    Object.defineProperty(obj, "prop", { value:  true});
++    return false;
++  }
++}
++obj = new Object(proto);
++obj[Symbol.unscopables] = proto;
++with (obj) {
++  assertEq(prop, true);
++}
+diff --git a/js/src/jit-test/tests/environments/bug1912715-3.js b/js/src/jit-test/tests/environments/bug1912715-3.js
+new file mode 100644
+index 0000000000000..b17535902351e
+--- /dev/null
++++ b/js/src/jit-test/tests/environments/bug1912715-3.js
+@@ -0,0 +1,12 @@
++var obj;
++const proto = {
++  get prop() {
++    delete proto.prop;
++    return false;
++  }
++}
++obj = new Object(proto);
++obj[Symbol.unscopables] = proto;
++with (obj) {
++  assertEq(prop, undefined);
++}

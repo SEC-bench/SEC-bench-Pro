@@ -1,0 +1,28 @@
+From 5635e34af97fedb56260a73656793a6bbf9cb44d Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Wed, 29 Mar 2023 17:37:14 +0000
+Subject: [PATCH] Bug 1810711: Add testcase r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D167106
+---
+ js/src/jit-test/tests/errors/bug1810711.js | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+ create mode 100644 js/src/jit-test/tests/errors/bug1810711.js
+
+diff --git a/js/src/jit-test/tests/errors/bug1810711.js b/js/src/jit-test/tests/errors/bug1810711.js
+new file mode 100644
+index 0000000000000..ef04251a0565f
+--- /dev/null
++++ b/js/src/jit-test/tests/errors/bug1810711.js
+@@ -0,0 +1,11 @@
++var g = newGlobal({newCompartment: true});
++
++try {
++  undef()
++} catch (err) {
++  const handler = { "getPrototypeOf": (x) => () => x };
++  const proxy = new g.Proxy(err, handler);
++  try {
++    proxy.stack
++  } catch {}
++}

@@ -1,0 +1,40 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000001 (pc 0x59e56b5f6587 bp 0x7fff3caa79f0 sp 0x7fff3caa7950 T0)
+==13==The signal is caused by a READ memory access.
+==13==Hint: address points to the zero page.
+    #0 0x59e56b5f6587 in IsWriteableAddress(void*) /src/gecko-dev/js/src/gc/Nursery.cpp:972:11
+    #1 0x59e56b5f6587 in js::Nursery::forwardBufferPointer(unsigned long*) /src/gecko-dev/js/src/gc/Nursery.cpp:1001:5
+    #2 0x59e56c57cf69 in js::jit::UpdateIonJSFrameForMinorGC(JSRuntime*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:1171:13
+    #3 0x59e56c57cf69 in js::jit::UpdateJitActivationsForMinorGC(JSRuntime*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1516:11
+    #4 0x59e56b5f9481 in js::Nursery::doCollection(js::gc::AutoGCSession&, JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1596:3
+    #5 0x59e56b5b1c2d in js::Nursery::collect(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1421:31
+    #6 0x59e56b5a5b92 in js::gc::GCRuntime::collectNursery(JS::GCOptions, JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:5066:13
+    #7 0x59e56b5935b5 in js::gc::GCRuntime::collectNurseryFromMajorGC(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4187:3
+    #8 0x59e56b592a4c in js::gc::GCRuntime::endPreparePhase(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3026:3
+    #9 0x59e56b5a2531 in js::gc::GCRuntime::incrementalSlice(JS::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3992:7
+    #10 0x59e56b5aab19 in js::gc::GCRuntime::gcCycle(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4624:3
+    #11 0x59e56b5adc87 in js::gc::GCRuntime::collect(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4813:9
+    #12 0x59e56b57f932 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4893:3
+    #13 0x59e56b5b5595 in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp
+    #14 0x59e56a09b7c5 in js::gc::PreAllocGCChecks(JSContext*) /src/gecko-dev/js/src/gc/Allocator-inl.h:152:9
+    #15 0x59e56a09b7c5 in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:194:5
+    #16 0x59e56a09b347 in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:112:16
+    #17 0x59e56a09a128 in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #18 0x59e56a09a128 in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:359:10
+    #19 0x59e56a09a128 in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:482:28
+    #20 0x59e56aa5c4e9 in js::FixedLengthTypedArrayObject* js::NativeObject::create<js::FixedLengthTypedArrayObject>(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject.h:745:26
+    #21 0x59e56aa5c4e9 in js::FixedLengthTypedArrayObject* (anonymous namespace)::NewTypedArrayObject<js::FixedLengthTypedArrayObject>(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::gc::AllocKind, js::gc::Heap) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:396:10
+    #22 0x59e56aa6515a in (anonymous namespace)::FixedLengthTypedArrayObjectTemplate<int>::newBuiltinClassInstance(JSContext*, js::gc::AllocKind, js::gc::Heap) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:918:12
+    #23 0x59e56aa6485c in (anonymous namespace)::FixedLengthTypedArrayObjectTemplate<int>::makeInstance(JSContext*, JS::Handle<js::ArrayBufferObjectMaybeShared*>, unsigned long, unsigned long, JS::Handle<JSObject*>, js::gc::Heap) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:944:13
+    #24 0x59e56aa049d1 in js::TypedArraySubarrayWithLength(JSContext*, JS::Handle<js::TypedArrayObject*>, long, long) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:4277:7
+    #25 0x205d17652dad  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00000fffe79552a1  rcx = 0x000010006794cf32  rdx = 0x0000000000000020  
+rdi = 0x0000000000000001  rsi = 0x00007d72b53e3008  rbp = 0x00007fff3caa79f0  rsp = 0x00007fff3caa7950  
+ r8 = 0x00000fffe7954f2f   r9 = 0x00007fff3caa7997  r10 = 0x00000fffe7954f32  r11 = 0x000010006794cf28  
+r12 = 0x00007fff3caa9508  r13 = 0x000026ef74601298  r14 = 0x00007d72b53e2fd8  r15 = 0x00ffffffffffffff  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Nursery.cpp:972:11 in IsWriteableAddress(void*)
+==13==ABORTING

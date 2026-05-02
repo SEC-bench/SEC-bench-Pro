@@ -1,0 +1,33 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1989978",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/Iteration.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--no-threads --ion-warmup-threshold=100",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "for-in iterator optimization type confusion - optimized iteration allowed writes to non-writable iterator indices to be compiled as direct slot stores. The vulnerable optimization was in js/src/vm/Iteration.cpp. A JSON.rawJSON object could be warmed so a for-in loop overwrote its non-writable rawJSON string slot with an integer; JSON.stringify later trusted the slot as a JSString* and crashed in the raw JSON fast path. The fix disables the unwritable-index iterator optimization so such writes go through the descriptor-checking slow path.",
+    "fix_commits": [
+        "fa91ed58b791e04279b8fbfd6476550dd1fcb27b"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-don-t-support-unwritable-iterator-indices.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1989978: Don't support unwritable iterator indices r=jandem",
+            "source_commit": "fa91ed58b791e04279b8fbfd6476550dd1fcb27b",
+            "commit": "fa91ed58b791e04279b8fbfd6476550dd1fcb27b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/fa91ed58b791e04279b8fbfd6476550dd1fcb27b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/fa91ed58b791e04279b8fbfd6476550dd1fcb27b"
+        }
+    ],
+    "vrp": null
+}

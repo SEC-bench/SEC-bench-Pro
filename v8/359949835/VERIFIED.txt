@@ -1,0 +1,3 @@
+Verified against the collector report for issue `359949835`.
+
+`../../v8/crash_check.sh 359949835` reproduces `abort: Unexpected instance type encountered` with the configured `out/x64.asan/d8 --expose-gc --omit-quit --allow-natives-syntax --fuzzing --jit-fuzzing` command. The stored `output.txt` shows the same js-to-wasm wrapper failure when a `WASM_FUNC_REF_TYPE` escapes to JavaScript. I also confirmed the cleaner collector comment PoC (`poc_comment_4.js`) reproduces locally after replacing its hardcoded builder path with `test/mjsunit/wasm/wasm-module-builder.js`.

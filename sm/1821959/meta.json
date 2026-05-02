@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1821959",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/JSObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Invalid free",
+    "error_type": "ASAN_CRASH",
+    "description": "JSObject::swap transplant invalid free - shifted dense elements use getElementsHeader() instead of the allocation base. In js/src/vm/JSObject.cpp, the transplant path computed the dynamic-elements allocation from getElementsHeader(); after Array.prototype.shift this can be an interior pointer. The GC background free path then calls free() on an address inside the allocation, which ASAN reports as bad-free and which corrupts heap allocator metadata in non-debug builds. The fix uses getUnshiftedElementsHeader() wherever the allocation base is needed during prepare/fixup/alloc-kind handling.",
+    "fix_commits": [
+        "abeb53ae551913d99778601be86b1ff1b195420c"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-use-unshiftedelementsheader-when-transplanting.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1821959 - Use unshiftedElementsHeader when transplanting",
+            "source_commit": "abeb53ae551913d99778601be86b1ff1b195420c",
+            "commit": "abeb53ae551913d99778601be86b1ff1b195420c",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/abeb53ae551913d99778601be86b1ff1b195420c",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/abeb53ae551913d99778601be86b1ff1b195420c",
+            "phabricator": "D173171"
+        }
+    ],
+    "vrp": null
+}

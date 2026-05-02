@@ -1,0 +1,4 @@
+Verified on 2026-04-16.
+Recovered from failed/342602616 after rechecking the packaged debug Turboshaft Wasm repro.
+Reproduced with ./crash_check.sh 342602616.
+Result: CONFIMRED: DCHECK.

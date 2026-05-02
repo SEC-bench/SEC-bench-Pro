@@ -1,0 +1,11 @@
+V8 is running with experimental features enabled. Stability and security will suffer.
+Received signal 11 SEGV_ACCERR 6de242424242
+
+==== C stack trace ===============================
+
+out/x64.asan/d8(__interceptor_backtrace+0x46)[0x56f882707d96]
+out/x64.asan/d8(+0x60bef12)[0x56f8874f2f12]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7323ad4bb330]
+[0x7ec595568bd7]
+[end of stack trace]
+Segmentation fault

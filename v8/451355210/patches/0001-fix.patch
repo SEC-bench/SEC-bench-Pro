@@ -1,0 +1,97 @@
+From 95b9fa928629d3aa86a20b5a6c29a9ccbe322385 Mon Sep 17 00:00:00 2001
+From: Igor Sheludko <ishell@chromium.org>
+Date: Thu, 16 Oct 2025 14:23:10 +0200
+Subject: [PATCH] [sandbox] SBXCHECK that CSA::LoadBuiltin() gets valid builtin
+ id
+
+Drive-by: add IFTTT linter pragmas for CSA::GetSharedFunctionInfoCode()
+and SharedFunctionInfo::GetCode().
+
+NO_IFTTT=Introducing IFTTT, no logical change.
+
+Fixed: 451355210
+Change-Id: Iad01aa8cb973f3d7e699ba135bf6ebe52cb2c928
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/7045784
+Reviewed-by: Patrick Thier <pthier@chromium.org>
+Auto-Submit: Igor Sheludko <ishell@chromium.org>
+Commit-Queue: Patrick Thier <pthier@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#103164}
+---
+ src/builtins/builtins-internal-gen.cc | 3 +++
+ src/codegen/code-stub-assembler.cc    | 5 ++++-
+ src/objects/shared-function-info.cc   | 7 ++-----
+ 3 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/src/builtins/builtins-internal-gen.cc b/src/builtins/builtins-internal-gen.cc
+index a771f931433..21d49e85353 100644
+--- a/src/builtins/builtins-internal-gen.cc
++++ b/src/builtins/builtins-internal-gen.cc
+@@ -110,6 +110,9 @@ TF_BUILTIN(DebugBreakTrampoline, CodeStubAssembler) {
+ 
+   BIND(&tailcall_to_shared);
+   // Tail call into code object on the SharedFunctionInfo.
++  // TODO(https://crbug.com/451355210, ishell): consider removing this
++  // duplicate implementation in favour of returning code object from above
++  // runtime calls once non-leaptering code is removed.
+   TNode<Code> code = GetSharedFunctionInfoCode(shared);
+ 
+   // TailCallJSCode will take care of parameter count validation between the
+diff --git a/src/codegen/code-stub-assembler.cc b/src/codegen/code-stub-assembler.cc
+index b749310ddf9..3845afaed10 100644
+--- a/src/codegen/code-stub-assembler.cc
++++ b/src/codegen/code-stub-assembler.cc
+@@ -18179,7 +18179,8 @@ TNode<BoolT> CodeStubAssembler::NeedsAnyPromiseHooks(TNode<Uint32T> flags) {
+ }
+ 
+ TNode<Code> CodeStubAssembler::LoadBuiltin(TNode<Smi> builtin_id) {
+-  CSA_DCHECK(this, SmiBelow(builtin_id, SmiConstant(Builtins::kBuiltinCount)));
++  CSA_SBXCHECK(this,
++               SmiBelow(builtin_id, SmiConstant(Builtins::kBuiltinCount)));
+ 
+   TNode<IntPtrT> offset =
+       ElementOffsetFromIndex(SmiToBInt(builtin_id), SYSTEM_POINTER_ELEMENTS);
+@@ -18249,6 +18250,7 @@ void CodeStubAssembler::LoadSharedFunctionInfoTrustedDataAndDispatch(
+ #endif
+ }
+ 
++// LINT.IfChange(GetSharedFunctionInfoCode)
+ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
+     TNode<SharedFunctionInfo> shared_info, TVariable<Uint16T>* data_type_out,
+     Label* if_compile_lazy) {
+@@ -18395,6 +18397,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
+   BIND(&done);
+   return sfi_code.value();
+ }
++// LINT.ThenChange(/src/objects/shared-function-info.cc:GetSharedFunctionInfoCode)
+ 
+ TNode<RawPtrT> CodeStubAssembler::LoadCodeInstructionStart(
+     TNode<Code> code, CodeEntrypointTag tag) {
+diff --git a/src/objects/shared-function-info.cc b/src/objects/shared-function-info.cc
+index a252733f89f..b799d38de90 100644
+--- a/src/objects/shared-function-info.cc
++++ b/src/objects/shared-function-info.cc
+@@ -72,12 +72,8 @@ void SharedFunctionInfo::Init(ReadOnlyRoots ro_roots, int unique_id) {
+   clear_padding();
+ }
+ 
++// LINT.IfChange(GetSharedFunctionInfoCode)
+ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
+-  // ======
+-  // NOTE: This chain of checks MUST be kept in sync with the equivalent CSA
+-  // GetSharedFunctionInfoCode method in code-stub-assembler.cc.
+-  // ======
+-
+   Tagged<Object> data = GetTrustedData(isolate);
+   if (data != Smi::zero()) {
+     DCHECK(HasTrustedData());
+@@ -150,6 +146,7 @@ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
+ 
+   UNREACHABLE();
+ }
++// LINT.ThenChange(/src/codegen/code-stub-assembler.cc:GetSharedFunctionInfoCode)
+ 
+ SharedFunctionInfo::ScriptIterator::ScriptIterator(Isolate* isolate,
+                                                    Tagged<Script> script)
+-- 
+2.43.0
+

@@ -1,0 +1,95 @@
+From 1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Fri, 13 Feb 2026 23:41:02 +0000
+Subject: [PATCH] Bug 2013560: Handle force return at yield opcodes r=mgaudet
+
+Differential Revision: https://phabricator.services.mozilla.com/D283332
+---
+ js/src/debugger/Debugger.cpp                  | 29 ++++++++---------
+ .../Frame-onStep-generator-resumption-04.js   | 31 +++++++++++++++++++
+ 2 files changed, 46 insertions(+), 14 deletions(-)
+ create mode 100644 js/src/jit-test/tests/debug/Frame-onStep-generator-resumption-04.js
+
+diff --git a/js/src/debugger/Debugger.cpp b/js/src/debugger/Debugger.cpp
+index 7ff7dd004500b..616b8e956cc50 100644
+--- a/js/src/debugger/Debugger.cpp
++++ b/js/src/debugger/Debugger.cpp
+@@ -2033,26 +2033,27 @@ Completion Completion::fromJSFramePop(JSContext* cx, AbstractFramePtr frame,
+   //
+   // GetGeneratorObjectForFrame can return nullptr even when a generator
+   // object does exist, if the frame is paused between the Generator and
+-  // SetAliasedVar opcodes. But by checking the opcode first we eliminate that
+-  // possibility, so it's fine to call genObj->isClosed().
++  // SetAliasedVar opcodes.
+   Rooted<AbstractGeneratorObject*> generatorObj(
+       cx, GetGeneratorObjectForFrame(cx, frame));
+-  switch (JSOp(*pc)) {
+-    case JSOp::InitialYield:
+-      MOZ_ASSERT(!generatorObj->isClosed());
+-      return Completion(InitialYield(generatorObj));
+ 
+-    case JSOp::Yield:
+-      MOZ_ASSERT(!generatorObj->isClosed());
+-      return Completion(Yield(generatorObj, frame.returnValue()));
++  if (generatorObj && !generatorObj->isClosed()) {
++    switch (JSOp(*pc)) {
++      case JSOp::InitialYield:
++        return Completion(InitialYield(generatorObj));
+ 
+-    case JSOp::Await:
+-      MOZ_ASSERT(!generatorObj->isClosed());
+-      return Completion(Await(generatorObj, frame.returnValue()));
++      case JSOp::Yield:
++        return Completion(Yield(generatorObj, frame.returnValue()));
+ 
+-    default:
+-      return Completion(Return(frame.returnValue()));
++      case JSOp::Await:
++        return Completion(Await(generatorObj, frame.returnValue()));
++
++      default:
++        break;
++    }
+   }
++
++  return Completion(Return(frame.returnValue()));
+ }
+ 
+ void Completion::trace(JSTracer* trc) {
+diff --git a/js/src/jit-test/tests/debug/Frame-onStep-generator-resumption-04.js b/js/src/jit-test/tests/debug/Frame-onStep-generator-resumption-04.js
+new file mode 100644
+index 0000000000000..79ddb611f0328
+--- /dev/null
++++ b/js/src/jit-test/tests/debug/Frame-onStep-generator-resumption-04.js
+@@ -0,0 +1,31 @@
++// Don't crash on {return:} from onStep in a generator at a Yield.
++
++// This test force-returns from each bytecode instruction in a generator.
++
++let g = newGlobal({ newCompartment: true });
++g.eval(`
++function* gen() {
++  yield 1;
++}
++`)
++
++let dbg = new Debugger(g);
++
++let targetSteps = 0;
++let found = true;
++dbg.onEnterFrame = (frame) => {
++  let steps = 0;
++  frame.onStep = () => {
++    if (steps++ == targetSteps) {
++      found = true;
++      return { return: 0xdead };
++    }
++  }
++}
++dbg.uncaughtExceptionHook = () => undefined
++
++while (found) {
++  found = false;
++  targetSteps++;
++  for (var y of g.gen()) {}
++}

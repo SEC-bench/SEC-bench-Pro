@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:342866373",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/codegen/interface-descriptors.h"
+  ],
+  "target_subdir": [
+    "src/codegen"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The WasmJSToWasmWrapperDescriptor and WasmToJSWrapperDescriptor in src/codegen/interface-descriptors.h were incorrectly marked with SANDBOX_EXPOSED_DESCRIPTOR(kJSEntrypointTag) and SANDBOX_EXPOSED_DESCRIPTOR(kWasmEntrypointTag), respectively. This registered the JSToWasmWrapperAsm and WasmToJsWrapperAsm builtins in the Code Pointer Table (CPT) under the kJSEntrypointTag, making them invocable from within the sandbox. An attacker can overwrite the code pointer of a JSFunction object to point to JSToWasmWrapperAsm. When invoked as a JS function, on x64, rdi contains the JSFunction pointer (kJSFunctionRegister). Because WasmJSToWasmWrapperDescriptor::WrapperBufferRegister() also maps to rdi, the builtin treats the JSFunction pointer as a WrapperBuffer struct and reads raw, untagged pointer fields from it (e.g., kWrapperBufferCallTarget). Since the JSFunction object lies within the attacker-controlled sandbox heap, the attacker can position arbitrary pointer values at the expected WrapperBuffer offsets, causing the builtin to dereference and call an attacker-controlled address outside the sandbox. The fix is to replace SANDBOX_EXPOSED_DESCRIPTOR with INTERNAL_DESCRIPTOR() for both wrapper descriptors, removing them from the CPT and preventing sandbox-internal code from invoking them.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/5580045 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "8430125e7c0212a735600565b82ae43483bd788e [sandbox] Mark Wasm wrapper interface descriptors as internal",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5580045",
+      "source_cl": 5580045,
+      "source_commit": "8430125e7c0212a735600565b82ae43483bd788e"
+    }
+  ]
+}

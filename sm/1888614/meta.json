@@ -1,0 +1,38 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1888614",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JSJitFrameIter.cpp",
+        "js/src/jit/JSJitFrameIter.h",
+        "js/src/jit/JitFrames.cpp",
+        "js/src/vm/FrameIter.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Cross-compartment violation",
+    "error_type": "ASAN_CRASH",
+    "description": "JIT exception unwinding realm mismatch - trampoline native frames did not restore the caller realm when unwinding an exception. The fix changes js/src/jit/JSJitFrameIter.cpp, JSJitFrameIter.h, JitFrames.cpp, and js/src/vm/FrameIter.cpp so frame iteration recognizes TrampolineNative frames and recovers their callee/realm information. Before the fix, a cross-global Array.prototype.toSorted comparator that threw could leave cx->realm() pointing at the wrong compartment, tripping Realm.h assertions in debug builds and risking cross-compartment access violations in release builds.",
+    "fix_commits": [
+        "7a6d8fd713576aafe1923dbec51a46a42fb60fdf"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-exception-handler-to-restore-realm-for.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1888614 - Fix exception handler to restore realm for",
+            "source_commit": "7a6d8fd713576aafe1923dbec51a46a42fb60fdf",
+            "commit": "7a6d8fd713576aafe1923dbec51a46a42fb60fdf",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/7a6d8fd713576aafe1923dbec51a46a42fb60fdf",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/7a6d8fd713576aafe1923dbec51a46a42fb60fdf",
+            "phabricator": "D206330"
+        }
+    ],
+    "vrp": null
+}

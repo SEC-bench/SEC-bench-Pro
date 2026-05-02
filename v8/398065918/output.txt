@@ -1,0 +1,412 @@
+0
+NaN
+1
+NaN
+2
+NaN
+3
+NaN
+4
+NaN
+5
+NaN
+6
+NaN
+7
+NaN
+8
+NaN
+9
+NaN
+10
+NaN
+11
+NaN
+12
+NaN
+13
+NaN
+14
+NaN
+15
+NaN
+16
+NaN
+17
+NaN
+18
+NaN
+19
+NaN
+20
+NaN
+21
+NaN
+22
+NaN
+23
+NaN
+24
+NaN
+25
+NaN
+26
+NaN
+27
+NaN
+28
+NaN
+29
+NaN
+30
+NaN
+31
+NaN
+32
+NaN
+33
+NaN
+34
+NaN
+35
+NaN
+36
+NaN
+37
+NaN
+38
+NaN
+39
+NaN
+40
+NaN
+41
+NaN
+42
+NaN
+43
+NaN
+44
+NaN
+45
+NaN
+46
+NaN
+47
+NaN
+48
+NaN
+49
+NaN
+50
+NaN
+51
+NaN
+52
+NaN
+53
+NaN
+54
+NaN
+55
+NaN
+56
+NaN
+57
+NaN
+58
+NaN
+59
+NaN
+60
+NaN
+61
+NaN
+62
+NaN
+63
+NaN
+64
+NaN
+65
+NaN
+66
+NaN
+67
+NaN
+68
+NaN
+69
+NaN
+70
+NaN
+71
+NaN
+72
+NaN
+73
+NaN
+74
+NaN
+75
+NaN
+76
+NaN
+77
+NaN
+78
+NaN
+79
+NaN
+80
+NaN
+81
+NaN
+82
+NaN
+83
+NaN
+84
+NaN
+85
+NaN
+86
+NaN
+87
+NaN
+88
+NaN
+89
+NaN
+90
+NaN
+91
+NaN
+92
+NaN
+93
+NaN
+94
+NaN
+95
+NaN
+96
+NaN
+97
+NaN
+98
+NaN
+99
+NaN
+0
+1073751823
+1
+1073751822
+2
+1073751821
+3
+1073751820
+4
+1073751819
+5
+1073751818
+6
+1073751817
+7
+1073751816
+8
+1073751815
+9
+1073751814
+10
+1073751813
+11
+1073751812
+12
+1073751811
+13
+1073751810
+14
+1073751809
+15
+1073751808
+16
+1073751807
+17
+1073751806
+18
+1073751805
+19
+1073751804
+20
+1073751803
+21
+1073751802
+22
+1073751801
+23
+1073751800
+24
+1073751799
+25
+1073751798
+26
+1073751797
+27
+1073751796
+28
+1073751795
+29
+1073751794
+30
+1073751793
+31
+1073751792
+32
+1073751791
+33
+1073751790
+34
+1073751789
+35
+1073751788
+36
+1073751787
+37
+1073751786
+38
+1073751785
+39
+1073751784
+40
+1073751783
+41
+1073751782
+42
+1073751781
+43
+1073751780
+44
+1073751779
+45
+1073751778
+46
+1073751777
+47
+1073751776
+48
+1073751775
+49
+1073751774
+50
+1073751773
+51
+1073751772
+52
+1073751771
+53
+1073751770
+54
+1073751769
+55
+1073751768
+56
+1073751767
+57
+1073751766
+58
+1073751765
+59
+1073751764
+60
+1073751763
+61
+1073751762
+62
+1073751761
+63
+1073751760
+64
+1073751759
+65
+1073751758
+66
+1073751757
+67
+1073751756
+68
+1073751755
+69
+1073751754
+70
+1073751753
+71
+1073751752
+Stacktrace:
+    ptr1=0x9b1001c002d
+    ptr2=(nil)
+    ptr3=(nil)
+    ptr4=(nil)
+    ptr5=(nil)
+    ptr6=(nil)
+    failure_message_object=0x7f467c4d1130
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x564a850451b6]
+    1: StubFrame [pc: 0x564a85099e95]
+    2: StubFrame [pc: 0x564a8508da45]
+    3: toString [0x9b1003431d1](this=10000000,0x09b1001c002d <FixedArray[10]>,0x09b1001c0021 <HeapNumber 3.14159>,0x09b100000011 <undefined>,0x09b1001c00ad <HeapNumber 78383880524.0>,0x09b100000011 <undefined>,0x09b1001c0011 <Number map = 0x9b10034308d value = 0>,0x09b100000011 <undefined>,0x09b100000011 <undefined>,0x09b100000011 <undefined>,0x09b100000011 <undefined>)
+    4: __f_0 [0x9b10035bc81] [/testcase/poc.js:~170] [pc=0x564ae000a99e](this=0x09b100341a85 <JSGlobalProxy>)
+    5: __f_1 [0x9b10035bcb5] [/testcase/poc.js:190] [bytecode=0x31a0018013d offset=40](this=0x09b100341a85 <JSGlobalProxy>)
+    6: /* anonymous */ [0x9b10035b3a1] [/testcase/poc.js:193] [bytecode=0x31a001800d1 offset=43](this=0x09b100341a85 <JSGlobalProxy>)
+    7: InternalFrame [pc: 0x564a84f9b71c]
+    8: EntryFrame [pc: 0x564a84f9b46b]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x564a850451b6]
+[1]: StubFrame [pc: 0x564a85099e95]
+[2]: StubFrame [pc: 0x564a8508da45]
+[3]: toString [0x9b1003431d1](this=10000000,0x09b1001c002d <FixedArray[10]>,0x09b1001c0021 <HeapNumber 3.14159>,0x09b100000011 <undefined>,0x09b1001c00ad <HeapNumber 78383880524.0>,0x09b100000011 <undefined>,0x09b1001c0011 <Number map = 0x9b10034308d value = 0>,0x09b100000011 <undefined>,0x09b100000011 <undefined>,0x09b100000011 <undefined>,0x09b100000011 <undefined>) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[4]: __f_0 [0x9b10035bc81] [/testcase/poc.js:~170] [pc=0x564ae000a99e](this=0x09b100341a85 <JSGlobalProxy>) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+function __f_0() {\x0a  let __v_2 = __v_1;\x0a\x0a  for (var i = 0; i < 100; i++) { \x0a    --__v_1;\x0a    __v_2 += __v_1;\x0a    console.log(i);\x0a    console.log(__v_1);\x0a    triggerFunction(10000000, 456109613, __v_1,   Math.PI, __getRandomObject(5161),__v_2, __getRandomObject(639756),new Number(), undefined,undefined, undefined,...
+
+-----------------------------------------
+}
+[5]: __f_1 [0x9b10035bcb5] [/testcase/poc.js:190] [bytecode=0x31a0018013d offset=40](this=0x09b100341a85 <JSGlobalProxy>) {
+  // expression stack (top to bottom)
+  [01] : 0x09b100341a85 <JSGlobalProxy>
+  [00] : 0x09b10035bc81 <JSFunction __f_0 (sfi = 0x9b10035b259)>
+--------- s o u r c e   c o d e ---------
+function __f_1() {\x0a  %PrepareFunctionForOptimization(__f_0);  \x0a  __f_0();\x0a  %OptimizeMaglevOnNextCall(__f_0);\x0a  __v_1 = 1073751824;\x0a  __f_0();\x0a}
+-----------------------------------------
+}
+
+[6]: /* anonymous */ [0x9b10035b3a1] [/testcase/poc.js:193] [bytecode=0x31a001800d1 offset=43](this=0x09b100341a85 <JSGlobalProxy>) {
+  // heap-allocated locals
+  var __v_1 = 0x09b10035eb29 <FixedArray[1]>
+  // expression stack (top to bottom)
+  [04] : 0x09b100341a85 <JSGlobalProxy>
+  [03] : 0x09b10035d63d <Object map = 0x9b10034281d>
+  [02] : 0x09b10035d659 <Object map = 0x9b10034281d>
+  [01] : 0x09b10035bcb5 <JSFunction __f_1 (sfi = 0x9b10035b289)>
+  [00] : 0x09b100000011 <undefined>
+--------- s o u r c e   c o d e ---------
+var my_simple_var_0;\x0avar my_simple_var_1;\x0avar my_simple_var_2;\x0avar my_simple_var_3;\x0avar my_simple_var_4;\x0avar my_simple_var_5;\x0avar my_simple_var_6;\x0avar my_simple_var_7;\x0avar my_simple_var_8;\x0avar my_simple_var_9;\x0avar my_simple_var_10;\x0avar my_simple_var_11;\x0avar my_simple_var_12;\x0avar my_simple_var_13;\x0ava...
+
+-----------------------------------------
+}
+
+[7]: InternalFrame [pc: 0x564a84f9b71c]
+[8]: EntryFrame [pc: 0x564a84f9b46b]
+=====================
+
+Trace/breakpoint trap (core dumped)

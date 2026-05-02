@@ -1,0 +1,60 @@
+Assertion failure: IsBackgroundFinalizedWhenTenured(a) == IsBackgroundFinalizedWhenTenured(b), at /src/gecko-dev/js/src/vm/JSObject.cpp:1226
+#01: JSObject::swap(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>, js::AutoEnterOOMUnsafeRegion&)[/out/js +0x2e06293]
+#02: ???[/out/js +0x364c654]
+#03: ???[/out/js +0x364b949]
+#04: js::RemapAllWrappersForObject(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>)[/out/js +0x364d60e]
+#05: JS_TransplantObject(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>)[/out/js +0x35ad594]
+#06: ???[/out/js +0x27b7953]
+#07: ???[/out/js +0x299bf53]
+#08: ???[/out/js +0x295502e]
+#09: ???[/out/js +0x2972ae3]
+#10: ???[/out/js +0x295358e]
+#11: ???[/out/js +0x295a24e]
+#12: ???[/out/js +0x295abfa]
+#13: ???[/out/js +0x2c14b81]
+#14: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x2c1507c]
+#15: ???[/out/js +0x27c5e1c]
+#16: ???[/out/js +0x27c4566]
+#17: ???[/out/js +0x2748bfa]
+#18: ???[/out/js +0x273de21]
+#19: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#20: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#21: ???[/out/js +0x2643079]
+#22: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6294e24282c8 bp 0x7fffe33887f0 sp 0x7fffe33882c0 T0)
+==12==The signal is caused by a WRITE memory access.
+==12==Hint: address points to the zero page.
+    #0 0x6294e24282c8 in JSObject::swap(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>, js::AutoEnterOOMUnsafeRegion&) /src/gecko-dev/js/src/vm/JSObject.cpp:1225:3
+    #1 0x6294e2c6e653 in js::RemapDeadWrapper(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>) /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:561:5
+    #2 0x6294e2c6d948 in js::RemapWrapper(JSContext*, JSObject*, JSObject*) /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:521:3
+    #3 0x6294e2c6f60d in js::RemapAllWrappersForObject(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>) /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:600:5
+    #4 0x6294e2bcf593 in JS_TransplantObject(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>) /src/gecko-dev/js/src/jsapi.cpp:706:8
+    #5 0x6294e1dd9952 in TransplantObject(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:8486:12
+    #6 0x6294e1fbdf52 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:486:13
+    #7 0x6294e1f7702d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:580:12
+    #8 0x6294e1f94ae2 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:652:10
+    #9 0x6294e1f94ae2 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3395:16
+    #10 0x6294e1f7558d in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:458:13
+    #11 0x6294e1f7c24d in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:845:13
+    #12 0x6294e1f7cbf9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:877:10
+    #13 0x6294e2236b80 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:493:10
+    #14 0x6294e223707b in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:517:10
+    #15 0x6294e1de7e1b in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1102:10
+    #16 0x6294e1de6565 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #17 0x6294e1d6abf9 in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10578:10
+    #18 0x6294e1d6abf9 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10802:12
+    #19 0x6294e1d5fe20 in main /src/gecko-dev/js/src/shell/js.cpp:11234:12
+    #20 0x7f874f8be1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x7f874f8be28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x6294e1c65078 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2643078) (BuildId: e4d0fa19c8c0b9a4dd94c8534510a197)
+
+==12==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fffe3388880  rcx = 0x00006294e0173ca0  rdx = 0x0000000000000000  
+rdi = 0x00006294e58e86d0  rsi = 0x00007fffe3388278  rbp = 0x00007fffe33887f0  rsp = 0x00007fffe33882c0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000ffffc671136  r13 = 0x00007fffe33889b0  r14 = 0x0000000000000001  r15 = 0x00000ffffc671070  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/vm/JSObject.cpp:1225:3 in JSObject::swap(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>, js::AutoEnterOOMUnsafeRegion&)
+==12==ABORTING

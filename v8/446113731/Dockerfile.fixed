@@ -1,0 +1,22 @@
+FROM hwiwonlee/v8.base:latest
+
+ARG NINJA_JOBS
+ENV SRC=/src
+ENV PATH="/opt/depot_tools:$PATH"
+WORKDIR $SRC/v8
+
+RUN git fetch origin 04a92d6a85419c705384a2fa9effd886fc30009b && git checkout 04a92d6a85419c705384a2fa9effd886fc30009b
+RUN rm -rf $SRC/.cipd
+RUN gclient sync -D
+COPY patches/ /tmp/secb-fix-patches/
+RUN set -eux; \
+    for p in /tmp/secb-fix-patches/*.patch; do git apply "$p"; done; \
+    rm -rf $SRC/.cipd; \
+    gclient sync -D
+RUN set -eux; \
+    jobs="${NINJA_JOBS:-$(nproc)}"; \
+    gn gen out/x64.asan --args='is_debug = false is_asan = true dcheck_always_on = false v8_enable_slow_dchecks = false target_cpu = "x64" v8_target_cpu = "x64" use_sysroot = false v8_enable_sandbox = true v8_enable_pointer_compression = true v8_enable_memory_corruption_api = true is_component_build = false'; \
+    ninja -j"$jobs" -C out/x64.asan d8; \
+    mkdir -p /out; \
+    ln -sf /src/v8/out/x64.asan/d8 /out/d8; \
+    if [ -f /src/v8/out/x64.asan/snapshot_blob.bin ]; then ln -sf /src/v8/out/x64.asan/snapshot_blob.bin /out/snapshot_blob.bin; fi

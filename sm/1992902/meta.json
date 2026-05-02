@@ -1,0 +1,38 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1992902",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MIR.h",
+        "js/src/jit/MIROps.yaml",
+        "js/src/jit/LIROps.yaml",
+        "js/src/jit/ScalarReplacement.cpp",
+        "js/src/jit/WarpCacheIRTranspiler.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off --ion-warmup-threshold=30",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Use-after-free in SpiderMonkey IonMonkey caused by incorrect scalar replacement of TypedArray.prototype.subarray(). CVE-2025-13024 (sec-high, MFSA 2025-87, Firefox 145). MTypedArraySubarray was statically marked alias_set=none and can_recover=true, so Ion treated every subarray() call as a pure, hoistable operation with no side effects. But subarray() on a TypedArray with inline elements MIGRATES those elements into a newly-allocated ArrayBuffer — a GC-observable allocation whose side effects invalidate the parent array's inline dense-elements pointer. When Ion hoisted subarray() over aliased element stores, the subsequent store landed on freed inline-elements storage. Under gczeal(2) (GC on every allocation), the freed storage is reused quickly enough to surface as a heap-UAF; the shell allocation-metadata builder variant asserts on metadata lookup; the oomTest variant exercises the effectful resume-after path. The fix (commit de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6 by André Bargull, 2025-10-30, r=iain) converts MTypedArraySubarray to a hand-written MIR class with a scalarReplaced_ flag: getAliasSet() now returns Store(ObjectFields) unless scalar-replaced; canRecoverOnBailout() is gated on the flag; WarpCacheIRTranspiler's emitTypedArraySubarrayResult uses addEffectful + resumeAfter; and ScalarReplacement.cpp's SubarrayReplacer calls setScalarReplaced() and stealResumePoint to preserve the deoptimization point. Reporter: André Bargull.",
+    "fix_commits": [
+        "de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-track-scalar-replacement-for-subarray.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1992902: Track scalar replacement for subarray. r=iain",
+            "source_commit": "de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6",
+            "commit": "de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6",
+            "phabricator": "D268254"
+        }
+    ],
+    "vrp": null
+}

@@ -1,0 +1,3 @@
+Verified with `out/x64.asan/d8 --sandbox-fuzzing --harmony-struct poc.js` in `hwiwonlee/v8.x86_64:443182220`.
+
+`../../v8/crash_check.sh 443182220` immediately reports `CONFIMRED: ASAN_CRASH`, and `output.txt` matches the report's `heap-use-after-free` in `RemoveFromAsyncWaiterQueueList` / `UnlockAsyncLockedMutex` from `src/objects/js-atomics-synchronization.cc`.

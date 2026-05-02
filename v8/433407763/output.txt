@@ -1,0 +1,33 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x7fa39d197a19 bp 0x7fffc1289518 sp 0x7fffc12894f8 T0)
+==13==The signal is caused by a READ memory access.
+==13==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x7fa39d197a19  (<unknown module>)
+    #1 0x7fa39d197994  (<unknown module>)
+    #2 0x5632db6af0c5 in Builtins_JSToWasmWrapperAsm setup-isolate-deserialize.cc
+    #3 0x5632db791e73 in Builtins_JSToWasmWrapper setup-isolate-deserialize.cc
+    #4 0x5632db60a934 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #5 0x5632db60755b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #6 0x5632db6072aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #7 0x5632d761cc8b in Call src/execution/simulator.h:212:12
+    #8 0x5632d761cc8b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #9 0x5632d761e248 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #10 0x5632d721da03 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1937:7
+    #11 0x5632d6f47d06 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #12 0x5632d6f7da1d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #13 0x5632d6f898b3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #14 0x5632d6f88ce5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #15 0x5632d6f8c3fe in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #16 0x7fa39d5f61c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #17 0x7fa39d5f628a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #18 0x5632d6e3a024 in _start (/src/v8/out/x64.asan/d8+0x127e024) (BuildId: c3176a91b9592706)
+
+==13==Register values:
+rax = 0x00000000deadbeef  rbx = 0x0000000000000000  rcx = 0x00007ba342230000  rdx = 0x414141414141413a  
+rdi = 0x00007fa39d197a08  rsi = 0x00007a82001076b9  rbp = 0x00007fffc1289518  rsp = 0x00007fffc12894f8  
+ r8 = 0x0000000000000001   r9 = 0x0000000000000000  r10 = 0x00007eb39c7e1150  r11 = 0x00007df39c8208f0  
+r12 = 0x0000000000000000  r13 = 0x00007eb39c7e1080  r14 = 0x00007a9300000000  r15 = 0x00007a93000007bd  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==13==ABORTING

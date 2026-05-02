@@ -1,0 +1,113 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x76d200000000,0x77d200000000)
+=================================================================
+==10==ERROR: AddressSanitizer: use-after-poison on address 0x7aa3fd80cfc0 at pc 0x57c22a10b447 bp 0x7ffc7b3fe720 sp 0x7ffc7b3fe718
+WRITE of size 8 at 0x7aa3fd80cfc0 thread T0
+    #0 0x57c22a10b446 in v8::internal::maglev::VirtualObject::set(unsigned int, v8::internal::maglev::ValueNode*) src/maglev/maglev-ir.h:6451:57
+    #1 0x57c22a18d561 in v8::internal::maglev::MaglevGraphBuilder::TryReadBoilerplateForFastLiteral(v8::internal::compiler::JSObjectRef, v8::internal::AllocationType, int, int*) src/maglev/maglev-graph-builder.cc:13288:19
+    #2 0x57c22a18c0c4 in v8::internal::maglev::MaglevGraphBuilder::TryBuildFastCreateObjectOrArrayLiteral(v8::internal::compiler::LiteralFeedback const&) src/maglev/maglev-graph-builder.cc:14045:47
+    #3 0x57c22a18ba5c in v8::internal::maglev::MaglevGraphBuilder::VisitCreateArrayLiteral() src/maglev/maglev-graph-builder.cc:13095:7
+    #4 0x57c22a11b441 in v8::internal::maglev::MaglevGraphBuilder::VisitSingleBytecode() src/maglev/maglev-graph-builder.cc:16185:5
+    #5 0x57c22a140c98 in v8::internal::maglev::MaglevGraphBuilder::BuildBody() src/maglev/maglev-graph-builder.cc:15777:9
+    #6 0x57c22a1af59e in v8::internal::maglev::MaglevGraphBuilder::Build() src/maglev/maglev-graph-builder.cc:15756:3
+    #7 0x57c229d3bf98 in v8::internal::maglev::MaglevCompiler::Compile(v8::internal::LocalIsolate*, v8::internal::maglev::MaglevCompilationInfo*) src/maglev/maglev-compiler.cc:104:26
+    #8 0x57c22a0d6838 in v8::internal::maglev::MaglevCompilationJob::ExecuteJobImpl(v8::internal::RuntimeCallStats*, v8::internal::LocalIsolate*) src/maglev/maglev-concurrent-dispatcher.cc:132:8
+    #9 0x57c2286b2f1b in ExecuteJob src/codegen/compiler.cc:451:22
+    #10 0x57c2286b2f1b in v8::internal::(anonymous namespace)::CompileMaglev(v8::internal::Isolate*, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::BytecodeOffset, v8::internal::(anonymous namespace)::CompileResultBehavior) src/codegen/compiler.cc:1302:14
+    #11 0x57c22869b32b in v8::internal::(anonymous namespace)::GetOrCompileOptimized(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind, v8::internal::BytecodeOffset, v8::internal::(anonymous namespace)::CompileResultBehavior) src/codegen/compiler.cc:1404:12
+    #12 0x57c228699f6a in v8::internal::Compiler::CompileOptimized(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind) src/codegen/compiler.cc:3175:7
+    #13 0x57c2298817eb in v8::internal::(anonymous namespace)::CompileOptimized(v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind, v8::internal::Isolate*) src/runtime/runtime-compiler.cc:185:3
+    #14 0x57c2298741da in __RT_impl_Runtime_OptimizeMaglevEager src/runtime/runtime-compiler.cc:217:3
+    #15 0x57c2298741da in v8::internal::Runtime_OptimizeMaglevEager(int, unsigned long*, v8::internal::Isolate*) src/runtime/runtime-compiler.cc:212:1
+    #16 0x57c22cceeb75 in Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit setup-isolate-deserialize.cc
+    #17 0x57c22cc44f41 in Builtins_OptimizeMaglevEager setup-isolate-deserialize.cc
+    #18 0x57c28cc09afd  (<unknown module>)
+    #19 0x57c22cc4055b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #20 0x57c22cc402aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #21 0x57c22886f0a2 in Call src/execution/simulator.h:212:12
+    #22 0x57c22886f0a2 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #23 0x57c228870628 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #24 0x57c22846cf3d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1955:7
+    #25 0x57c2281958b6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1036:44
+    #26 0x57c2281cd7bd in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5487:10
+    #27 0x57c2281d95c3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6443:37
+    #28 0x57c2281d89f5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6351:18
+    #29 0x57c2281dc0fc in v8::Shell::Main(int, char**) src/d8/d8.cc:7241:18
+    #30 0x7c13fe511082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+0x7aa3fd80cfc0 is located 7616 bytes inside of 16480-byte region [0x7aa3fd80b200,0x7aa3fd80f260)
+allocated by thread T0 here:
+    #0 0x57c228129db4 in malloc (/src/v8/out/x64.asan/d8+0x132bdb4) (BuildId: ef39bb40adb72bc2)
+    #1 0x57c229b1ddf1 in Malloc src/base/platform/memory.h:44:10
+    #2 0x57c229b1ddf1 in AllocateAtLeast<char> src/base/platform/memory.h:146:34
+    #3 0x57c229b1ddf1 in v8::internal::AllocAtLeastWithRetry(unsigned long) src/utils/allocation.cc:138:14
+    #4 0x57c229b27ecd in v8::internal::AccountingAllocator::AllocateSegment(unsigned long) src/zone/accounting-allocator.cc:101:14
+    #5 0x57c229b28bd3 in v8::internal::Zone::Expand(unsigned long) src/zone/zone.cc:178:34
+    #6 0x57c229b28aaa in v8::internal::Zone::AsanNew(unsigned long) src/zone/zone.cc:52:5
+    #7 0x57c22ade24df in UpdateLiveness<true> src/compiler/bytecode-analysis.cc:414:5
+    #8 0x57c22ade24df in v8::internal::compiler::BytecodeAnalysis::BytecodeAnalysisImpl::Analyze() src/compiler/bytecode-analysis.cc:680:7
+    #9 0x57c22adfb4ec in v8::internal::compiler::BytecodeAnalysis::BytecodeAnalysis(v8::internal::Handle<v8::internal::BytecodeArray>, v8::internal::Zone*, v8::internal::BytecodeOffset, bool) src/compiler/bytecode-analysis.cc:1191:12
+    #10 0x57c22a0e2a10 in v8::internal::maglev::MaglevGraphBuilder::MaglevGraphBuilder(v8::internal::LocalIsolate*, v8::internal::maglev::MaglevCompilationUnit*, v8::internal::maglev::Graph*, v8::internal::maglev::MaglevCallerDetails*) src/maglev/maglev-graph-builder.cc:1121:7
+    #11 0x57c229d3bf90 in v8::internal::maglev::MaglevCompiler::Compile(v8::internal::LocalIsolate*, v8::internal::maglev::MaglevCompilationInfo*) src/maglev/maglev-compiler.cc:102:26
+    #12 0x57c22a0d6838 in v8::internal::maglev::MaglevCompilationJob::ExecuteJobImpl(v8::internal::RuntimeCallStats*, v8::internal::LocalIsolate*) src/maglev/maglev-concurrent-dispatcher.cc:132:8
+    #13 0x57c2286b2f1b in ExecuteJob src/codegen/compiler.cc:451:22
+    #14 0x57c2286b2f1b in v8::internal::(anonymous namespace)::CompileMaglev(v8::internal::Isolate*, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::BytecodeOffset, v8::internal::(anonymous namespace)::CompileResultBehavior) src/codegen/compiler.cc:1302:14
+    #15 0x57c22869b32b in v8::internal::(anonymous namespace)::GetOrCompileOptimized(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind, v8::internal::BytecodeOffset, v8::internal::(anonymous namespace)::CompileResultBehavior) src/codegen/compiler.cc:1404:12
+    #16 0x57c228699f6a in v8::internal::Compiler::CompileOptimized(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind) src/codegen/compiler.cc:3175:7
+    #17 0x57c2298817eb in v8::internal::(anonymous namespace)::CompileOptimized(v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::ConcurrencyMode, v8::internal::CodeKind, v8::internal::Isolate*) src/runtime/runtime-compiler.cc:185:3
+    #18 0x57c2298741da in __RT_impl_Runtime_OptimizeMaglevEager src/runtime/runtime-compiler.cc:217:3
+    #19 0x57c2298741da in v8::internal::Runtime_OptimizeMaglevEager(int, unsigned long*, v8::internal::Isolate*) src/runtime/runtime-compiler.cc:212:1
+    #20 0x57c22cceeb75 in Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit setup-isolate-deserialize.cc
+    #21 0x57c22cc44f41 in Builtins_OptimizeMaglevEager setup-isolate-deserialize.cc
+    #22 0x57c28cc09afd  (<unknown module>)
+    #23 0x57c22cc4055b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #24 0x57c22cc402aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #25 0x57c22886f0a2 in Call src/execution/simulator.h:212:12
+    #26 0x57c22886f0a2 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #27 0x57c228870628 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #28 0x57c22846cf3d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1955:7
+    #29 0x57c2281958b6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1036:44
+    #30 0x57c2281cd7bd in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5487:10
+    #31 0x57c2281d95c3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6443:37
+    #32 0x57c2281d89f5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6351:18
+    #33 0x57c2281dc0fc in v8::Shell::Main(int, char**) src/d8/d8.cc:7241:18
+    #34 0x7c13fe511082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+SUMMARY: AddressSanitizer: use-after-poison src/maglev/maglev-ir.h:6451:57 in v8::internal::maglev::VirtualObject::set(unsigned int, v8::internal::maglev::ValueNode*)
+Shadow bytes around the buggy address:
+  0x7aa3fd80cd00: f7 f7 f7 00 00 00 f7 f7 f7 00 00 f7 f7 f7 00 00
+  0x7aa3fd80cd80: 00 00 f7 f7 f7 00 00 f7 f7 f7 00 00 00 00 00 f7
+  0x7aa3fd80ce00: f7 f7 00 00 00 f7 f7 f7 00 00 00 00 00 f7 f7 f7
+  0x7aa3fd80ce80: 00 00 f7 f7 f7 00 00 00 00 f7 f7 f7 00 00 00 00
+  0x7aa3fd80cf00: 00 00 f7 f7 f7 00 00 00 00 00 00 00 00 00 00 00
+=>0x7aa3fd80cf80: 00 f7 f7 f7 00 00 00 00[f7]f7 f7 00 00 00 f7 f7
+  0x7aa3fd80d000: f7 00 00 00 00 00 00 f7 f7 f7 00 00 00 00 f7 f7
+  0x7aa3fd80d080: f7 00 00 00 00 00 00 f7 f7 f7 00 00 00 f7 f7 f7
+  0x7aa3fd80d100: 00 00 00 00 00 00 f7 f7 f7 00 00 00 00 00 00 00
+  0x7aa3fd80d180: 00 00 00 00 00 f7 f7 f7 00 00 00 00 00 00 00 00
+  0x7aa3fd80d200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+
+NOTE: the stack trace above identifies the code that *accessed* the poisoned memory.
+To identify the code that *poisoned* the memory, try the experimental setting ASAN_OPTIONS=poison_history_size=<size>.
+==10==ABORTING
+
+## V8 sandbox violation detected!

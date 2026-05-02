@@ -1,0 +1,48 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1908631",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmBaselineCompile.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--wasm-compiler=baseline --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds read",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm baseline compiler missing dead-code check in BaseCompiler::emitTableFill. Sec-high (csectype-bounds). When table.fill appears in dead code (after an unreachable), the baseline compiler still consumed operands from the wasm value stack, violating the numval <= stk_.length() invariant and tripping MOZ_RELEASE_ASSERT. Fix (commit 5a54e992206bf047493b1081886b364fe21837d7 'Bug 1908631: Add missing dead code check in table.fill' by Ben Visness, 2024-07-22, r=rhunt) adds the deadCode_ early-return that all other table-* opcodes already had. Test commit c3216db173b3631a656a2feb519f572b6837489a ships js/src/jit-test/tests/wasm/bug1908631.js. Reporter: Christian Holler (:decoder).",
+    "fix_commits": [
+        "5a54e992206bf047493b1081886b364fe21837d7",
+        "c3216db173b3631a656a2feb519f572b6837489a"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-add-missing-dead-code-check-in-table-fill.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1908631: Add missing dead code check in table.fill.",
+            "source_commit": "5a54e992206bf047493b1081886b364fe21837d7",
+            "commit": "5a54e992206bf047493b1081886b364fe21837d7",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/5a54e992206bf047493b1081886b364fe21837d7",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/5a54e992206bf047493b1081886b364fe21837d7",
+            "phabricator": "D217310"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-for-dead-code-in-table-fill.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1908631: Add test for dead code in table.fill. r=rhunt",
+            "source_commit": "c3216db173b3631a656a2feb519f572b6837489a",
+            "commit": "c3216db173b3631a656a2feb519f572b6837489a",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/c3216db173b3631a656a2feb519f572b6837489a",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/c3216db173b3631a656a2feb519f572b6837489a",
+            "phabricator": "D217312"
+        }
+    ],
+    "vrp": null
+}

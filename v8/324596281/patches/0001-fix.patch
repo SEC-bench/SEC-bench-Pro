@@ -1,0 +1,138 @@
+From 2109613ad4622028778a38fb418956fab8b478b6 Mon Sep 17 00:00:00 2001
+From: Andreas Haas <ahaas@chromium.org>
+Date: Tue, 13 Feb 2024 14:14:59 +0100
+Subject: [PATCH] [wasm] Use correct signature index for tier-up of wasm-to-js
+ wrapper
+
+The wasm-to-js wrapper tierup used the canonicalized signature id lookup
+for module-independent signatures to look up the canonicalized signature
+id of module-specific signatures. With this CL the signature id is
+looked up with the function index of imported functions and from the
+dispatch table for indirect function calls instead.
+
+R=jkummerow@chromium.org
+
+Bug: chromium:324596281
+Change-Id: I5e47e48ad5e2f103a4c731302ebf3464b59762b8
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5291374
+Commit-Queue: Andreas Haas <ahaas@chromium.org>
+Reviewed-by: Jakob Kummerow <jkummerow@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#92300}
+---
+ src/runtime/runtime-wasm.cc                   | 28 ++++++--
+ .../mjsunit/regress/wasm/regress-324596281.js | 64 +++++++++++++++++++
+ 2 files changed, 88 insertions(+), 4 deletions(-)
+ create mode 100644 test/mjsunit/regress/wasm/regress-324596281.js
+
+diff --git a/src/runtime/runtime-wasm.cc b/src/runtime/runtime-wasm.cc
+index 5da828915d0..4bfda038b94 100644
+--- a/src/runtime/runtime-wasm.cc
++++ b/src/runtime/runtime-wasm.cc
+@@ -597,10 +597,30 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+   }
+   Handle<WasmTrustedInstanceData> trusted_data(
+       instance_object->trusted_data(isolate), isolate);
+-  // Get the function's canonical signature index. Note that the function's
+-  // signature may not be present in the importing module.
+-  uint32_t canonical_sig_index =
+-      wasm::GetTypeCanonicalizer()->AddRecursiveGroup(&sig);
++
++  // Get the function's canonical signature index.
++  uint32_t canonical_sig_index = std::numeric_limits<uint32_t>::max();
++  const wasm::WasmModule* module = trusted_data->module();
++  if (WasmApiFunctionRef::CallOriginIsImportIndex(origin)) {
++    int func_index = WasmApiFunctionRef::CallOriginAsIndex(origin);
++    canonical_sig_index =
++        module->isorecursive_canonical_type_ids[module->functions[func_index]
++                                                    .sig_index];
++  } else {
++    // Indirect function table index.
++    int entry_index = WasmApiFunctionRef::CallOriginAsIndex(origin);
++    int table_count = trusted_data->dispatch_tables()->length();
++    // We have to find the table which contains the correct entry.
++    for (int table_index = 0; table_index < table_count; ++table_index) {
++      Tagged<WasmDispatchTable> table =
++          trusted_data->dispatch_table(table_index);
++      if (table->ref(entry_index) == *ref) {
++        canonical_sig_index = table->sig(entry_index);
++        break;
++      }
++    }
++  }
++  DCHECK_NE(canonical_sig_index, std::numeric_limits<uint32_t>::max());
+ 
+   // Compile a wrapper for the target callable.
+   Handle<JSReceiver> callable(JSReceiver::cast(ref->callable()), isolate);
+diff --git a/test/mjsunit/regress/wasm/regress-324596281.js b/test/mjsunit/regress/wasm/regress-324596281.js
+new file mode 100644
+index 00000000000..84f847a4350
+--- /dev/null
++++ b/test/mjsunit/regress/wasm/regress-324596281.js
+@@ -0,0 +1,64 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++//
++// Flags: --wasm-wrapper-tiering-budget=1
++
++d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
++
++(function TierUpImportedFunction() {
++  let builder = new WasmModuleBuilder();
++  let struct = builder.addStruct([makeField(kWasmI32, true)]);
++  let sig =
++    builder.addType(makeSig([wasmRefType(struct)], [wasmRefType(struct)]));
++  let imp = builder.addImport('m', 'f', sig);
++  builder.addFunction('main', kSig_i_i).exportFunc().addBody([
++    kGCPrefix, kExprStructNewDefault, struct,
++    kExprLoop, sig,
++    kExprCallFunction, imp,
++    kExprLocalGet, 0,
++    kExprI32Const, 1,
++    kExprI32Sub,
++    kExprLocalTee, 0,
++    kExprI32Eqz,
++    kExprI32Eqz,
++    kExprBrIf, 0,
++    kExprEnd,
++    kGCPrefix, kExprStructGet, struct, 0,
++  ]);
++
++  let instance = builder.instantiate({ m: { f: (x) => x } });
++  // The argument is the iteration count: enough to tier up the wasm-to-js
++  // wrapper.
++  instance.exports.main(2);
++})();
++
++(function TierUpIndirectlyCalledFunction() {
++  let builder = new WasmModuleBuilder();
++  let struct = builder.addStruct([makeField(kWasmI32, true)]);
++  let sig =
++    builder.addType(makeSig([wasmRefType(struct)], [wasmRefType(struct)]));
++  let imp = builder.addImport('m', 'f', sig);
++  builder.addTable(kWasmAnyFunc, 10, 10);
++  builder.addActiveElementSegment(0, wasmI32Const(0), [imp]);
++  builder.addFunction('main', kSig_i_i).exportFunc().addBody([
++    kGCPrefix, kExprStructNewDefault, struct,
++    kExprLoop, sig,
++    kExprI32Const, 0,
++    kExprCallIndirect, sig, kTableZero,
++    kExprLocalGet, 0,
++    kExprI32Const, 1,
++    kExprI32Sub,
++    kExprLocalTee, 0,
++    kExprI32Eqz,
++    kExprI32Eqz,
++    kExprBrIf, 0,
++    kExprEnd,
++    kGCPrefix, kExprStructGet, struct, 0,
++  ]);
++
++  let instance = builder.instantiate({ m: { f: (x) => x } });
++  // The argument is the iteration count: enough to tier up the wasm-to-js
++  // wrapper.
++  instance.exports.main(2);
++})();
+-- 
+2.43.0
+

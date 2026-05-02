@@ -1,0 +1,351 @@
+From c250ecfd8b26dee1370d89524946288cbfbf0635 Mon Sep 17 00:00:00 2001
+From: Clemens Backes <clemensb@chromium.org>
+Date: Thu, 3 Jul 2025 12:11:25 +0200
+Subject: [PATCH] [asmjs] Copy input before parsing
+
+The asm parser often rewinds the scanner to re-parse the input. This is
+done in particular for switches and for-loops.
+To fix this issue once and for all, we now copy all characters into a
+vector of utf16 values and the `AsmScanner` works on that vector.
+
+We introduce a few helper functions in `AsmScanner` to make checking and
+consuming the next character easier. This actually made some scanning
+code significantly simpler.
+
+Drive-by: Put fields last in the `AsmScanner` class (see style guide).
+
+R=jkummerow@chromium.org
+
+Bug: 427918760
+Change-Id: I7feae8fe04f2a0f317445f553c2f08615ffbd6e4
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6701450
+Reviewed-by: Jakob Kummerow <jkummerow@chromium.org>
+Commit-Queue: Clemens Backes <clemensb@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#101227}
+---
+ src/asmjs/asm-scanner.cc | 110 ++++++++++++++++++---------------------
+ src/asmjs/asm-scanner.h  |  55 ++++++++++++++------
+ 2 files changed, 89 insertions(+), 76 deletions(-)
+
+diff --git a/src/asmjs/asm-scanner.cc b/src/asmjs/asm-scanner.cc
+index b699135e6e4..ae03396eea3 100644
+--- a/src/asmjs/asm-scanner.cc
++++ b/src/asmjs/asm-scanner.cc
+@@ -22,8 +22,7 @@ static const int kMaxIdentifierCount = 0xF000000;
+ }  // namespace
+ 
+ AsmJsScanner::AsmJsScanner(Utf16CharacterStream* stream)
+-    : stream_(stream),
+-      token_(kUninitialized),
++    : token_(kUninitialized),
+       preceding_token_(kUninitialized),
+       next_token_(kUninitialized),
+       position_(0),
+@@ -48,6 +47,15 @@ AsmJsScanner::AsmJsScanner(Utf16CharacterStream* stream)
+ #define V(name) global_names_[#name] = kToken_##name;
+   KEYWORD_NAME_LIST(V)
+ #undef V
++
++  // Fully read the stream to protect against concurrent modification of on-heap
++  // data (e.g. strings).
++  input_offset_ = stream->pos();
++  static constexpr auto kEndOfInputU = static_cast<base::uc32>(kEndOfInput);
++  for (base::uc32 ch; (ch = stream->Advance()) != kEndOfInputU;) {
++    input_.push_back(ch);
++  }
++
+   Next();
+ }
+ 
+@@ -63,9 +71,7 @@ void AsmJsScanner::Next() {
+     return;
+   }
+ 
+-  if (token_ == kEndOfInput || token_ == kParseError) {
+-    return;
+-  }
++  if (token_ == kEndOfInput || token_ == kParseError) return;
+ 
+ #if DEBUG
+   if (v8_flags.trace_asm_scanner) {
+@@ -84,9 +90,14 @@ void AsmJsScanner::Next() {
+   preceding_token_ = token_;
+   preceding_position_ = position_;
+ 
+-  for (;;) {
+-    position_ = stream_->pos();
+-    base::uc32 ch = stream_->Advance();
++  while (true) {
++    position_ = input_offset_ + input_position_;
++    if (!HasMoreChars()) {
++      token_ = kEndOfInput;
++      return;
++    }
++
++    base::uc32 ch = NextChar();
+     switch (ch) {
+       case ' ':
+       case '\t':
+@@ -100,26 +111,20 @@ void AsmJsScanner::Next() {
+         preceded_by_newline_ = true;
+         break;
+ 
+-      case kEndOfInputU:
+-        token_ = kEndOfInput;
+-        return;
+-
+       case '\'':
+       case '"':
+         ConsumeString(ch);
+         return;
+ 
+       case '/':
+-        ch = stream_->Advance();
+-        if (ch == '/') {
++        if (Consume('/')) {
+           ConsumeCPPComment();
+-        } else if (ch == '*') {
++        } else if (Consume('*')) {
+           if (!ConsumeCComment()) {
+             token_ = kParseError;
+             return;
+           }
+         } else {
+-          stream_->Back();
+           token_ = '/';
+           return;
+         }
+@@ -213,7 +218,10 @@ std::string AsmJsScanner::Name(token_t token) const {
+ #endif
+ 
+ void AsmJsScanner::Seek(size_t pos) {
+-  stream_->Seek(pos);
++  DCHECK_LE(input_offset_, pos);
++  size_t pos_within_input = pos - input_offset_;
++  DCHECK_LE(pos_within_input, input_.size());
++  input_position_ = pos_within_input;
+   preceding_token_ = kUninitialized;
+   token_ = kUninitialized;
+   next_token_ = kUninitialized;
+@@ -226,13 +234,10 @@ void AsmJsScanner::Seek(size_t pos) {
+ 
+ void AsmJsScanner::ConsumeIdentifier(base::uc32 ch) {
+   // Consume characters while still part of the identifier.
+-  identifier_string_.clear();
+-  while (IsIdentifierPart(ch)) {
+-    identifier_string_ += ch;
+-    ch = stream_->Advance();
++  identifier_string_.assign(1, ch);
++  while (HasMoreChars() && IsIdentifierPart(PeekChar())) {
++    identifier_string_ += NextChar();
+   }
+-  // Go back one for next time.
+-  stream_->Back();
+ 
+   // Decode what the identifier means.
+   if (preceding_token_ == '.') {
+@@ -284,8 +289,8 @@ void AsmJsScanner::ConsumeNumber(base::uc32 ch) {
+   number.assign(1, ch);
+   bool has_dot = ch == '.';
+   bool has_prefix = false;
+-  for (;;) {
+-    ch = stream_->Advance();
++  while (HasMoreChars()) {
++    ch = PeekChar();
+     if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+         (ch >= 'A' && ch <= 'F') || ch == '.' || ch == 'b' || ch == 'o' ||
+         ch == 'x' ||
+@@ -300,11 +305,11 @@ void AsmJsScanner::ConsumeNumber(base::uc32 ch) {
+         has_prefix = true;
+       }
+       number.push_back(ch);
++      Advance();
+     } else {
+       break;
+     }
+   }
+-  stream_->Back();
+   // Special case the most common number.
+   if (number.size() == 1 && number[0] == '0') {
+     unsigned_value_ = 0;
+@@ -357,9 +362,9 @@ void AsmJsScanner::ConsumeNumber(base::uc32 ch) {
+     // TODO(bradnelson): Check if this happens often enough to be a perf
+     // problem.
+     if (number[0] == '.') {
+-      for (size_t k = 1; k < number.size(); ++k) {
+-        stream_->Back();
+-      }
++      size_t rewind_by = number.size() - 1;
++      DCHECK_LE(rewind_by, input_position_);
++      input_position_ -= rewind_by;
+       token_ = '.';
+       return;
+     }
+@@ -381,33 +386,27 @@ void AsmJsScanner::ConsumeNumber(base::uc32 ch) {
+ }
+ 
+ bool AsmJsScanner::ConsumeCComment() {
+-  for (;;) {
+-    base::uc32 ch = stream_->Advance();
+-    while (ch == '*') {
+-      ch = stream_->Advance();
+-      if (ch == '/') {
+-        return true;
+-      }
++  while (HasMoreChars()) {
++    while (Consume('*')) {
++      if (Consume('/')) return true;
+     }
+-    if (ch == '\n') {
++
++    if (Consume('\n')) {
+       preceded_by_newline_ = true;
+-    }
+-    if (ch == kEndOfInputU) {
+-      return false;
++    } else {
++      Advance();
+     }
+   }
++  return false;
+ }
+ 
+ void AsmJsScanner::ConsumeCPPComment() {
+-  for (;;) {
+-    base::uc32 ch = stream_->Advance();
+-    if (ch == '\n') {
++  while (HasMoreChars()) {
++    if (Consume('\n')) {
+       preceded_by_newline_ = true;
+       return;
+     }
+-    if (ch == kEndOfInputU) {
+-      return;
+-    }
++    Advance();
+   }
+ }
+ 
+@@ -415,12 +414,12 @@ void AsmJsScanner::ConsumeString(base::uc32 quote) {
+   // Only string allowed is 'use asm' / "use asm".
+   const char* expected = "use asm";
+   for (; *expected != '\0'; ++expected) {
+-    if (stream_->Advance() != static_cast<base::uc32>(*expected)) {
++    if (!Consume(static_cast<base::uc32>(*expected))) {
+       token_ = kParseError;
+       return;
+     }
+   }
+-  if (stream_->Advance() != quote) {
++  if (!Consume(quote)) {
+     token_ = kParseError;
+     return;
+   }
+@@ -428,8 +427,7 @@ void AsmJsScanner::ConsumeString(base::uc32 quote) {
+ }
+ 
+ void AsmJsScanner::ConsumeCompareOrShift(base::uc32 ch) {
+-  base::uc32 next_ch = stream_->Advance();
+-  if (next_ch == '=') {
++  if (Consume('=')) {
+     switch (ch) {
+       case '<':
+         token_ = kToken_LE;
+@@ -446,17 +444,11 @@ void AsmJsScanner::ConsumeCompareOrShift(base::uc32 ch) {
+       default:
+         UNREACHABLE();
+     }
+-  } else if (ch == '<' && next_ch == '<') {
++  } else if (ch == '<' && Consume('<')) {
+     token_ = kToken_SHL;
+-  } else if (ch == '>' && next_ch == '>') {
+-    if (stream_->Advance() == '>') {
+-      token_ = kToken_SHR;
+-    } else {
+-      token_ = kToken_SAR;
+-      stream_->Back();
+-    }
++  } else if (ch == '>' && Consume('>')) {
++    token_ = Consume('>') ? kToken_SHR : kToken_SAR;
+   } else {
+-    stream_->Back();
+     token_ = ch;
+   }
+ }
+diff --git a/src/asmjs/asm-scanner.h b/src/asmjs/asm-scanner.h
+index aa9c4d3db44..380f7ebbca5 100644
+--- a/src/asmjs/asm-scanner.h
++++ b/src/asmjs/asm-scanner.h
+@@ -135,11 +135,45 @@ class V8_EXPORT_PRIVATE AsmJsScanner {
+   };
+   // clang-format on
+ 
+-  static constexpr base::uc32 kEndOfInputU =
+-      static_cast<base::uc32>(kEndOfInput);
+-
+  private:
+-  Utf16CharacterStream* stream_;
++  // Consume multiple characters.
++  void ConsumeIdentifier(base::uc32 ch);
++  void ConsumeNumber(base::uc32 ch);
++  bool ConsumeCComment();
++  void ConsumeCPPComment();
++  void ConsumeString(base::uc32 quote);
++  void ConsumeCompareOrShift(base::uc32 ch);
++
++  // Classify character categories.
++  bool IsIdentifierStart(base::uc32 ch);
++  bool IsIdentifierPart(base::uc32 ch);
++  bool IsNumberStart(base::uc32 ch);
++
++  bool HasMoreChars() const { return input_position_ < input_.size(); }
++  base::uc32 PeekChar() const {
++    DCHECK(HasMoreChars());
++    return input_[input_position_];
++  }
++  base::uc32 NextChar() {
++    DCHECK(HasMoreChars());
++    return input_[input_position_++];
++  }
++  bool Consume(base::uc32 next) {
++    if (!HasMoreChars() || PeekChar() != next) return false;
++    ++input_position_;
++    return true;
++  }
++  void Advance() {
++    DCHECK(HasMoreChars());
++    ++input_position_;
++  }
++
++  std::vector<base::uc32> input_;
++  // Start position of the input stream; i.e. offset of `input_position_`.
++  size_t input_offset_;
++  // Current position inside `input_`.
++  size_t input_position_ = 0;
++
+   token_t token_;
+   token_t preceding_token_;
+   token_t next_token_;         // Only set when in {rewind} state.
+@@ -156,19 +190,6 @@ class V8_EXPORT_PRIVATE AsmJsScanner {
+   double double_value_;
+   uint32_t unsigned_value_;
+   bool preceded_by_newline_;
+-
+-  // Consume multiple characters.
+-  void ConsumeIdentifier(base::uc32 ch);
+-  void ConsumeNumber(base::uc32 ch);
+-  bool ConsumeCComment();
+-  void ConsumeCPPComment();
+-  void ConsumeString(base::uc32 quote);
+-  void ConsumeCompareOrShift(base::uc32 ch);
+-
+-  // Classify character categories.
+-  bool IsIdentifierStart(base::uc32 ch);
+-  bool IsIdentifierPart(base::uc32 ch);
+-  bool IsNumberStart(base::uc32 ch);
+ };
+ 
+ }  // namespace internal
+-- 
+2.43.0
+

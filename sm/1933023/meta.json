@@ -1,0 +1,35 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1933023",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/builtin/intl/Segmenter.cpp",
+        "js/src/builtin/intl/Segmenter.h"
+    ],
+    "target_subdir": [
+        "js/src/builtin/intl"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Intl.Segmenter Latin1/two-byte char buffer type confusion after string atomization. CVE-2025-0241 (sec-moderate, MFSA 2025-01, Firefox 134). SegmentsObject cached the underlying JS string's Latin1 bit at construction time via getString()->hasLatin1Chars(). Bug 1881995's atom-ref string mechanism allows a two-byte JSString to be re-pointed at a freshly created Latin1 atom (e.g., when used as a property key in an object literal), changing the actual character buffer encoding without notifying SegmentsObject. Subsequent reads of the segment's characters dispatched on the cached two-byte path while the buffer was actually Latin1, producing type-confused reads and a debug MOZ_ASSERT failure at js/src/builtin/intl/Segmenter.h:141. The fix (commit 6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9 by Jan de Mooij, 2024-11-27, r=anba) introduces SegmentsObject::hasLatin1StringChars() that queries the segment's actual character buffer rather than the parent JS string. Reporter: Nils Bars.",
+    "fix_commits": [
+        "6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-check-whether-the-segment-s-chars-are-latin1.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1933023 - Check whether the segment's chars are Latin1",
+            "source_commit": "6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9",
+            "commit": "6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/6a1bdb80cb57384cd915ae2e27d3363a13ecb6f9",
+            "phabricator": "D230111"
+        }
+    ],
+    "vrp": null
+}

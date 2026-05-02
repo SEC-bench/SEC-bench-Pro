@@ -1,0 +1,20 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x6cb200000000,0x6db200000000)
+
+## V8 sandbox violation detected!
+
+The sandbox violation was a *read* access which is technically not a sandbox violation. This requires manual investigation.
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x424242424242 (pc 0x424242424242 bp 0x6cb20081f24d sp 0x7ffd4f36e610 T0)
+==13==The signal is caused by a READ memory access.
+    #0 0x424242424242  (<unknown module>)
+
+==13==Register values:
+rax = 0x00006cb200000011  rbx = 0x00006cb200000011  rcx = 0x0000000000000002  rdx = 0x00007103a6fe1000  
+rdi = 0x0000000000000000  rsi = 0x0000000000000000  rbp = 0x00006cb20081f24d  rsp = 0x00007ffd4f36e610  
+ r8 = 0x0000000000000002   r9 = 0x0000424242424242  r10 = 0x00006259c5000204  r11 = 0x00007ffd4f36e491  
+r12 = 0x00007ffd4f36e3b0  r13 = 0x00007103a6fe1080  r14 = 0x00006cb200000000  r15 = 0x00007083a6fe0309  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==13==ABORTING

@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:390743124",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--allow-natives-syntax",
+  "target_source_files": [
+    "src/compiler/escape-analysis.cc"
+  ],
+  "target_subdir": [
+    "src/compiler"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in TurboFan's escape analysis because `TrustedHeapConstant` values could flow through phi nodes together with regular heap constants. That confused later decompression optimization and deoptimization materialization, allowing a value reconstructed through `TranslatedState` to lose its trusted-cage bits and become an invalid pointer. The root cause is the handling of trusted constants in `src/compiler/escape-analysis.cc`.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit b75e527fb521dca5e7621928846c0c7c6becc8dd for CL 6278358.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6278358",
+      "cl": 6278358,
+      "source_commit": "b75e527fb521dca5e7621928846c0c7c6becc8dd",
+      "commit": "b75e527fb521dca5e7621928846c0c7c6becc8dd",
+      "source_cl": 6278358,
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6278358"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+From b75e527fb521dca5e7621928846c0c7c6becc8dd Mon Sep 17 00:00:00 2001
+From: Darius Mercadier <dmercadier@chromium.org>
+Date: Tue, 18 Feb 2025 09:32:04 +0100
+Subject: [PATCH] [turbofan] Disable escape analysis for TrustedHeapConstant
+
+More precisely: prevent eliding objects that contain
+TrustedHeapConstant, because it can lead to this constant flowing into
+a Phis where other inputs are regular HeapConstant, which confuses
+decompression optimization and leads to memory corruption.
+
+Fixed: chromium:390743124
+Change-Id: Ic60e4d7dd156367f7d4bb385d422591384c3033c
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6278358
+Reviewed-by: Nico Hartmann <nicohartmann@chromium.org>
+Commit-Queue: Nico Hartmann <nicohartmann@chromium.org>
+Auto-Submit: Darius Mercadier <dmercadier@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98748}
+---
+ src/compiler/escape-analysis.cc | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/compiler/escape-analysis.cc b/src/compiler/escape-analysis.cc
+index 99bdb087e12..5c35f74f9a2 100644
+--- a/src/compiler/escape-analysis.cc
++++ b/src/compiler/escape-analysis.cc
+@@ -648,6 +648,16 @@ void ReduceNode(const Operator* op, EscapeAnalysisTracker::Scope* current,
+       Node* value = current->ValueInput(1);
+       const VirtualObject* vobject = current->GetVirtualObject(object);
+       Variable var;
++      if (value->opcode() == IrOpcode::kTrustedHeapConstant) {
++        // TODO(dmercadier): enable escaping objects containing
++        // TrustedHeapConstants. This is currently disabled because it leads to
++        // bugs when Trusted HeapConstant and regular HeapConstant flow into the
++        // same Phi, which can then be marked as Compressed, messing up the
++        // tagging of the Trusted HeapConstant.
++        current->SetEscaped(object);
++        current->SetEscaped(value);
++        break;
++      }
+       // BoundedSize fields cannot currently be materialized by the deoptimizer,
+       // so we must not dematerialze them.
+       if (vobject && !vobject->HasEscaped() &&
+-- 
+2.43.0
+

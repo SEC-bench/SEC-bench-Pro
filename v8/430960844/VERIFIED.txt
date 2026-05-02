@@ -1,0 +1,3 @@
+Verified with `../../v8/crash_check.sh 430960844` using `out/x64.asan/d8 --sandbox-testing` from `meta.json`.
+
+`output.txt` was refreshed from the canonical docker invocation and shows the expected V8 sandbox violation with a write to the attacker-controlled `0x133713371337` address, matching the report's bug family.

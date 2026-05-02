@@ -1,0 +1,47 @@
+=================================================================
+==13==ERROR: AddressSanitizer: use-after-poison on address 0x27dde64fffb0 at pc 0x5c39b029df75 bp 0x7ffe57ec8ba0 sp 0x7ffe57ec8b98
+READ of size 8 at 0x27dde64fffb0 thread T0
+    #0 0x5c39b029df74 in js::wasm::AnyRef::isNull() const /src/gecko-dev/js/src/wasm/WasmAnyRef.h:293:32
+    #1 0x5c39b029df74 in js::wasm::AnyRef::isGCThing() const /src/gecko-dev/js/src/wasm/WasmAnyRef.h:294:36
+    #2 0x5c39b029df74 in js::gc::StoreBuffer::WasmAnyRefEdge::isGCThing() const /src/gecko-dev/js/src/gc/StoreBuffer.h:453:43
+    #3 0x5c39b029df74 in js::gc::StoreBuffer::WasmAnyRefEdge::deref() const /src/gecko-dev/js/src/gc/StoreBuffer.h:456:14
+    #4 0x5c39b029df74 in js::gc::StoreBuffer::WasmAnyRefEdge::maybeInRememberedSet(js::Nursery const&) const /src/gecko-dev/js/src/gc/StoreBuffer.h:460:7
+    #5 0x5c39b029d7eb in void js::gc::StoreBuffer::put<js::gc::StoreBuffer::MonoTypeBuffer<js::gc::StoreBuffer::WasmAnyRefEdge>, js::gc::StoreBuffer::WasmAnyRefEdge>(js::gc::StoreBuffer::MonoTypeBuffer<js::gc::StoreBuffer::WasmAnyRefEdge>&, js::gc::StoreBuffer::WasmAnyRefEdge const&, JS::GCReason) /src/gecko-dev/js/src/gc/StoreBuffer.h:498:15
+    #6 0x5c39b16a4b6d in js::gc::StoreBuffer::putWasmAnyRef(js::wasm::AnyRef*) /src/gecko-dev/js/src/gc/StoreBuffer.h:596:5
+    #7 0x5c39b16a4b6d in js::wasm::Instance::postBarrier(js::wasm::Instance*, void**) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:1409:27
+    #8 0x321a87ea8702  (<unknown module>)
+
+Address 0x27dde64fffb0 is a wild pointer inside of access range of size 0x000000000008.
+SUMMARY: AddressSanitizer: use-after-poison /src/gecko-dev/js/src/wasm/WasmAnyRef.h:293:32 in js::wasm::AnyRef::isNull() const
+Shadow bytes around the buggy address:
+  0x27dde64ffd00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x27dde64ffd80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x27dde64ffe00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x27dde64ffe80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x27dde64fff00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+=>0x27dde64fff80: f7 f7 f7 f7 f7 f7[f7]f7 f7 f7 f7 00 00 00 00 00
+  0x27dde6500000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x27dde6500080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x27dde6500100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x27dde6500180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x27dde6500200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

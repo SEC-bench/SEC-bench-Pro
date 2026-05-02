@@ -1,0 +1,44 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==14==ERROR: AddressSanitizer: SEGV on unknown address 0x7a4204242424 (pc 0x7f4ae9c9a8c9 bp 0x7ffe30f18fb0 sp 0x7ffe30f18f90 T0)
+==14==The signal is caused by a WRITE memory access.
+    #0 0x7f4ae9c9a8c9  (<unknown module>)
+    #1 0x55fd8f7e8989 in Builtins_JSToWasmWrapperAsm setup-isolate-deserialize.cc
+    #2 0x55fd8f8be585 in Builtins_JSToWasmWrapper setup-isolate-deserialize.cc
+    #3 0x55fd8f74d91d in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #4 0x55fd8f78eeee in Builtins_AsyncFunctionAwaitResolveClosure setup-isolate-deserialize.cc
+    #5 0x55fd8f86e269 in Builtins_PromiseFulfillReactionJob setup-isolate-deserialize.cc
+    #6 0x55fd8f77dbfe in Builtins_RunMicrotasks setup-isolate-deserialize.cc
+    #7 0x55fd8f74b41e in Builtins_JSRunMicrotasksEntry setup-isolate-deserialize.cc
+    #8 0x55fd8bf70fa0 in Call src/execution/simulator.h:187:12
+    #9 0x55fd8bf70fa0 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:435:41
+    #10 0x55fd8bf74229 in v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:477:18
+    #11 0x55fd8bf74620 in v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) src/execution/execution.cc:578:10
+    #12 0x55fd8bffaf1b in v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) src/execution/microtask-queue.cc:185:22
+    #13 0x55fd8bffa8d0 in v8::internal::MicrotaskQueue::PerformCheckpointInternal(v8::Isolate*) src/execution/microtask-queue.cc:129:3
+    #14 0x55fd8bfd0710 in PerformCheckpoint src/execution/microtask-queue.h:48:5
+    #15 0x55fd8bfd0710 in v8::internal::Isolate::FireCallCompletedCallbackInternal(v8::internal::MicrotaskQueue*) src/execution/isolate.cc:6290:44
+    #16 0x55fd8baf26b2 in FireCallCompletedCallback src/execution/isolate.h:1733:5
+    #17 0x55fd8baf26b2 in v8::CallDepthScope<true>::~CallDepthScope() src/api/api-inl.h:190:32
+    #18 0x55fd8bb41388 in v8::Promise::Resolver::Resolve(v8::Local<v8::Context>, v8::Local<v8::Value>) src/api/api.cc:8716:1
+    #19 0x55fd8babc735 in v8::(anonymous namespace)::D8WasmAsyncResolvePromiseTask::Run() src/d8/d8.cc:885:39
+    #20 0x55fd8fa3ede2 in v8::platform::DefaultPlatform::PumpMessageLoop(v8::Isolate*, v8::platform::MessageLoopBehavior) src/libplatform/default-platform.cc:173:9
+    #21 0x55fd8bab425a in v8::(anonymous namespace)::ProcessMessages(v8::Isolate*, std::__Cr::function<v8::platform::MessageLoopBehavior ()> const&) src/d8/d8.cc:5819:9
+    #22 0x55fd8ba8a2e2 in EmptyMessageQueues src/d8/d8.cc:5890:10
+    #23 0x55fd8ba8a2e2 in v8::Shell::ExecuteModule(v8::Isolate*, char const*) src/d8/d8.cc:1672:5
+    #24 0x55fd8baa8cf1 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4820:12
+    #25 0x55fd8bab3ca8 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5784:37
+    #26 0x55fd8bab33a6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5693:18
+    #27 0x55fd8bab6348 in v8::Shell::Main(int, char**) src/d8/d8.cc:6546:18
+    #28 0x7f4aea1c61c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x7f4aea1c628a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #30 0x55fd8b971024 in _start (/src/v8/out/x64.asan/d8+0x10dd024) (BuildId: af37d646c1722390)
+
+==14==Register values:
+rax = 0x0000000004242424  rbx = 0x00007a4200000069  rcx = 0x00000000042423b0  rdx = 0x0000000013333337  
+rdi = 0x000000007ff80000  rsi = 0x00007a390004693d  rbp = 0x00007ffe30f18fb0  rsp = 0x00007ffe30f18f90  
+ r8 = 0x0000000000000000   r9 = 0x00007a420031de3d  r10 = 0x00007e5ae91e1200  r11 = 0x00007d9ae91f38f0  
+r12 = 0x0000000000000002  r13 = 0x00007e5ae91e1080  r14 = 0x00007a4200000000  r15 = 0x00007a4200000775  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==14==ABORTING

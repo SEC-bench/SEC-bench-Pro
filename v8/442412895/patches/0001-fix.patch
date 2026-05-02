@@ -1,0 +1,38 @@
+From 753d3760c6e477a7615bed2ddb26c3e8388ed1fd Mon Sep 17 00:00:00 2001
+From: pthier <pthier@chromium.org>
+Date: Mon, 19 May 2025 17:08:09 +0200
+Subject: [PATCH] [json] Stringify: Ensure we are not reading OOB the
+ JsonEscapeTable
+
+In the SIMD version, we load the character that requires escaping from
+memory instead of extracting it from the SIMD register (as this is
+usually faster). However that results in a double-fetch and we need
+to check that we are not reading from the JsonEscapeTable OOB.
+
+Fixed: 417779731
+Bug: 380044242
+Change-Id: Ie93b81c098ba27d1e94070f819624fdedcef654d
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6563503
+Auto-Submit: Patrick Thier <pthier@chromium.org>
+Commit-Queue: Igor Sheludko <ishell@chromium.org>
+Reviewed-by: Igor Sheludko <ishell@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#100356}
+---
+ src/json/json-stringifier.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/json/json-stringifier.cc b/src/json/json-stringifier.cc
+index 69c801849f2..5c759ba04a6 100644
+--- a/src/json/json-stringifier.cc
++++ b/src/json/json-stringifier.cc
+@@ -3397,6 +3397,7 @@ bool FastJsonStringifier<Char>::AppendStringSIMD(
+     const size_t char_index = block - chars + index;
+     const size_t copy_length = char_index - uncopied_src_index;
+     buffer_.Append(chars + uncopied_src_index, copy_length);
++    SBXCHECK_LT(found_char, 0x60);
+     AppendCStringUnchecked(
+         &JsonEscapeTable[found_char * kJsonEscapeTableEntrySize]);
+     uncopied_src_index = char_index + 1;
+-- 
+2.43.0
+

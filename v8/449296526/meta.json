@@ -1,0 +1,40 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:449296526",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/objects/string.cc",
+    "src/objects/script.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "An out-of-bounds read vulnerability exists in V8's script line-end computation for externalized strings. If an attacker corrupts the length field of an externalized string, `Script::GetPositionInfo` and `Script::InitLineEndsInternal` in `src/objects/script.cc` eventually call `String::CalculateLineEnds` in `src/objects/string.cc`. `CalculateLineEndsImpl` then trusts the corrupted string length and iterates past the real backing buffer, producing an out-of-bounds read when `console.profile()` triggers script position logging.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "duplicate-329781444",
+      "commit": "64d557999055da1faa080b97864b7fbb5e225953",
+      "source_commit": "64d557999055da1faa080b97864b7fbb5e225953",
+      "description": "Upstream fix patch exported from commit 64d557999055da1faa080b97864b7fbb5e225953 for final fixed-image validation.",
+      "url": "https://crrev.com/c/7516748",
+      "source_url": "https://crrev.com/c/7516748",
+      "cl": 7516748,
+      "source_cl": 7516748,
+      "ref": "refs/changes/48/7516748/13",
+      "source_ref": "refs/changes/48/7516748/13",
+      "patchset": 13,
+      "source_patchset": 13,
+      "evidence_text": "[testing][sandbox] Singleton external strings cage",
+      "evidence_lineno": 0
+    }
+  ]
+}

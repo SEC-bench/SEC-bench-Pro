@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:355256380",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "",
+  "target_source_files": [
+    "src/maglev/maglev-graph-builder.cc"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "In V8's Maglev JIT compiler, MaglevGraphBuilder::InferHasInPrototypeChain calls prototype.AsJSObject() when all receiver maps have the given prototype in their chain (all == true), without first verifying that prototype is actually a JSObject. This function is invoked during optimization of the instanceof operator via TryBuildFastOrdinaryHasInstance, which obtains the function's .prototype property via DependOnPrototypeProperty. If a JavaScript function's .prototype is set to a WasmArray or WasmStruct (a WebAssembly object that is not a JSObject), the Maglev compiler incorrectly assumes it is a JSObject and calls AsJSObject() on it. In debug builds this triggers a fatal DCHECK failure (IsJSObject()) in heap-refs.cc; in release builds, the type confusion can lead to further memory safety violations.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 171,
+      "evidence_text": "merge approved for [https://crrev.com/c/5741275](<https://crrev.com/c/5741275>) \\-- please merge 12.8, 12.7, and 12.6 at your earliest convenience. Please merge to 12.8 by tomorrow, Tuesday, 30 July so this fix can be included in the next update of M128 beta -- thank you",
+      "url": "https://crrev.com/c/5741275",
+      "cl": 5741275,
+      "commit": "313905c4f2c153be4bf4b09b2b06ffad7106869c",
+      "description": "Local patch exported from https://crrev.com/c/5741275 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/5741275",
+      "source_cl": 5741275,
+      "source_commit": "313905c4f2c153be4bf4b09b2b06ffad7106869c",
+      "source_ref": "refs/changes/75/5741275/4",
+      "source_patchset": 4
+    }
+  ]
+}

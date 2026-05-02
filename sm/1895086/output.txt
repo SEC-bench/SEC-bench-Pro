@@ -1,0 +1,53 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x6118faf9b1c0 bp 0x79b0ed0e3e70 sp 0x79b0ed0e3da0 T8)
+==13==The signal is caused by a READ memory access.
+==13==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x6118faf9b1c0 in js::gc::HeaderWord::getAtomic() const /src/gecko-dev/js/src/gc/Cell.h:100:12
+    #1 0x6118faf9b1c0 in js::gc::HeaderWord::flags() const /src/gecko-dev/js/src/gc/Cell.h:116:36
+    #2 0x6118faf9b1c0 in js::gc::Cell::flags() const /src/gecko-dev/js/src/gc/Cell.h:154:44
+    #3 0x6118faf9b1c0 in js::gc::TenuredCellWithNonGCPointer<JSClass const>::headerPtr() const /src/gecko-dev/js/src/gc/Cell.h:715:5
+    #4 0x6118faf9b1c0 in js::BaseShape::clasp() const /src/gecko-dev/js/src/vm/Shape.h:243:41
+    #5 0x6118faf9b1c0 in js::Shape::getObjectClass() const /src/gecko-dev/js/src/vm/Shape.h:391:58
+    #6 0x6118faf9b1c0 in JSObject::finalize(JS::GCContext*) /src/gecko-dev/js/src/vm/JSObject-inl.h:97:36
+    #7 0x6118faf99fcc in unsigned long js::gc::Arena::finalize<JSObject>(JS::GCContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Sweeping.cpp:133:10
+    #8 0x6118faf7ee71 in bool FinalizeTypedArenas<JSObject>(JS::GCContext*, js::gc::ArenaList&, js::gc::SortedArenaList&, js::gc::AllocKind, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:200:29
+    #9 0x6118faf35f34 in js::gc::GCRuntime::backgroundFinalize(JS::GCContext*, JS::Zone*, js::gc::AllocKind, js::gc::Arena**) /src/gecko-dev/js/src/gc/Sweeping.cpp:270:3
+    #10 0x6118faf3c42f in js::gc::GCRuntime::sweepBackgroundThings(js::gc::ZoneList&) /src/gecko-dev/js/src/gc/Sweeping.cpp:348:9
+    #11 0x6118faf3da67 in js::gc::GCRuntime::sweepFromBackgroundThread(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/Sweeping.cpp:425:5
+    #12 0x6118fadfd849 in js::GCParallelTask::runTask(JS::GCContext*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:207:3
+    #13 0x6118fadfe206 in js::GCParallelTask::runHelperThreadTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:189:3
+    #14 0x6118f9bfd6f2 in js::GlobalHelperThreadState::runTaskLocked(js::HelperThreadTask*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1730:9
+    #15 0x6118f9bfd326 in js::GlobalHelperThreadState::runOneTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1699:5
+    #16 0x6118f9bfd11b in JS::RunHelperThreadTask() /src/gecko-dev/js/src/vm/HelperThreads.cpp:1686:23
+    #17 0x6118f9c6142e in js::HelperThread::threadLoop(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:287:7
+    #18 0x6118f9c60e9b in js::HelperThread::ThreadMain(js::InternalThreadPool*, js::HelperThread*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:228:11
+    #19 0x6118f9c9191e in void js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::callMain<0ul, 1ul>(std::integer_sequence<unsigned long, 0ul, 1ul>) /src/gecko-dev/js/src/threading/Thread.h:228:5
+    #20 0x6118f9c9191e in js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::Start(void*) /src/gecko-dev/js/src/threading/Thread.h:217:11
+    #21 0x6118f94ee9e6 in asan_thread_start(void*) /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+    #22 0x7db0f1a39aa3  (/lib/x86_64-linux-gnu/libc.so.6+0x9caa3) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #23 0x7db0f1ac6a63 in clone (/lib/x86_64-linux-gnu/libc.so.6+0x129a63) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+
+==13==Register values:
+rax = 0x1fffc96960140014  rbx = 0x00003c549e2e2040  rcx = 0x00000f369da147bc  rdx = 0x0000000000000005  
+rdi = 0xfffe4b4b00a000a0  rsi = 0x0000000000000001  rbp = 0x000079b0ed0e3e70  rsp = 0x000079b0ed0e3da0  
+ r8 = 0x00000f361da1c7bb   r9 = 0x0000000000000000  r10 = 0x00000f361da1c7bc  r11 = 0x0000000000000003  
+r12 = 0x00000f361da1c7b4  r13 = 0x0000078a93c5c408  r14 = 0x000079b0ed0e4900  r15 = 0x00003c549e29d060  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Cell.h:100:12 in js::gc::HeaderWord::getAtomic() const
+Thread T8 created by T0 here:
+    #0 0x6118f94d6c91 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x6118fa68068d in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x6118f9c834ae in bool js::Thread::init<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>(void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*&&) /src/gecko-dev/js/src/threading/Thread.h:90:16
+    #3 0x6118f9c6007e in js::HelperThread::init(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:218:17
+    #4 0x6118f9c6007e in js::InternalThreadPool::ensureThreadCount(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:133:29
+    #5 0x6118f9c5fd99 in js::InternalThreadPool::Initialize(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:112:18
+    #6 0x6118f9bebb6c in js::GlobalHelperThreadState::ensureInitialized() /src/gecko-dev/js/src/vm/HelperThreads.cpp:805:10
+    #7 0x6118fa0076cb in JSRuntime::init(JSContext*, unsigned int) /src/gecko-dev/js/src/vm/Runtime.cpp:182:32
+    #8 0x6118f9cb022f in js::NewContext(unsigned int, JSRuntime*) /src/gecko-dev/js/src/vm/JSContext.cpp:185:17
+    #9 0x6118f954e500 in main /src/gecko-dev/js/src/shell/js.cpp:11888:25
+    #10 0x7db0f19c71c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x7db0f19c728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x6118f9451304 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b0c304) (BuildId: 931d94dc1ce9bb7975801e7d13c0b952)
+
+==13==ABORTING

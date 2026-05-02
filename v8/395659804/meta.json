@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:395659804",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/builtins/x64/builtins-x64.cc"
+  ],
+  "target_subdir": [
+    "src/builtins/x64"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A V8 sandbox bypass vulnerability exists in the On-Stack Replacement (OSR) path. In the `OnStackReplacement` function in `src/builtins/x64/builtins-x64.cc`, after loading a cached OSR target Code object from the FeedbackVector (via a CodeWrapper), the code unconditionally reads `Code::kDeoptimizationDataOrInterpreterDataOffset` and treats it as a `DeoptimizationData` object to extract the OSR PC offset (`DeoptimizationData::kOsrPcOffsetIndex`). However, this field can also hold a `BytecodeArray` (for baseline-compiled code) or `InterpreterData` (for interpreted code). An attacker can forge the in-sandbox FeedbackVector \u2192 CodeWrapper \u2192 Code handle chain to point to a baseline-compiled Code object. Because `BytecodeArray::kFrameSizeOffset` coincides with `DeoptimizationData::kOsrPcOffsetIndex`, the function's frame size (easily controlled by the number of declared local variables) is used as the OSR PC offset, allowing an attacker to jump to an attacker-controlled offset within the baseline JIT-compiled code and achieve arbitrary native code execution. The existing `SbxCheck` for parameter count does not prevent exploitation because the attacker can match parameter counts.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6264504 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "4623235265a651af38f496e27378e87243d5d9d0 [sandbox] Ensure we only OSR to osr code",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6264504",
+      "source_cl": 6264504,
+      "source_commit": "4623235265a651af38f496e27378e87243d5d9d0"
+    }
+  ]
+}

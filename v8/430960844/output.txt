@@ -1,0 +1,16 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+GO
+prop getter
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 133713371337
+
+==== C stack trace ===============================
+
+out/x64.asan/d8(___interceptor_backtrace+0x46)[0x5565b89ac8a6]
+out/x64.asan/d8(+0x5c80572)[0x5565bd370572]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7f4b0a335330]
+[0x5565e0080874]
+[end of stack trace]
+Segmentation fault

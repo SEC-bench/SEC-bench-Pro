@@ -1,0 +1,37 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x578a598d39ac bp 0x7ffdb2e981b0 sp 0x7ffdb2e98120 T0)
+==13==The signal is caused by a READ memory access.
+==13==Hint: address points to the zero page.
+    #0 0x578a598d39ac in IsWriteableAddress(void*) /src/gecko-dev/js/src/gc/Nursery.cpp:772:11
+    #1 0x578a598d39ac in js::Nursery::forwardBufferPointer(unsigned long*) /src/gecko-dev/js/src/gc/Nursery.cpp:801:5
+    #2 0x578a5a717ac4 in js::jit::UpdateIonJSFrameForMinorGC(JSRuntime*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:1055:15
+    #3 0x578a5a717ac4 in js::jit::UpdateJitActivationsForMinorGC(JSRuntime*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1392:9
+    #4 0x578a598d7843 in js::Nursery::doCollection(JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1267:3
+    #5 0x578a598d586f in js::Nursery::collect(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1115:31
+    #6 0x578a59822334 in js::gc::GCRuntime::collectNursery(JS::GCOptions, JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:4265:13
+    #7 0x578a5981fb01 in js::gc::GCRuntime::collectNurseryFromMajorGC(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3412:3
+    #8 0x578a5981fb01 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3257:9
+    #9 0x578a5982728d in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3839:3
+    #10 0x578a5982a157 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4027:9
+    #11 0x578a597d0275 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4104:3
+    #12 0x578a5982f711 in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp
+    #13 0x578a59833dea in js::gc::GCRuntime::gcIfNeededAtAllocation(JSContext*) /src/gecko-dev/js/src/gc/Allocator.cpp:445:5
+    #14 0x578a59833dea in bool js::gc::GCRuntime::checkAllocatorState<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:409:10
+    #15 0x578a598373fc in JS::BigInt* js::gc::detail::AllocateBigInt<(js::AllowGC)1>(JSContext*, js::gc::InitialHeap) /src/gecko-dev/js/src/gc/Allocator.cpp:296:15
+    #16 0x578a585b6e87 in JS::BigInt* js::gc::CellAllocator::NewCell<JS::BigInt, (js::AllowGC)1, js::gc::InitialHeap&>(JSContext*, js::gc::InitialHeap&) /src/gecko-dev/js/src/gc/Allocator.h:120:12
+    #17 0x578a585b6e87 in JS::BigInt* JSContext::newCell<JS::BigInt, (js::AllowGC)1, js::gc::InitialHeap&>(js::gc::InitialHeap&) /src/gecko-dev/js/src/vm/JSContext.h:267:12
+    #18 0x578a585b6e87 in JS::BigInt::createUninitialized(JSContext*, unsigned long, bool, js::gc::InitialHeap) /src/gecko-dev/js/src/vm/BigIntType.cpp:146:19
+    #19 0x578a585b6e87 in JS::BigInt::zero(JSContext*, js::gc::InitialHeap) /src/gecko-dev/js/src/vm/BigIntType.cpp:212:10
+    #20 0x578a585b6e87 in JS::BigInt::createFromUint64(JSContext*, unsigned long) /src/gecko-dev/js/src/vm/BigIntType.cpp:1755:12
+    #21 0x578a585b6fe4 in JS::BigInt::createFromInt64(JSContext*, long) /src/gecko-dev/js/src/vm/BigIntType.cpp:1780:17
+    #22 0x20ef8c43a5b5  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00000fbe3941c70d  rcx = 0x0000000000000000  rdx = 0x00ffffffffffffff  
+rdi = 0x00007ffdb2e99070  rsi = 0x0000000000000000  rbp = 0x00007ffdb2e981b0  rsp = 0x00007ffdb2e98120  
+ r8 = 0x00000fffb65d3026   r9 = 0x00007ffdb2e9814f  r10 = 0x00000fffb65d3029  r11 = 0x00000fffb65d320e  
+r12 = 0x00007df1ca0e3538  r13 = 0x00000fbe3941c6a8  r14 = 0x00007b11c8400578  r15 = 0x00000fbe3941c6a9  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Nursery.cpp:772:11 in IsWriteableAddress(void*)
+==13==ABORTING

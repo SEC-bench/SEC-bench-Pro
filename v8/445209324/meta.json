@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:445209324",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing --allow-natives-syntax",
+  "target_source_files": [
+    "src/sandbox/code-entrypoint-tag.h",
+    "src/sandbox/js-dispatch-table-inl.h"
+  ],
+  "target_subdir": [
+    "src/sandbox"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability exists due to incorrect code entrypoint tag handling in the JS dispatch table. The root cause is that `kJSEntrypointTag` is aliased to `kDefaultCodeEntrypointTag` (both equal 0) in `src/sandbox/code-entrypoint-tag.h`. As a result, `JSDispatchTable::IsCompatibleCode` in `src/sandbox/js-dispatch-table-inl.h` only checks `code->entrypoint_tag() != kJSEntrypointTag`, which inadvertently allows builtins using `kDefaultCodeEntrypointTag` (namely `CCallDescriptor` and `CEntryDummyDescriptor`) to pass the compatibility check and be installed onto JS dispatch table entries. Builtins such as `CEntry_Return1_ArgvOnStack_NoBuiltinExit`, `MemCopyUint8Uint8`, and `MemMove` can therefore be dispatched via JS call sites. An attacker with sandbox write primitives can install these builtins on a dispatch entry and invoke them from JavaScript: `CEntry_Return1_ArgvOnStack_NoBuiltinExit` performs an indirect call to the rbx register (attacker-controlled), enabling full PC control, while `MemCopyUint8Uint8`/`MemMove` enable arbitrary memory writes. This completely bypasses the V8 sandbox.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[sandbox] Ensure only JS linkage builtins are added to dispatch tables",
+      "url": "https://crrev.com/c/6955106",
+      "cl": 6955106,
+      "source_commit": "581bca24327d088eaa5d6689a1428aa4cf28fbb3",
+      "commit": "581bca24327d088eaa5d6689a1428aa4cf28fbb3",
+      "description": "Local patch exported from https://crrev.com/c/6955106 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6955106",
+      "source_cl": 6955106,
+      "source_ref": "refs/changes/06/6955106/5",
+      "source_patchset": 5
+    }
+  ]
+}

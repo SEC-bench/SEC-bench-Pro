@@ -1,0 +1,4 @@
+Verified on 2026-04-16.
+Recovered from failed/334120897 by switching the case to the exact rewarded x64 artifact and preserving the required --no-wasm-bounds-checks flag.
+Reproduced with ./crash_check.sh failed/334120897.
+Result: CONFIMRED: SANDBOX_VIOLATION.

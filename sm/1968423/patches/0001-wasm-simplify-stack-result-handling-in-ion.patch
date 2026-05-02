@@ -1,0 +1,137 @@
+From 8c2be2db0ab32915b756d1c46988e17eb70feaae Mon Sep 17 00:00:00 2001
+From: Ryan Hunt <rhunt@eqrion.net>
+Date: Tue, 8 Jul 2025 16:34:45 +0000
+Subject: [PATCH] Bug 1968423 - wasm: Simplify stack result handling in Ion.
+ r=jseward
+
+Ion stores stack results that are refs using MWasmStoreRef, and this
+is only safe because we manually disable the barriers for the
+instruction. Add a dedicated node that is safe for ref stack results
+and just does the plain store we need.
+
+Differential Revision: https://phabricator.services.mozilla.com/D255036
+---
+ js/src/jit/CodeGenerator.cpp   | 33 +++++++++++++++++++++++++++++++++
+ js/src/jit/LIROps.yaml         | 15 +++++++++++++++
+ js/src/jit/Lowering.cpp        | 11 ++++-------
+ js/src/wasm/WasmIonCompile.cpp | 14 +++-----------
+ 4 files changed, 55 insertions(+), 18 deletions(-)
+
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index 4b086f6a68a76..42ed3f65acabf 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -10678,6 +10678,39 @@ void CodeGenerator::visitWasmStoreSlot(LWasmStoreSlot* ins) {
+   emitWasmValueStore(ins, type, narrowingOp, src, addr);
+ }
+ 
++void CodeGenerator::visitWasmStoreStackResult(LWasmStoreStackResult* ins) {
++  const LAllocation* value = ins->value();
++  Address addr(ToRegister(ins->stackResultsArea()), ins->offset());
++
++  switch (ins->type()) {
++    case MIRType::Int32:
++      masm.storePtr(ToRegister(value), addr);
++      break;
++    case MIRType::Float32:
++      masm.storeFloat32(ToFloatRegister(value), addr);
++      break;
++    case MIRType::Double:
++      masm.storeDouble(ToFloatRegister(value), addr);
++      break;
++#ifdef ENABLE_WASM_SIMD
++    case MIRType::Simd128:
++      masm.storeUnalignedSimd128(ToFloatRegister(value), addr);
++      break;
++#endif
++    case MIRType::WasmAnyRef:
++      masm.storePtr(ToRegister(value), addr);
++      break;
++    default:
++      MOZ_CRASH("unexpected type in ::visitWasmStoreStackResult");
++  }
++}
++
++void CodeGenerator::visitWasmStoreStackResultI64(
++    LWasmStoreStackResultI64* ins) {
++  masm.store64(ToRegister64(ins->value()),
++               Address(ToRegister(ins->stackResultsArea()), ins->offset()));
++}
++
+ void CodeGenerator::visitWasmStoreElement(LWasmStoreElement* ins) {
+   MIRType type = ins->type();
+   MNarrowingOp narrowingOp = ins->narrowingOp();
+diff --git a/js/src/jit/LIROps.yaml b/js/src/jit/LIROps.yaml
+index fbcaf794e3d2a..043b57107d2bb 100644
+--- a/js/src/jit/LIROps.yaml
++++ b/js/src/jit/LIROps.yaml
+@@ -3336,6 +3336,21 @@
+     offset: size_t
+     maybeTrap: wasm::MaybeTrapSiteDesc
+ 
++- name: WasmStoreStackResult
++  operands:
++    value: WordSized
++    stackResultsArea: WordSized
++  arguments:
++    offset: size_t
++    type: MIRType
++
++- name: WasmStoreStackResultI64
++  operands:
++    value: Int64
++    stackResultsArea: WordSized
++  arguments:
++    offset: size_t
++
+ - name: WasmStoreElement
+   operands:
+     base: WordSized
+diff --git a/js/src/jit/Lowering.cpp b/js/src/jit/Lowering.cpp
+index 4c0507a68eb24..bd2ef0abd3071 100644
+--- a/js/src/jit/Lowering.cpp
++++ b/js/src/jit/Lowering.cpp
+@@ -6699,14 +6699,11 @@ void LIRGenerator::visitWasmStoreStackResult(MWasmStoreStackResult* ins) {
+   size_t offs = ins->offset();
+   LInstruction* lir;
+   if (value->type() == MIRType::Int64) {
+-    lir = new (alloc())
+-        LWasmStoreSlotI64(useInt64Register(value), useRegister(stackResultArea),
+-                          offs, mozilla::Nothing());
++    lir = new (alloc()) LWasmStoreStackResultI64(
++        useInt64Register(value), useRegister(stackResultArea), offs);
+   } else {
+-    MOZ_ASSERT(value->type() != MIRType::WasmAnyRef);
+-    lir = new (alloc())
+-        LWasmStoreSlot(useRegister(value), useRegister(stackResultArea), offs,
+-                       value->type(), MNarrowingOp::None, mozilla::Nothing());
++    lir = new (alloc()) LWasmStoreStackResult(
++        useRegister(value), useRegister(stackResultArea), offs, value->type());
+   }
+   add(lir, ins);
+ }
+diff --git a/js/src/wasm/WasmIonCompile.cpp b/js/src/wasm/WasmIonCompile.cpp
+index b93225f9e594d..1bcbf73052123 100644
+--- a/js/src/wasm/WasmIonCompile.cpp
++++ b/js/src/wasm/WasmIonCompile.cpp
+@@ -3490,17 +3490,9 @@ class FunctionCompiler {
+         const ABIResult& result = iter.cur();
+         if (result.onStack()) {
+           MOZ_ASSERT(iter.remaining() > 1);
+-          if (result.type().isRefRepr()) {
+-            auto* store = MWasmStoreRef::New(
+-                alloc(), instancePointer_, stackResultPointer_,
+-                result.stackOffset(), values[i], AliasSet::WasmStackResult,
+-                WasmPreBarrierKind::None);
+-            curBlock_->add(store);
+-          } else {
+-            auto* store = MWasmStoreStackResult::New(
+-                alloc(), stackResultPointer_, result.stackOffset(), values[i]);
+-            curBlock_->add(store);
+-          }
++          auto* store = MWasmStoreStackResult::New(
++              alloc(), stackResultPointer_, result.stackOffset(), values[i]);
++          curBlock_->add(store);
+         } else {
+           MOZ_ASSERT(iter.remaining() == 1);
+           MOZ_ASSERT(i + 1 == values.length());

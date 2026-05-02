@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:400086889",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax",
+  "target_source_files": [
+    "src/wasm/canonical-types.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's WebAssembly type canonicalization due to a transient canonical index overflow. In `TypeCanonicalizer::CanonicalizeTypeDef()` (canonical-types.cc), the `CanonicalizeTypeIndex` lambda computes a provisional absolute canonical index for types within a new recursion group by adding `canonical_recgroup_start.index` to the relative offset. If this sum exceeds `kMaxCanonicalTypes` (the maximum number of canonical types), the resulting index overflows the 20-bit `PayloadField` of `CanonicalValueType` and is silently truncated when stored via `ValueType::Canonicalize()`. The `CheckMaxCanonicalIndex()` guard is only invoked *after* confirming the group is new, so the overflow is not caught during the equality comparison phase. This causes `CanonicalEquality::EqualValueType()` to compare truncated (incorrect) indices, allowing two structurally distinct recursion groups to hash-collide and be assigned the same canonical type index. The regression was introduced by commit 44171ac which removed the `CHECK_LT()` safety check that previously existed in `CanonicalValueType::FromIndex()`. An attacker can exploit a meet-in-the-middle hash collision attack to craft a WebAssembly module where a relative reference (canonical index `0x100000 + N`) and an absolute reference (canonical index `N`) are treated as identical, enabling arbitrary type confusion between struct types and subsequent in-sandbox memory corruption primitives.",
+  "vrp": 62000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit 700e9d09e4c916e7ea510b85f53e95e1f5ea2f93 for CL 6316677.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6316677",
+      "cl": 6316677,
+      "source_commit": "700e9d09e4c916e7ea510b85f53e95e1f5ea2f93",
+      "commit": "700e9d09e4c916e7ea510b85f53e95e1f5ea2f93",
+      "source_cl": 6316677,
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6316677"
+    }
+  ]
+}

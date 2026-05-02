@@ -1,0 +1,59 @@
+diff --git a/src/runtime/runtime-wasm.cc b/src/runtime/runtime-wasm.cc
+index 2348624..aadefa1 100644
+--- a/src/runtime/runtime-wasm.cc
++++ b/src/runtime/runtime-wasm.cc
+@@ -712,41 +712,30 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+   CHECK(IsSmi(*origin));
+   Tagged<Smi> call_origin_index = Cast<Smi>(*origin);
+ 
+-  // Get the function's canonical signature index.
+-  // TODO(clemensb): Just get the sig_index based on WasmImportData::sig.
+-  wasm::CanonicalTypeIndex sig_index = wasm::CanonicalTypeIndex::Invalid();
++  // The signature is stored in trusted WasmImportData. Do not recover the
++  // wrapper cache key from call_origin, which may contain in-sandbox data.
++  wasm::CanonicalTypeIndex sig_index =
++      wasm::GetTypeCanonicalizer()->FindIndex_Slow(sig);
+ 
+-  if (WasmImportData::CallOriginIsImportIndex(call_origin_index)) {
+-    int func_index = WasmImportData::CallOriginAsIndex(call_origin_index);
+-    const wasm::WasmModule* call_origin_module =
+-        call_origin_instance_data->module();
+-    sig_index = call_origin_module->canonical_sig_id(
+-        call_origin_module->functions[func_index].sig_index);
+-  } else {
+-    // Indirect function table index.
++  if (WasmImportData::CallOriginIsIndexInTable(call_origin_index)) {
+     int entry_index = WasmImportData::CallOriginAsIndex(call_origin_index);
+     int table_count = call_origin_instance_data->dispatch_tables()->length();
+-    const wasm::WasmModule* call_origin_module =
+-        call_origin_instance_data->module();
+-    // We have to find the table which contains the correct entry.
++    bool found_origin = false;
+     for (int table_index = 0; table_index < table_count; ++table_index) {
+-      bool table_is_shared = call_origin_module->tables[table_index].shared;
+-      DirectHandle<WasmTrustedInstanceData> maybe_shared_data =
+-          table_is_shared
+-              ? direct_handle(call_origin_instance_data->shared_part(), isolate)
+-              : call_origin_instance_data;
+-      if (!maybe_shared_data->has_dispatch_table(table_index)) continue;
++      if (!call_origin_instance_data->has_dispatch_table(table_index)) continue;
+       Tagged<WasmDispatchTable> table =
+-          maybe_shared_data->dispatch_table(table_index);
++          call_origin_instance_data->dispatch_table(table_index);
+       if (entry_index < table->length() &&
+           table->implicit_arg(entry_index) == *import_data) {
+-        sig_index = table->sig(entry_index);
++        found_origin = true;
+         break;
+       }
+     }
++    // Do not trust the Tuple2 stored in call_origin. If the claimed table entry
++    // does not actually point back to this import data, crash before tier-up.
++    SBXCHECK(found_origin);
+   }
+-  // Do not trust the `Tuple2` stored in `call_origin`. If we failed to find the
+-  // signature, crash early.
++
+   SBXCHECK(sig_index.valid());
+ 
+   // Compile a wrapper for the target callable.

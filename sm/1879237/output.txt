@@ -1,0 +1,74 @@
+Assertion failure: v.isMem() == result.onStack(), at /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:1298
+#01: ???[/out/js +0x565e5e4]
+#02: ???[/out/js +0x56726dd]
+#03: ???[/out/js +0x56af454]
+#04: ???[/out/js +0x56af9c4]
+#05: ???[/out/js +0x56ba09e]
+#06: ???[/out/js +0x56e99d0]
+#07: ???[/out/js +0x58bd720]
+#08: ???[/out/js +0x58bf731]
+#09: ???[/out/js +0x5854e2f]
+#10: ???[/out/js +0x5854712]
+#11: ???[/out/js +0x591c593]
+#12: ???[/out/js +0x2e277e8]
+#13: ???[/out/js +0x2e3ed55]
+#14: ???[/out/js +0x2ddfda2]
+#15: ???[/out/js +0x2dfa79b]
+#16: ???[/out/js +0x2ddb83a]
+#17: ???[/out/js +0x2de20df]
+#18: ???[/out/js +0x2de297a]
+#19: ???[/out/js +0x311e52b]
+#20: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x311e9a4]
+#21: ???[/out/js +0x2c56c43]
+#22: ???[/out/js +0x2c556e7]
+#23: ???[/out/js +0x2bddd78]
+#24: ???[/out/js +0x2bd1fd9]
+#25: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#26: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#27: ???[/out/js +0x2ad7d29]
+#28: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5da7f9c21619 bp 0x7fff4ecf4fb0 sp 0x7fff4ecf4ea0 T0)
+==12==The signal is caused by a WRITE memory access.
+==12==Hint: address points to the zero page.
+    #0 0x5da7f9c21619 in js::wasm::BaseCompiler::shuffleStackResultsBeforeBranch(js::wasm::StackHeight, js::wasm::StackHeight, js::wasm::ResultType) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:1298:7
+    #1 0x5da7f9c356dc in js::wasm::BaseCompiler::jumpConditionalWithResults(js::wasm::BranchState*, js::wasm::RegRef, js::wasm::RefType, js::wasm::RefType, bool) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:3245:7
+    #2 0x5da7f9c72453 in js::wasm::BaseCompiler::emitBrOnCastCommon(bool, unsigned int, js::wasm::ResultType const&, js::wasm::RefType, js::wasm::RefType) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:8507:8
+    #3 0x5da7f9c729c3 in js::wasm::BaseCompiler::emitBrOnCast(bool) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:8533:10
+    #4 0x5da7f9c7d09d in js::wasm::BaseCompiler::emitBody() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:10744:13
+    #5 0x5da7f9cac9cf in js::wasm::BaseCompiler::emitFunction() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:11855:8
+    #6 0x5da7f9cac9cf in js::wasm::BaselineCompileFunctions(js::wasm::ModuleEnvironment const&, js::wasm::CompilerEnvironment const&, js::LifoAlloc&, mozilla::Vector<js::wasm::FuncCompileInput, 8ul, js::SystemAllocPolicy> const&, js::wasm::CompiledCode*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:12032:12
+    #7 0x5da7f9e8071f in ExecuteCompileTask(js::wasm::CompileTask*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:735:12
+    #8 0x5da7f9e82730 in js::wasm::ModuleGenerator::locallyCompileCurrentTask() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:784:8
+    #9 0x5da7f9e82730 in js::wasm::ModuleGenerator::finishFuncDefs() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:915:24
+    #10 0x5da7f9e17e2e in bool DecodeCodeSection<js::wasm::Decoder>(js::wasm::ModuleEnvironment const&, js::wasm::Decoder&, js::wasm::ModuleGenerator&) /src/gecko-dev/js/src/wasm/WasmCompile.cpp
+    #11 0x5da7f9e17711 in js::wasm::CompileBuffer(js::wasm::CompileArgs const&, js::wasm::ShareableBytes const&, mozilla::UniquePtr<char [], JS::FreePolicy>*, mozilla::Vector<mozilla::UniquePtr<char [], JS::FreePolicy>, 0ul, js::SystemAllocPolicy>*, JS::OptimizedEncodingListener*) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:807:8
+    #12 0x5da7f9edf592 in js::WasmModuleObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1494:7
+    #13 0x5da7f73ea7e7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:480:13
+    #14 0x5da7f7401d54 in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:496:8
+    #15 0x5da7f73a2da1 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:702:14
+    #16 0x5da7f73bd79a in js::ConstructFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:749:10
+    #17 0x5da7f73bd79a in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3046:16
+    #18 0x5da7f739e839 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:452:13
+    #19 0x5da7f73a50de in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:839:13
+    #20 0x5da7f73a5979 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:871:10
+    #21 0x5da7f76e152a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #22 0x5da7f76e19a3 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #23 0x5da7f7219c42 in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1206:10
+    #24 0x5da7f72186e6 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #25 0x5da7f71a0d77 in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10997:10
+    #26 0x5da7f71a0d77 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11259:12
+    #27 0x5da7f7194fd8 in main /src/gecko-dev/js/src/shell/js.cpp:11735:12
+    #28 0x75710dba61c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x75710dba628a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #30 0x5da7f709ad28 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2ad7d28) (BuildId: 8473d74e6968b831e4b09826fc7c279a)
+
+==12==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fff4ecf6e28  rcx = 0x00005da7f5896900  rdx = 0x0000000000000000  
+rdi = 0x00005da7fb07f290  rsi = 0x00007fff4ecf4e58  rbp = 0x00007fff4ecf4fb0  rsp = 0x00007fff4ecf4ea0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fffe9d9edc5  r13 = 0x00000fffe9d9edc9  r14 = 0x00007fff4ecf6e30  r15 = 0x00007fff4ecf6e48  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:1298:7 in js::wasm::BaseCompiler::shuffleStackResultsBeforeBranch(js::wasm::StackHeight, js::wasm::StackHeight, js::wasm::ResultType)
+==12==ABORTING

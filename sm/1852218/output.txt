@@ -1,0 +1,42 @@
+Assertion failure: aPtr.mMutationCount == mMutationCount, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2137
+#01: ???[/out/js +0x4f9c98e]
+#02: ???[/out/js +0x4f8dc84]
+#03: ???[/out/js +0x4f8e60b]
+#04: ???[/out/js +0x4c7a759]
+#05: ???[/out/js +0x4d3b040]
+#06: ???[/out/js +0x4d38cdd]
+#07: ???[/out/js +0x4f6ff04]
+#08: ???[/out/js +0x2c505e5]
+#09: ???[/out/js +0x2c51ebd]
+#10: ???[/out/js +0x2c54d6b]
+#11: ???[/out/js +0x4462c03]
+#12: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6213b5f8e9c3 bp 0x7ffdedbeb140 sp 0x7ffdedbeb080 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6213b5f8e9c3 in bool mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::add<unsigned int&, js::jit::JitHintsMap::IonHint*&>(mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::AddPtr&, unsigned int&, js::jit::JitHintsMap::IonHint*&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2137:5
+    #1 0x6213b5f7fc83 in bool mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::add<unsigned int&, js::jit::JitHintsMap::IonHint*&>(mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::AddPtr&, unsigned int&, js::jit::JitHintsMap::IonHint*&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:343:18
+    #2 0x6213b5f7fc83 in js::jit::JitHintsMap::addIonHint(unsigned int, mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::AddPtr&) /src/gecko-dev/js/src/jit/JitHints.cpp:34:20
+    #3 0x6213b5f8060a in js::jit::JitHintsMap::recordIonCompilation(JSScript*) /src/gecko-dev/js/src/jit/JitHints.cpp:60:12
+    #4 0x6213b5c6c758 in js::jit::CodeGenerator::link(JSContext*, js::jit::WarpSnapshot const*) /src/gecko-dev/js/src/jit/CodeGenerator.cpp:14396:15
+    #5 0x6213b5d2d03f in LinkCodeGen(JSContext*, js::jit::CodeGenerator*, JS::Handle<JSScript*>, js::jit::WarpSnapshot const*) /src/gecko-dev/js/src/jit/Ion.cpp:339:17
+    #6 0x6213b5d2d03f in js::jit::IonCompile(JSContext*, JS::Handle<JSScript*>, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1715:17
+    #7 0x6213b5d2d03f in js::jit::Compile(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1860:24
+    #8 0x6213b5d2acdc in js::jit::CanEnterIon(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Ion.cpp:1951:25
+    #9 0x6213b5f61f03 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:170:34
+    #10 0x6213b3c425e4 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:448:32
+    #11 0x6213b3c43ebc in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:612:13
+    #12 0x6213b3c46d6a in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:711:10
+    #13 0x6213b5454c02 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1628:10
+    #14 0x303a92799f06  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffdedbeb1e8  rcx = 0x00006213b21430a0  rdx = 0x0000000000000000  
+rdi = 0x00006213b7696790  rsi = 0x00007ffdedbeb038  rbp = 0x00007ffdedbeb140  rsp = 0x00007ffdedbeb080  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fffbdb7d639  r13 = 0x00000fffbdb7d63d  r14 = 0x00006ff261603100  r15 = 0x00007ffdedbeb1c8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2137:5 in bool mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::add<unsigned int&, js::jit::JitHintsMap::IonHint*&>(mozilla::detail::HashTable<mozilla::HashMapEntry<unsigned int, js::jit::JitHintsMap::IonHint*>, mozilla::HashMap<unsigned int, js::jit::JitHintsMap::IonHint*, mozilla::DefaultHasher<unsigned int, void>, js::SystemAllocPolicy>::MapHashPolicy, js::SystemAllocPolicy>::AddPtr&, unsigned int&, js::jit::JitHintsMap::IonHint*&)
+==13==ABORTING

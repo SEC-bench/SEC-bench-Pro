@@ -1,0 +1,47 @@
+From 836a941b54f44446fb75d9b3412fff630a433b25 Mon Sep 17 00:00:00 2001
+From: Yoshi Cheng-Hao Huang <allstars.chh@gmail.com>
+Date: Wed, 27 Mar 2024 09:17:05 +0000
+Subject: [PATCH] Bug 1885775 - tests. r=jonco
+
+Differential Revision: https://phabricator.services.mozilla.com/D205675
+---
+ js/src/jit-test/tests/collections/bug-1884927.js | 10 ++++++++++
+ js/src/jit-test/tests/collections/bug-1885775.js | 12 ++++++++++++
+ 2 files changed, 22 insertions(+)
+ create mode 100644 js/src/jit-test/tests/collections/bug-1884927.js
+ create mode 100644 js/src/jit-test/tests/collections/bug-1885775.js
+
+diff --git a/js/src/jit-test/tests/collections/bug-1884927.js b/js/src/jit-test/tests/collections/bug-1884927.js
+new file mode 100644
+index 0000000000000..263d9df8a089d
+--- /dev/null
++++ b/js/src/jit-test/tests/collections/bug-1884927.js
+@@ -0,0 +1,10 @@
++// |jit-test| --enable-symbols-as-weakmap-keys; skip-if: getBuildConfiguration("release_or_beta")
++for (x=0; x<10000; ++x) {
++  try {
++    m13 = new WeakMap;
++    sym = Symbol();
++    m13.set(sym, new Debugger);
++    startgc(1, );
++  } catch (exc) {}
++}
++
+diff --git a/js/src/jit-test/tests/collections/bug-1885775.js b/js/src/jit-test/tests/collections/bug-1885775.js
+new file mode 100644
+index 0000000000000..bc14c6d58b1d6
+--- /dev/null
++++ b/js/src/jit-test/tests/collections/bug-1885775.js
+@@ -0,0 +1,12 @@
++// |jit-test| --enable-symbols-as-weakmap-keys; skip-if: getBuildConfiguration("release_or_beta")
++var code = `
++var m58 = new WeakMap;
++var sym = Symbol();
++m58.set(sym, ({ entry16: 0, length: 1 }));
++function testCompacting() {
++  gcslice(50000);
++}
++testCompacting(2, 100000, 50000);
++`;
++for (x = 0; x < 10000; ++x)
++  evaluate(code);

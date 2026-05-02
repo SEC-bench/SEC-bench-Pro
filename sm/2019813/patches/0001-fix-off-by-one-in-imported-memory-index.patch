@@ -1,0 +1,51 @@
+From 9ef71fcf90d12a656c362e4af21e3026bbdcb15f Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Fri, 27 Feb 2026 21:07:35 +0000
+Subject: [PATCH] Bug 2019813: Fix off-by-one in imported memory index. r=rhunt
+
+After rearranging the import process for compact imports, the
+importIndex property assigned to memories became off by one.
+
+Differential Revision: https://phabricator.services.mozilla.com/D285313
+---
+ js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js | 8 ++++++++
+ js/src/wasm/WasmValidate.cpp                             | 4 ++--
+ 2 files changed, 10 insertions(+), 2 deletions(-)
+ create mode 100644 js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js
+
+diff --git a/js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js b/js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js
+new file mode 100644
+index 0000000000000..29f492ab551fb
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js
+@@ -0,0 +1,8 @@
++const bytes = wasmTextToBinary(`(module
++  (import "wasm:js-string" "length" (func (param externref) (result i32)))
++  (import "m" "mem" (memory 0))
++)`);
++
++const mod = new WebAssembly.Module(bytes, { builtins: ["js-string"] });
++const mem = new WebAssembly.Memory({ initial: 0 });
++new WebAssembly.Instance(mod, { m: { mem } });
+diff --git a/js/src/wasm/WasmValidate.cpp b/js/src/wasm/WasmValidate.cpp
+index b07ac91d29c8d..f2c61154227f7 100644
+--- a/js/src/wasm/WasmValidate.cpp
++++ b/js/src/wasm/WasmValidate.cpp
+@@ -3145,6 +3145,7 @@ static bool DecodeImportType(Decoder& d, DefinitionKind importKind,
+ static bool AddImport(Decoder& d, CacheableName& moduleName,
+                       CacheableName& itemName, ExternType importType,
+                       CodeMetadata* codeMeta, ModuleMetadata* moduleMeta) {
++  uint32_t importIndex = moduleMeta->imports.length();
+   if (!moduleMeta->imports.emplaceBack(
+           std::move(moduleName), std::move(itemName), importType.kind())) {
+     return false;
+@@ -3178,8 +3179,7 @@ static bool AddImport(Decoder& d, CacheableName& moduleName,
+       if (!codeMeta->memories.emplaceBack(MemoryDesc(importType.asMemory()))) {
+         return false;
+       }
+-      codeMeta->memories.back().importIndex =
+-          Some(moduleMeta->imports.length());
++      codeMeta->memories.back().importIndex = Some(importIndex);
+       break;
+     }
+     case DefinitionKind::Global: {

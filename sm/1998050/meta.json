@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1998050",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CacheIR.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Baseline-JIT type confusion in SpiderMonkey's CacheIR AddSlot attach path when the index is a huge typed-array out-of-bounds value. CVE-2025-14325 (sec-high, MFSA 2025-92, Firefox 146). canAttachAddSlotStub in js/src/jit/CacheIR.cpp previously lacked a check for typed-array OOB indices >= 2^32, so an AddSlot stub was attached for a statement that was actually an indexed store on a Uint8Array wrapped around a growable SharedArrayBuffer or resizable ArrayBuffer. The RHS value's valueOf hook calls sab.grow()/ab.resize() to change the backing buffer size, invalidating the IC stub's shape assumption; when the Baseline IC dispatches the AddSlot path against the mutated object, the IC treats the typed-array element slot as a regular NativeObject expando slot — classic JIT type confusion. The fix (commit 49150a9a555a73e21dc20181c204b6003b17c167 by André Bargull, 2025-11-11, r=iain) adds an explicit typed-array index check in canAttachAddSlotStub so the stub is not attached for typed-array indices. Tests landed separately (commit e412912d7e6ae7859f4d7f8aca3afcff053afbf6, 2026-04-20) as js/src/jit-test/tests/large-arraybuffers/bug1998050-{1,2}.js. Reporter: qriousec (AI-fuzzed).",
+    "fix_commits": [
+        "49150a9a555a73e21dc20181c204b6003b17c167"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-check-for-typed-array-index-in.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1998050 - Check for typed array index in",
+            "source_commit": "49150a9a555a73e21dc20181c204b6003b17c167",
+            "commit": "49150a9a555a73e21dc20181c204b6003b17c167",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/49150a9a555a73e21dc20181c204b6003b17c167",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/49150a9a555a73e21dc20181c204b6003b17c167",
+            "phabricator": "D271224"
+        }
+    ],
+    "vrp": null
+}

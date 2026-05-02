@@ -1,0 +1,47 @@
+From 85c8dad6f466d7cf5c45444126ec3440e8c15aba Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Thu, 21 Mar 2024 16:24:25 +0000
+Subject: [PATCH] Bug 1884427 - Don't destroy realms that were being
+ initialised at the start of GC r=jandem
+
+The problem is that when global object creation fails it may leave a live base
+shape with a pointer into a realm that has been destroyed. This happens when
+the base shape is allocated during an incremental GC (and is therefore kept
+alive), but the realm was allocated before the GC was started and can be freed.
+
+If the realm was a GC thing it would have been placed in a Rooted and this
+would work.
+
+There is a flag to keep the realm alive if it was allocated during GC. The
+patch also sets this flag if the realm is in the process of being initialized
+at the start of GC.
+
+Differential Revision: https://phabricator.services.mozilla.com/D204494
+---
+ js/src/vm/Realm.cpp | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/vm/Realm.cpp b/js/src/vm/Realm.cpp
+index d2ad39f3db57b..4e3eba5677f4c 100644
+--- a/js/src/vm/Realm.cpp
++++ b/js/src/vm/Realm.cpp
+@@ -237,11 +237,17 @@ void Realm::traceRoots(JSTracer* trc,
+     // The global is never nursery allocated, so we don't need to
+     // trace it when doing a minor collection.
+     //
+-    // If a realm is on-stack, we mark its global so that
+-    // JSContext::global() remains valid.
++    // If a realm is on-stack, we mark its global so that JSContext::global()
++    // remains valid.
+     if (shouldTraceGlobal() && global_) {
+       TraceRoot(trc, global_.unbarrieredAddress(), "on-stack realm global");
+     }
++
++    // If the realm is still being initialized we set a flag so that it doesn't
++    // get deleted, since there may be GC things that contain pointers to it.
++    if (shouldTraceGlobal() && initializingGlobal_) {
++      allocatedDuringIncrementalGC_ = true;
++    }
+   }
+ 
+   // Nothing below here needs to be treated as a root if we aren't marking

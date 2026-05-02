@@ -1,0 +1,154 @@
+From 0ba3af42be7fcfb0773fbf057c5b67277d3aa399 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 20 Jan 2026 23:44:42 +0000
+Subject: [PATCH] Bug 2010943: Support reading int64 from int32 stack slot
+ r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D279595
+---
+ js/src/jit/JitFrames.cpp                   |  7 +++++++
+ js/src/jit/Snapshots.cpp                   |  9 +++++++++
+ js/src/jit/Snapshots.h                     |  6 ++++++
+ js/src/jit/shared/CodeGenerator-shared.cpp | 11 ++++++++---
+ js/src/jsapi-tests/testJitRValueAlloc.cpp  |  9 +++++++++
+ 5 files changed, 39 insertions(+), 3 deletions(-)
+
+diff --git a/js/src/jit/JitFrames.cpp b/js/src/jit/JitFrames.cpp
+index addcd05e0153f..4d297f43270f7 100644
+--- a/js/src/jit/JitFrames.cpp
++++ b/js/src/jit/JitFrames.cpp
+@@ -1738,6 +1738,7 @@ bool SnapshotIterator::allocationReadable(const RValueAllocation& alloc,
+     case RValueAllocation::INT64_REG:
+       return hasRegister(alloc.reg());
+     case RValueAllocation::INT64_STACK:
++    case RValueAllocation::INT64_INT32_STACK:
+       return hasStack(alloc.stackOffset());
+ #endif
+ 
+@@ -1848,6 +1849,7 @@ Value SnapshotIterator::allocationValue(const RValueAllocation& alloc,
+ #elif defined(JS_PUNBOX64)
+     case RValueAllocation::INT64_REG:
+     case RValueAllocation::INT64_STACK:
++    case RValueAllocation::INT64_INT32_STACK:
+ #endif
+       MOZ_CRASH("Can't read Int64 as Value");
+ 
+@@ -1904,6 +1906,7 @@ bool SnapshotIterator::readMaybeUnpackedBigInt(JSContext* cx,
+ #elif defined(JS_PUNBOX64)
+     case RValueAllocation::INT64_REG:
+     case RValueAllocation::INT64_STACK:
++    case RValueAllocation::INT64_INT32_STACK:
+ #endif
+     {
+       auto* bigInt = JS::BigInt::createFromInt64(cx, allocationInt64(alloc));
+@@ -1971,6 +1974,9 @@ int64_t SnapshotIterator::allocationInt64(const RValueAllocation& alloc) {
+     case RValueAllocation::INT64_STACK: {
+       return static_cast<int64_t>(fromStack(alloc.stackOffset()));
+     }
++    case RValueAllocation::INT64_INT32_STACK: {
++      return static_cast<int64_t>(ReadFrameInt32Slot(fp_, alloc.stackOffset()));
++    }
+ #endif
+     default:
+       break;
+@@ -2044,6 +2050,7 @@ void SnapshotIterator::writeAllocationValuePayload(
+ #elif defined(JS_PUNBOX64)
+     case RValueAllocation::INT64_REG:
+     case RValueAllocation::INT64_STACK:
++    case RValueAllocation::INT64_INT32_STACK:
+ #endif
+       MOZ_CRASH("Not a GC thing: Unexpected write");
+       break;
+diff --git a/js/src/jit/Snapshots.cpp b/js/src/jit/Snapshots.cpp
+index 541efeb5eb6d6..41560a62080b1 100644
+--- a/js/src/jit/Snapshots.cpp
++++ b/js/src/jit/Snapshots.cpp
+@@ -154,6 +154,9 @@ using namespace js::jit;
+ //           register/stack-offset correspond to the low 32-bits, and the
+ //           second correspond to the high 32-bits.
+ //
++//         INT64_INT32_STACK  [STACK_OFFSET]: (64-bit platform)
++//           Unpacked Int64 value stored in int32_t. Payload is stored at an
++//           offset on the stack.
+ 
+ const RValueAllocation::Layout& RValueAllocation::layoutFromMode(Mode mode) {
+   switch (mode) {
+@@ -308,6 +311,12 @@ const RValueAllocation::Layout& RValueAllocation::layoutFromMode(Mode mode) {
+           PAYLOAD_STACK_OFFSET, PAYLOAD_NONE, "unpacked int64"};
+       return layout;
+     }
++
++    case INT64_INT32_STACK: {
++      static const RValueAllocation::Layout layout = {
++          PAYLOAD_STACK_OFFSET, PAYLOAD_NONE, "unpacked int64 (int32)"};
++      return layout;
++    }
+ #endif
+ 
+     default: {
+diff --git a/js/src/jit/Snapshots.h b/js/src/jit/Snapshots.h
+index b7e08b4cf71ac..5fe49806b9837 100644
+--- a/js/src/jit/Snapshots.h
++++ b/js/src/jit/Snapshots.h
+@@ -82,6 +82,7 @@ class RValueAllocation {
+ #elif defined(JS_PUNBOX64)
+     INT64_REG = 0x31,
+     INT64_STACK = 0x32,
++    INT64_INT32_STACK = 0x33,
+ #endif
+ 
+     // This mask can be used with any other valid mode. When this flag is
+@@ -348,6 +349,11 @@ class RValueAllocation {
+   static RValueAllocation Int64(int32_t stackOffset) {
+     return RValueAllocation(INT64_STACK, payloadOfStackOffset(stackOffset));
+   }
++
++  static RValueAllocation Int64Int32(int32_t stackOffset) {
++    return RValueAllocation(INT64_INT32_STACK,
++                            payloadOfStackOffset(stackOffset));
++  }
+ #endif
+ 
+   void setNeedSideEffect() {
+diff --git a/js/src/jit/shared/CodeGenerator-shared.cpp b/js/src/jit/shared/CodeGenerator-shared.cpp
+index 64d5178194ce1..c31517c7da864 100644
+--- a/js/src/jit/shared/CodeGenerator-shared.cpp
++++ b/js/src/jit/shared/CodeGenerator-shared.cpp
+@@ -599,9 +599,14 @@ void CodeGeneratorShared::encodeAllocation(LSnapshot* snapshot,
+       if (payload->isGeneralReg()) {
+         alloc = RValueAllocation::Int64(ToRegister(payload));
+       } else if (payload->isStackSlot()) {
+-        MOZ_ASSERT(payload->toStackSlot()->width() ==
+-                   LStackSlot::width(LDefinition::GENERAL));
+-        alloc = RValueAllocation::Int64(ToStackIndex(payload));
++        LStackSlot::Width width = payload->toStackSlot()->width();
++        MOZ_ASSERT(width == LStackSlot::width(LDefinition::GENERAL) ||
++                   width == LStackSlot::width(LDefinition::INT32));
++        if (width == LStackSlot::width(LDefinition::GENERAL)) {
++          alloc = RValueAllocation::Int64(ToStackIndex(payload));
++        } else {
++          alloc = RValueAllocation::Int64Int32(ToStackIndex(payload));
++        }
+       } else {
+         MOZ_CRASH("Unexpected payload type.");
+       }
+diff --git a/js/src/jsapi-tests/testJitRValueAlloc.cpp b/js/src/jsapi-tests/testJitRValueAlloc.cpp
+index 78e716e0ff0e6..40b20c1c6d51d 100644
+--- a/js/src/jsapi-tests/testJitRValueAlloc.cpp
++++ b/js/src/jsapi-tests/testJitRValueAlloc.cpp
+@@ -336,6 +336,15 @@ BEGIN_TEST(testJitRValueAlloc_Int64Stack) {
+   return true;
+ }
+ END_TEST(testJitRValueAlloc_Int64Stack)
++
++BEGIN_TEST(testJitRValueAlloc_Int64Int32Stack) {
++  for (auto i : Fibonacci{}) {
++    auto s = RValueAllocation::Int64Int32(i);
++    CHECK(s == Read(s));
++  }
++  return true;
++}
++END_TEST(testJitRValueAlloc_Int64Int32Stack)
+ #endif
+ 
+ BEGIN_TEST(testJitRValueAlloc_IntPtrCst) {

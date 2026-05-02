@@ -1,0 +1,36 @@
+#
+# Fatal error in ../../src/compiler/turboshaft/wasm-gc-type-reducer.cc, line 396
+# Debug check failed: !type.is_uninhabited().
+#
+#
+#
+#FailureMessage Object: 0x7ffebe2dd6b0
+==== C stack trace ===============================
+
+    out/x64.debug/d8(+0x3644793) [0x64204976f793]
+    out/x64.debug/d8(+0x3643bdd) [0x64204976ebdd]
+    out/x64.debug/d8(+0x36286be) [0x6420497536be]
+    out/x64.debug/d8(+0x3628115) [0x642049753115]
+    out/x64.debug/d8(+0x24a8068) [0x6420485d3068]
+    out/x64.debug/d8(+0x24a769d) [0x6420485d269d]
+    out/x64.debug/d8(+0x2475e23) [0x6420485a0e23]
+    out/x64.debug/d8(+0x2475cbd) [0x6420485a0cbd]
+    out/x64.debug/d8(+0x2463d64) [0x64204858ed64]
+    out/x64.debug/d8(+0x232bbc8) [0x642048456bc8]
+    out/x64.debug/d8(+0x232aa0c) [0x642048455a0c]
+    out/x64.debug/d8(+0x255ab31) [0x642048685b31]
+    out/x64.debug/d8(+0x1c6761d) [0x642047d9261d]
+    out/x64.debug/d8(+0x1c66bd2) [0x642047d91bd2]
+    out/x64.debug/d8(+0x1cc2296) [0x642047ded296]
+    out/x64.debug/d8(+0x1cc1b25) [0x642047decb25]
+    out/x64.debug/d8(+0x364551d) [0x64204977051d]
+    out/x64.debug/d8(+0x36459d3) [0x6420497709d3]
+    out/x64.debug/d8(+0x1cb581c) [0x642047de081c]
+    out/x64.debug/d8(+0x1dfdb80) [0x642047f28b80]
+    out/x64.debug/d8(+0x1e1a160) [0x642047f45160]
+    out/x64.debug/d8(+0x939f2c) [0x642046a64f2c]
+    out/x64.debug/d8(+0x938bbe) [0x642046a63bbe]
+    out/x64.debug/d8(+0x9372cd) [0x642046a622cd]
+    out/x64.debug/d8(+0x936b0d) [0x642046a61b0d]
+    out/x64.debug/d8(+0x2de067d) [0x642048f0b67d]
+Trace/breakpoint trap (core dumped)

@@ -1,0 +1,31 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:381999810",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--fuzzing --sandbox-fuzzing",
+  "target_source_files": [
+    "src/objects/backing-store.h",
+    "src/wasm/wasm-js.cc"
+  ],
+  "target_subdir": [
+    "src/objects",
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The `BackingStore::buffer_start()` accessor in `src/objects/backing-store.h` returns the raw `buffer_start_` field, which is `nullptr` for empty (zero-byte) ArrayBuffers. When `WebAssembly.validate()` is called with a TypedArray backed by such an empty ArrayBuffer, `GetFirstArgumentAsBytes` in `src/wasm/wasm-js.cc` computes the byte range start as `backing_store->Data() + array->ByteOffset()`, which equals `nullptr + byte_offset`. The `byte_offset` field is a BoundedSize value stored within the V8 sandbox (maximum ~32 GB), and can be corrupted via in-sandbox memory writes. With a corrupted `byte_offset`, the computed start pointer becomes a small positive address (e.g., ~23 GB) in the low virtual address space, which lies outside the V8 sandbox (typically mapped at a higher address). The WASM module decoder then dereferences this out-of-sandbox pointer, resulting in a sandbox escape. The fix is to return the `EmptyBackingStoreBuffer()` constant (pointing to the end of the sandbox before a guard region) instead of `nullptr` when the buffer is empty, ensuring the computed data pointer always remains within sandbox bounds.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Minimal production backport of CL 6074636: ensure empty BackingStore buffers expose EmptyBackingStoreBuffer() without test-only sandbox metadata changes that do not compile on this checkout.",
+      "source_cl": 6074636,
+      "source_commit": "12a53cc493f02f64f30dd08c0ec03a866ae45481",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6074636"
+    }
+  ]
+}

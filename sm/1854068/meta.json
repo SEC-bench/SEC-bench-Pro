@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1854068",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JitFrames.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --ion-warmup-threshold=10 --baseline-eager",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion safepoint tracing omission - wasm::AnyRef register spills were not traced in Ion JS frames. In js/src/jit/JitFrames.cpp, TraceIonJSFrame handled normal GC slots, Value spills, and wasm AnyRef stack slots, but missed wasm AnyRef values spilled in general registers around out-of-line calls. If a GC occurred while JS called into wasm with externref/anyref arguments, the spilled reference could be collected and later reused as a dangling pointer. The fix adds wasmAnyRefSpills() handling in JitFrames.cpp so these values are traced with the rest of the frame state.",
+    "fix_commits": [
+        "48114f50e75e0637cfd2e63f14868ad1fbaeff14"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-wasm-trace-anyref-spill-slots-in-ion-frames.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1854068 - wasm: Trace AnyRef spill slots in Ion frames.",
+            "source_commit": "48114f50e75e0637cfd2e63f14868ad1fbaeff14",
+            "commit": "48114f50e75e0637cfd2e63f14868ad1fbaeff14",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/48114f50e75e0637cfd2e63f14868ad1fbaeff14",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/48114f50e75e0637cfd2e63f14868ad1fbaeff14",
+            "phabricator": "D188845"
+        }
+    ],
+    "vrp": null
+}

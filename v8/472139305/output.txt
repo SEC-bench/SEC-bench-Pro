@@ -1,0 +1,134 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x6cca00000000,0x6dca00000000)
+=================================================================
+==18==ERROR: AddressSanitizer: heap-use-after-free on address 0x6f6bdb7e0e78 at pc 0x611bcde6626d bp 0x7fff00dcc240 sp 0x7fff00dcc238
+READ of size 4 at 0x6f6bdb7e0e78 thread T0
+    #0 0x611bcde6626c in __cxx_atomic_load<int> gen/third_party/libc++/src/include/__atomic/support/c11.h:81:10
+    #1 0x611bcde6626c in load gen/third_party/libc++/src/include/__atomic/atomic.h:70:12
+    #2 0x611bcde6626c in umtx_loadAcquire third_party/icu/source/common/umutex.h:76:16
+    #3 0x611bcde6626c in computeCompiled third_party/icu/source/i18n/number_fluent.cpp:691:28
+    #4 0x611bcde6626c in icu_74::number::LocalizedNumberFormatter::formatImpl(icu_74::number::impl::UFormattedNumberData*, UErrorCode&) const third_party/icu/source/i18n/number_fluent.cpp:644:9
+    #5 0x611bcde6646d in icu_74::number::LocalizedNumberFormatter::formatDouble(double, UErrorCode&) const third_party/icu/source/i18n/number_fluent.cpp:593:5
+    #6 0x611bca471823 in v8::internal::(anonymous namespace)::IcuFormatNumber(v8::internal::Isolate*, icu_74::number::LocalizedNumberFormatter const&, v8::internal::Handle<v8::internal::Object>) src/objects/js-number-format.cc:1579:33
+    #7 0x611bca4706e9 in v8::internal::IntlMathematicalValue::FormatNumeric(v8::internal::Isolate*, icu_74::number::LocalizedNumberFormatter const&, v8::internal::IntlMathematicalValue const&) src/objects/js-number-format.cc:1608:10
+    #8 0x611bca478696 in v8::internal::JSNumberFormat::NumberFormatFunction(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSNumberFormat>, v8::internal::Handle<v8::internal::Object>) src/objects/js-number-format.cc:2133:7
+    #9 0x611bc96ecb91 in v8::internal::Builtin_Impl_NumberFormatInternalFormatNumber(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-intl.cc:532:3
+    #10 0x611bcdb87d35 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #11 0x611bcdadc7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #12 0x611bcdad955b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #13 0x611bcdad92aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #14 0x611bc996ef7b in Call src/execution/simulator.h:212:12
+    #15 0x611bc996ef7b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #16 0x611bc9970538 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #17 0x611bc956d07d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1964:7
+    #18 0x611bc9295fc6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1036:44
+    #19 0x611bc92cd49d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5480:10
+    #20 0x611bc92d9293 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6436:37
+    #21 0x611bc92d86c5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6344:18
+    #22 0x611bc92dbda7 in v8::Shell::Main(int, char**) src/d8/d8.cc:7234:18
+    #23 0x720bdc440082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+0x6f6bdb7e0e78 is located 504 bytes inside of 520-byte region [0x6f6bdb7e0c80,0x6f6bdb7e0e88)
+freed by thread T0 here:
+    #0 0x611bc92645c2 in operator delete(void*, unsigned long) (/src/v8/out/x64.asan/d8+0x13a85c2) (BuildId: 7ff8c33ae4e11784)
+    #1 0x611bca43b8a7 in __release_shared gen/third_party/libc++/src/include/__memory/shared_count.h:122:7
+    #2 0x611bca43b8a7 in ~shared_ptr gen/third_party/libc++/src/include/__memory/shared_ptr.h:561:17
+    #3 0x611bca43b8a7 in void v8::internal::detail::Destructor<icu_74::number::LocalizedNumberFormatter>(void*) src/objects/managed-inl.h:21:3
+    #4 0x611bca5214ab in v8::internal::(anonymous namespace)::ManagedObjectFinalizerSecondPass(v8::WeakCallbackInfo<void> const&) src/objects/managed.cc:21:3
+    #5 0x611bc9a2d0a8 in Invoke src/handles/global-handles.cc:867:3
+    #6 0x611bc9a2d0a8 in v8::internal::GlobalHandles::InvokeSecondPassPhantomCallbacks() src/handles/global-handles.cc:768:18
+    #7 0x611bc9a2ed33 in v8::internal::GlobalHandles::PostGarbageCollectionProcessing(v8::GCCallbackFlags) src/handles/global-handles.cc:886:5
+    #8 0x611bc9bb233f in operator() src/heap/heap.cc:1712:34
+    #9 0x611bc9bb233f in InvokeExternalCallbacks<(lambda at ../../src/heap/heap.cc:1707:38)> src/heap/heap.cc:1475:3
+    #10 0x611bc9bb233f in v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags, v8::internal::PerformHeapLimitCheck) src/heap/heap.cc:1707:3
+    #11 0x611bc9a0b2f0 in v8::internal::(anonymous namespace)::InvokeGC(v8::Isolate*, v8::internal::(anonymous namespace)::GCOptions) src/extensions/gc-extension.cc:204:17
+    #12 0x611bc9a09d9b in v8::internal::GCExtension::GC(v8::FunctionCallbackInfo<v8::Value> const&) src/extensions/gc-extension.cc:291:5
+    #13 0x611bcdade543 in Builtins_CallApiCallbackGeneric setup-isolate-deserialize.cc
+    #14 0x611bcdadc7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #15 0x611bcdad955b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #16 0x611bcdad92aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #17 0x611bc996ef7b in Call src/execution/simulator.h:212:12
+    #18 0x611bc996ef7b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #19 0x611bc996cc4e in v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, v8::base::Vector<v8::internal::DirectHandle<v8::internal::Object> const>) src/execution/execution.cc:532:10
+    #20 0x611bca482e92 in T<v8::internal::Object>::MaybeType v8::internal::JSReceiver::ToPrimitive<v8::internal::Handle>(v8::internal::Isolate*, T<v8::internal::JSReceiver>, v8::internal::ToPrimitiveHint) src/objects/js-objects.cc:2122:5
+    #21 0x611bca474797 in v8::internal::IntlMathematicalValue::From(v8::internal::Isolate*, v8::internal::Handle<v8::internal::Object>) src/objects/js-number-format.cc:1688:5
+    #22 0x611bca478650 in v8::internal::JSNumberFormat::NumberFormatFunction(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSNumberFormat>, v8::internal::Handle<v8::internal::Object>) src/objects/js-number-format.cc:2128:3
+    #23 0x611bc96ecb91 in v8::internal::Builtin_Impl_NumberFormatInternalFormatNumber(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-intl.cc:532:3
+    #24 0x611bcdb87d35 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #25 0x611bcdadc7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #26 0x611bcdad955b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #27 0x611bcdad92aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #28 0x611bc996ef7b in Call src/execution/simulator.h:212:12
+    #29 0x611bc996ef7b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #30 0x611bc9970538 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #31 0x611bc956d07d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1964:7
+    #32 0x611bc9295fc6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1036:44
+    #33 0x611bc92cd49d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5480:10
+    #34 0x611bc92d9293 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6436:37
+    #35 0x611bc92d86c5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6344:18
+    #36 0x611bc92dbda7 in v8::Shell::Main(int, char**) src/d8/d8.cc:7234:18
+
+previously allocated by thread T0 here:
+    #0 0x611bc926395d in operator new(unsigned long) (/src/v8/out/x64.asan/d8+0x13a795d) (BuildId: 7ff8c33ae4e11784)
+    #1 0x611bca438796 in __libcpp_allocate<std::__Cr::__shared_ptr_emplace<icu_74::number::LocalizedNumberFormatter, std::__Cr::allocator<icu_74::number::LocalizedNumberFormatter> > > gen/third_party/libc++/src/include/__new/allocate.h:43:28
+    #2 0x611bca438796 in allocate gen/third_party/libc++/src/include/__memory/allocator.h:105:14
+    #3 0x611bca438796 in allocate gen/third_party/libc++/src/include/__memory/allocator_traits.h:259:16
+    #4 0x611bca438796 in __allocation_guard<std::__Cr::allocator<icu_74::number::LocalizedNumberFormatter> > gen/third_party/libc++/src/include/__memory/allocation_guard.h:55:16
+    #5 0x611bca438796 in allocate_shared<icu_74::number::LocalizedNumberFormatter, std::__Cr::allocator<icu_74::number::LocalizedNumberFormatter>, icu_74::number::LocalizedNumberFormatter &, 0> gen/third_party/libc++/src/include/__memory/shared_ptr.h:735:46
+    #6 0x611bca438796 in std::__Cr::shared_ptr<icu_74::number::LocalizedNumberFormatter> std::__Cr::make_shared<icu_74::number::LocalizedNumberFormatter, icu_74::number::LocalizedNumberFormatter&, 0>(icu_74::number::LocalizedNumberFormatter&) gen/third_party/libc++/src/include/__memory/shared_ptr.h:744:10
+    #7 0x611bca46cfb4 in v8::internal::JSNumberFormat::New(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Map>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, char const*) src/objects/js-number-format.cc:1474:15
+    #8 0x611bc96ea603 in LegacyFormatConstructor<v8::internal::JSNumberFormat> src/builtins/builtins-intl.cc:266:3
+    #9 0x611bc96ea603 in v8::internal::Builtin_Impl_NumberFormatConstructor(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-intl.cc:461:10
+    #10 0x611bcdb87d35 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #11 0x611bcdadd072 in Builtins_InterpreterPushArgsThenFastConstructFunction setup-isolate-deserialize.cc
+    #12 0x611bcdc8c35d in Builtins_ConstructHandler setup-isolate-deserialize.cc
+    #13 0x611bcdadc7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #14 0x611bcdadc7a9 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #15 0x611bcdad955b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #16 0x611bcdad92aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #17 0x611bc996ef7b in Call src/execution/simulator.h:212:12
+    #18 0x611bc996ef7b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #19 0x611bc9970538 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #20 0x611bc956d07d in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1964:7
+    #21 0x611bc9295fc6 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1036:44
+    #22 0x611bc92cd49d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5480:10
+    #23 0x611bc92d9293 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6436:37
+    #24 0x611bc92d86c5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6344:18
+    #25 0x611bc92dbda7 in v8::Shell::Main(int, char**) src/d8/d8.cc:7234:18
+    #26 0x720bdc440082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+SUMMARY: AddressSanitizer: heap-use-after-free gen/third_party/libc++/src/include/__atomic/support/c11.h:81:10 in __cxx_atomic_load<int>
+Shadow bytes around the buggy address:
+  0x6f6bdb7e0b80: fd fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f6bdb7e0c00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f6bdb7e0c80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f6bdb7e0d00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f6bdb7e0d80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+=>0x6f6bdb7e0e00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd[fd]
+  0x6f6bdb7e0e80: fd fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f6bdb7e0f00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6f6bdb7e0f80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f6bdb7e1000: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6f6bdb7e1080: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==18==ABORTING
+
+## V8 sandbox violation detected!

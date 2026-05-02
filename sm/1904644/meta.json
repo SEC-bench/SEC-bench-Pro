@@ -1,0 +1,52 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1904644",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JitFrames.cpp",
+        "js/src/jit/x64/MacroAssembler-x64.cpp",
+        "js/src/wasm/WasmBuiltins.cpp",
+        "js/src/wasm/WasmBuiltins.h",
+        "js/src/wasm/WasmStubs.cpp",
+        "js/src/wasm/WasmStubs.h"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "JS-to-wasm exception handling use-after-free - JIT exception unwinding did not restore the wasm instance register before jumping to a wasm catch handler. In js/src/jit/JitFrames.cpp, the exception path for a JS call that throws into wasm left the catch handler running with a poisoned/stale instance register. Debug builds assert in the frame iterator; non-debug builds dereference garbage such as 0xe5e5e5e5e5e5e5e5 from the instance, matching the bug's csectype-uaf classification. The fix shares the correct exception-handling path so the wasm instance register is restored before control reaches the catch block.",
+    "fix_commits": [
+        "b44f14fb5cc6",
+        "ceb01a751fde"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-share-more-exception-handling-code.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1904644 fix part 1",
+            "source_commit": "b44f14fb5cc6",
+            "commit": "b44f14fb5cc6",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/b44f14fb5cc6",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/b44f14fb5cc6"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-tests.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1904644 fix part 2",
+            "source_commit": "ceb01a751fde",
+            "commit": "ceb01a751fde",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/ceb01a751fde",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/ceb01a751fde"
+        }
+    ],
+    "vrp": null
+}

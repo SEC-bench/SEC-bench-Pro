@@ -1,0 +1,4 @@
+Verified with ../../v8/crash_check.sh 385775375.
+
+Checked against the original collector report and PoC under `../../collector/output/general/Blink/JavaScript/Runtime/385775375`.
+`output.txt` retains the stronger report-aligned ASAN heap-buffer-overflow capture; current reruns are flaky and often stop earlier in an unrelated `munmap` fatal.

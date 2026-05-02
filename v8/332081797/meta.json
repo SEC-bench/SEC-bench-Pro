@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:332081797",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--experimental-wasm-exnref --allow-natives-syntax",
+  "target_source_files": [
+    "src/wasm/constant-expression-interface.cc",
+    "src/wasm/baseline/liftoff-compiler.cc"
+  ],
+  "target_subdir": [
+    "src/wasm",
+    "src/wasm/baseline"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "A type confusion vulnerability exists in V8's WebAssembly exception handling due to an inconsistency in how the null value is represented for the `kWasmNullExnRef` type. In `DefaultValueForType` within `src/wasm/constant-expression-interface.cc`, when initializing default values for `kRefNull`-kinded types, the condition checks for `kWasmExternRef`, `kWasmNullExternRef`, and `kWasmExnRef` to decide whether to use JS `null_value` vs. internal `wasm_null`. However, `kWasmNullExnRef` is absent from this condition, so table/struct/array elements of type `kWasmNullExnRef` are default-initialized with `wasm_null`. In contrast, `LoadNullValue` in `src/wasm/baseline/liftoff-compiler.cc` correctly includes `kWasmNullExnRef` in the condition that loads JS `null_value` for null comparisons. This mismatch means null checks on `kWasmNullExnRef` values compare against JS `null`, but the stored value is the internal `wasm_null` object, causing the check to fail. As a result, the internal `wasm_null` object is erroneously returned to the JavaScript layer, enabling attackers to obtain it and triggering type confusion. The bug was introduced by commit d09f312a14717fccc5ee0c4e8613bc83db4874d9 which added `kWasmNullExnRef` but did not update `DefaultValueForType` accordingly. Triggered by using WebAssembly tables or aggregates with element type `exnref`/`nullexnref` under the `--experimental-wasm-exnref` flag.",
+  "vrp": 11500,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "cf03d55db2a0b7c5ff62e08ff5ad52312f6da0b4 [wasm][exnref] Fix default value for null exnref",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5444544",
+      "cl": 5444544,
+      "commit": "cf03d55db2a0b7c5ff62e08ff5ad52312f6da0b4",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/5444544 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5444544",
+      "source_cl": 5444544,
+      "source_commit": "cf03d55db2a0b7c5ff62e08ff5ad52312f6da0b4",
+      "source_ref": "refs/changes/44/5444544/2",
+      "source_patchset": 2
+    }
+  ]
+}

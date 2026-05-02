@@ -1,0 +1,39 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1851569",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MacroAssembler.cpp",
+        "js/src/wasm/WasmBaselineCompile.cpp",
+        "js/src/wasm/WasmIonCompile.cpp",
+        "js/src/wasm/WasmValType.cpp",
+        "js/src/wasm/WasmValidate.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off --wasm-gc",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm-GC i31ref cast type confusion - the JIT and wasm validation paths kept an obsolete assumption that values subtype-compatible with eqref are heap GC objects. The fix touches js/src/jit/MacroAssembler.cpp plus wasm compiler/validation code in WasmBaselineCompile.cpp, WasmIonCompile.cpp, WasmValType.cpp, and WasmValidate.cpp so i31ref is handled as an immediate integer reference rather than a struct/array object pointer. Before the fix, ref.cast to concrete struct/array types could skip the GC-object check for i31ref values, causing the engine to treat an attacker-controlled small integer as a heap object pointer.",
+    "fix_commits": [
+        "a637208c750c031c65e5c162660b0970786a4399"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-add-i31-to-ref-cast-test-suite.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1851569: Add i31 to ref.cast test suite. r=jseward",
+            "source_commit": "a637208c750c031c65e5c162660b0970786a4399",
+            "commit": "a637208c750c031c65e5c162660b0970786a4399",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/a637208c750c031c65e5c162660b0970786a4399",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/a637208c750c031c65e5c162660b0970786a4399",
+            "phabricator": "D188108"
+        }
+    ],
+    "vrp": null
+}

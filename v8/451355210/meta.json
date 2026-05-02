@@ -1,0 +1,41 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:451355210",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax  --sandbox-testing --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/codegen/code-stub-assembler.cc",
+    "src/objects/shared-function-info.cc",
+    "src/builtins/builtins-internal-gen.cc"
+  ],
+  "target_subdir": [
+    "src/codegen",
+    "src/objects",
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Out-of-bounds read/write",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "CodeStubAssembler::LoadBuiltin in src/codegen/code-stub-assembler.cc validates the builtin ID index with only a CSA_DCHECK (a debug-only assertion stripped in release builds) rather than a CSA_SBXCHECK (a sandbox-enforced check). This is inconsistent with the C++ counterpart SharedFunctionInfo::builtin_id() in src/objects/shared-function-info-inl.h, which uses SBXCHECK(Builtins::IsBuiltinId(id)) to enforce bounds in all builds. When GetSharedFunctionInfoCode processes an untrusted Smi value from a SharedFunctionInfo's untrusted data field, it passes that Smi directly to LoadBuiltin without a sandbox bounds check. An attacker with in-sandbox write capability can corrupt the untrusted data field of a SharedFunctionInfo with an out-of-bounds Smi builtin ID. When the function is subsequently called, LoadBuiltin performs an out-of-bounds read past the builtin table, returning an attacker-controlled value as a Code object pointer. Because this forged Code object resides in writable V8 heap memory, the attacker can craft a mismatched parameter count, causing the stack to become imbalanced, which leads to arbitrary memory write (AAW) and PC control \u2014 a full V8 sandbox escape.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 149,
+      "evidence_text": "Fixed: 451355210; Reviewed-on: CL 7045784",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/7045784",
+      "cl": 7045784,
+      "commit": "95b9fa928629d3aa86a20b5a6c29a9ccbe322385",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/7045784 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7045784",
+      "source_cl": 7045784,
+      "source_commit": "95b9fa928629d3aa86a20b5a6c29a9ccbe322385",
+      "source_ref": "refs/changes/84/7045784/2",
+      "source_patchset": 2
+    }
+  ]
+}

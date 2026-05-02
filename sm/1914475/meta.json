@@ -1,0 +1,35 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1914475",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CodeGenerator.cpp",
+        "js/src/jit/Lowering.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion wasm call_ref safepoint omission - cross-instance function-reference calls needed an adjunct safepoint but not all LWasmCall nodes received one. The vulnerable lowering/codegen path in js/src/jit/Lowering.cpp and CodeGenerator.cpp could leave nursery values in wasm call descriptors untracked across a GC triggered by the call. When the callee or argument objects moved or were freed, the returning code used stale pointers, producing csectype-uaf crashes in wasm/GC traces. The fix emits the additional safepoint metadata for the affected wasm call_ref paths.",
+    "fix_commits": [
+        "a85fc72269124b76f985b0b84b46bde92e5bd552"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-bug-1914475.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1914475.  r=yury.",
+            "source_commit": "a85fc72269124b76f985b0b84b46bde92e5bd552",
+            "commit": "a85fc72269124b76f985b0b84b46bde92e5bd552",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/a85fc72269124b76f985b0b84b46bde92e5bd552",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/a85fc72269124b76f985b0b84b46bde92e5bd552",
+            "phabricator": "D220254"
+        }
+    ],
+    "vrp": null
+}

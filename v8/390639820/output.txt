@@ -1,0 +1,10 @@
+[*] spraying...
+[*] get [0]
+[+] SortState = 1c0411
+[*] get [1]
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 42424242c0d3
+Segmentation fault (core dumped)

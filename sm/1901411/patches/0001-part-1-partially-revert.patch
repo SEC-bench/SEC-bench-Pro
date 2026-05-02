@@ -1,0 +1,71 @@
+From 907e0ce2a1aef3f8cb3e9de2bdda3f8b74dc0a84 Mon Sep 17 00:00:00 2001
+From: Tooru Fujisawa <arai_a@mac.com>
+Date: Wed, 19 Jun 2024 16:31:26 +0000
+Subject: [PATCH] Bug 1901411 - Part 1: Partially revert
+ AsyncGeneratorDrainQueue to AsyncGeneratorResumeNext. r=mgaudet,jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D213351
+---
+ js/src/vm/AsyncIteration.cpp | 35 ++++++++++++++++++++++++++++++++++-
+ 1 file changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/js/src/vm/AsyncIteration.cpp b/js/src/vm/AsyncIteration.cpp
+index 33546dc9dd75e..fc30ecd4e564a 100644
+--- a/js/src/vm/AsyncIteration.cpp
++++ b/js/src/vm/AsyncIteration.cpp
+@@ -602,7 +602,11 @@ AsyncGeneratorRequest* AsyncGeneratorRequest::create(
+ [[nodiscard]] static bool AsyncGeneratorDrainQueue(
+     JSContext* cx, Handle<AsyncGeneratorObject*> generator) {
+   // Step 1. Assert: generator.[[AsyncGeneratorState]] is completed.
+-  MOZ_ASSERT(generator->isCompleted());
++  MOZ_ASSERT(!generator->isExecuting());
++  MOZ_ASSERT(!generator->isAwaitingYieldReturn());
++  if (generator->isAwaitingReturn()) {
++    return true;
++  }
+ 
+   // Step 2. Let queue be generator.[[AsyncGeneratorQueue]].
+   // Step 3. If queue is empty, return.
+@@ -625,6 +629,29 @@ AsyncGeneratorRequest* AsyncGeneratorRequest::create(
+     // Step 5.b. Let completion be next.[[Completion]].
+     CompletionKind completionKind = next->completionKind();
+ 
++    if (completionKind != CompletionKind::Normal) {
++      if (generator->isSuspendedStart()) {
++        generator->setCompleted();
++      }
++    }
++    if (!generator->isCompleted()) {
++      MOZ_ASSERT(generator->isSuspendedStart() ||
++                 generator->isSuspendedYield());
++
++      RootedValue argument(cx, next->completionValue());
++
++      if (completionKind == CompletionKind::Return) {
++        generator->setAwaitingYieldReturn();
++
++        return InternalAsyncGeneratorAwait(
++            cx, generator, argument,
++            PromiseHandler::AsyncGeneratorYieldReturnAwaitedFulfilled,
++            PromiseHandler::AsyncGeneratorYieldReturnAwaitedRejected);
++      }
++
++      return AsyncGeneratorResume(cx, generator, completionKind, argument);
++    }
++
+     // Step 5.c. If completion.[[Type]] is return, then
+     if (completionKind == CompletionKind::Return) {
+       RootedValue value(cx, next->completionValue());
+@@ -657,6 +684,12 @@ AsyncGeneratorRequest* AsyncGeneratorRequest::create(
+       }
+     }
+ 
++    MOZ_ASSERT(!generator->isExecuting());
++    MOZ_ASSERT(!generator->isAwaitingYieldReturn());
++    if (generator->isAwaitingReturn()) {
++      return true;
++    }
++
+     // Step 5.d.iii. If queue is empty, set done to true.
+     if (generator->isQueueEmpty()) {
+       return true;

@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:435630464",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/objects/js-atomics-synchronization.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Stack use-after-return",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability caused by a stack use-after-return (UAR) in JSAtomicsCondition::WaitFor(). A SyncWaiterQueueNode (this_waiter) is allocated on the stack and enqueued into the condition variable's doubly-linked waiter queue (stored as an ExternalPointer waiter_queue_head in JSSynchronizationPrimitive). The function assumes that either (a) the notifying thread dequeues the node or (b) the timeout path calls DequeueExplicit() to remove it before returning. Under adversarial in-sandbox corruption, an attacker can corrupt the condition variable's state to appear as if a notifying thread already dequeued the current thread, causing DequeueExplicit() to find no matching node and return 0 without removing this_waiter. After WaitFor() returns and the stack frame is freed, the dangling this_waiter pointer remains in the global waiter queue. Subsequent enqueue/dequeue operations then access the freed stack memory, enabling a stack use-after-return that can be weaponized into an arbitrary controlled address write (e.g., by spraying the stack with WebAssembly locals). The attacker reaches this vulnerable code path by first 'reviving' the --harmony-struct experimental builtins (AtomicsMutexLock, AtomicsConditionWait): since the Code objects for these builtins always exist even when the flag is disabled, an attacker can corrupt a SharedFunctionInfo (obtained via CreateDynamicFunction's compilation cache) to point to these builtins and set up a compatible FeedbackCell.dispatch_handle, causing JSFunctionBuilder to install the experimental builtin code on a function without the flag being enabled.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit 792c326e896020f74533e0d7b629b9a1b35e555a for fixed-image builds.",
+      "context": "compatibility-backport",
+      "evidence_text": "[sandbox] Don't allow to use disabled builtins, pt.2",
+      "source_url": "https://crrev.com/c/7003083",
+      "url": "https://crrev.com/c/7003083",
+      "source_cl": 7003083,
+      "cl": 7003083,
+      "source_commit": "792c326e896020f74533e0d7b629b9a1b35e555a",
+      "commit": "792c326e896020f74533e0d7b629b9a1b35e555a"
+    }
+  ]
+}

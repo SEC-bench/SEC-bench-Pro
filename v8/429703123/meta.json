@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:429703123",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/builtins/x64/builtins-x64.cc"
+  ],
+  "target_subdir": [
+    "src/builtins/x64"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A V8 sandbox bypass via type confusion in the interpreter-to-baseline OSR (On-Stack Replacement) transition. In `Builtins::Generate_InterpreterOnStackReplacement_ToBaseline`, the Code object is re-fetched from `SharedFunctionInfo::kTrustedFunctionDataOffset` using `kUnknownIndirectPointerTag` (line ~5199 of builtins-x64.cc) instead of the correct `kCodeIndirectPointerTag`. This is a double-fetch vulnerability: Ignition's `SharedFunctionInfoHasBaselineCode` check (which verifies the trusted function data is a baseline Code object) occurs before the builtin's unchecked re-fetch. An attacker can substitute the slot with an arbitrary `ExposedTrustedObject` between these two accesses. The attacker-controlled object is then passed to `Code::GetBaselinePCForNextExecutedBytecode`, where the `bytecode_offset_table()` field (a `TrustedByteArray`) controls the computed PC offset, and `LoadCodeInstructionStart` loads an instruction pointer from the object's self-indirect pointer slot. The result is an arbitrary code jump, bypassing the V8 sandbox without requiring any JIT page write.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "local-format-patch",
+      "evidence_text": "Local patch generated from verified V8 commit ebf22f9a925a45549a6124158ad935d624e7bf8f for CL 6714868.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6714868",
+      "cl": 6714868,
+      "source_commit": "ebf22f9a925a45549a6124158ad935d624e7bf8f",
+      "commit": "ebf22f9a925a45549a6124158ad935d624e7bf8f",
+      "source_cl": 6714868,
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6714868"
+    }
+  ]
+}

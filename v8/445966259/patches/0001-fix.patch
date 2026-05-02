@@ -1,0 +1,102 @@
+From a622c3686d9b0eeb6fbf38c949252479460b967a Mon Sep 17 00:00:00 2001
+From: Igor Sheludko <ishell@chromium.org>
+Date: Fri, 19 Sep 2025 18:25:05 +0200
+Subject: [PATCH] [sandbox] Introduce kCEntryEntrypointTag for CEntry builtins
+
+... which are not compatible with JS calling convention.
+
+Bug: 435630464
+Change-Id: I1cb765047236fe6a970b64e4313267502e3e8fad
+Fixed: 445966259
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6965029
+Auto-Submit: Igor Sheludko <ishell@chromium.org>
+Commit-Queue: Michael Lippautz <mlippautz@chromium.org>
+Reviewed-by: Michael Lippautz <mlippautz@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102658}
+---
+ src/codegen/interface-descriptors.h           |  2 +-
+ src/compiler/linkage.cc                       |  2 +-
+ src/sandbox/code-entrypoint-tag.h             |  2 ++
+ .../regress/regress-435630464-centry.js       | 31 +++++++++++++++++++
+ 4 files changed, 35 insertions(+), 2 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress/regress-435630464-centry.js
+
+diff --git a/src/codegen/interface-descriptors.h b/src/codegen/interface-descriptors.h
+index 36dcc0d469a..08e5d2cab2b 100644
+--- a/src/codegen/interface-descriptors.h
++++ b/src/codegen/interface-descriptors.h
+@@ -846,7 +846,7 @@ class CCallDescriptor : public StaticCallInterfaceDescriptor<CCallDescriptor> {
+ class CEntryDummyDescriptor
+     : public StaticCallInterfaceDescriptor<CEntryDummyDescriptor> {
+  public:
+-  SANDBOX_EXPOSED_DESCRIPTOR(kDefaultCodeEntrypointTag)
++  SANDBOX_EXPOSED_DESCRIPTOR(kCEntryEntrypointTag)
+   SANDBOXING_MODE(kSandboxed)
+   DEFINE_PARAMETERS()
+   DEFINE_PARAMETER_TYPES()
+diff --git a/src/compiler/linkage.cc b/src/compiler/linkage.cc
+index 22c09939472..d8bf1b48628 100644
+--- a/src/compiler/linkage.cc
++++ b/src/compiler/linkage.cc
+@@ -497,7 +497,7 @@ CallDescriptor* Linkage::GetCEntryStubCallDescriptor(
+       LinkageLocation::ForAnyRegister(MachineType::AnyTagged());
+   return zone->New<CallDescriptor>(     // --
+       CallDescriptor::kCallCodeObject,  // kind
+-      kDefaultCodeEntrypointTag,        // tag
++      kCEntryEntrypointTag,             // tag
+       target_type,                      // target MachineType
+       target_loc,                       // target location
+       locations.Get(),                  // location_sig
+diff --git a/src/sandbox/code-entrypoint-tag.h b/src/sandbox/code-entrypoint-tag.h
+index 3e7b17bd405..ec7ee9e31a7 100644
+--- a/src/sandbox/code-entrypoint-tag.h
++++ b/src/sandbox/code-entrypoint-tag.h
+@@ -47,6 +47,8 @@ enum CodeEntrypointTag : uint64_t {
+   kStoreTransitionICHandlerEntrypointTag = uint64_t{5}
+                                            << kCodeEntrypointTagShift,
+   kRegExpEntrypointTag = uint64_t{6} << kCodeEntrypointTagShift,
++  kCEntryEntrypointTag = uint64_t{7} << kCodeEntrypointTagShift,
++
+   // TODO(saelo): create more of these tags.
+ 
+   // Tag to use for code that will never be called indirectly via the CPT.
+diff --git a/test/mjsunit/sandbox/regress/regress-435630464-centry.js b/test/mjsunit/sandbox/regress/regress-435630464-centry.js
+new file mode 100644
+index 00000000000..b38203ca400
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress/regress-435630464-centry.js
+@@ -0,0 +1,31 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --sandbox-testing
++
++const kBuiltins = Sandbox.getBuiltinNames();
++
++const kJSFunctionType = Sandbox.getInstanceTypeIdFor('JS_FUNCTION_TYPE');
++const kSharedFunctionInfoType = Sandbox.getInstanceTypeIdFor('SHARED_FUNCTION_INFO_TYPE');
++const kJSFunctionSFIOffset = Sandbox.getFieldOffset(kJSFunctionType, 'shared_function_info');
++const kSharedFunctionInfoFormalParameterCountOffset = Sandbox.getFieldOffset(kSharedFunctionInfoType, 'formal_parameter_count');
++const kHeapObjectTag = 1;
++const kDontAdaptArgumentsSentinel = 0;
++
++let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++
++function getFormalParameterCount(f) {
++  let f_addr = Sandbox.getAddressOf(f);
++  let sfi_addr = memory.getUint32(f_addr + kJSFunctionSFIOffset, true) - kHeapObjectTag;
++  return memory.getUint16(sfi_addr + kSharedFunctionInfoFormalParameterCountOffset, true);
++}
++
++var f = BigInt;
++
++// The test requires a builtin with kDontAdaptArgumentsSentinel!
++assertEquals(getFormalParameterCount(f), kDontAdaptArgumentsSentinel);
++
++// Attempt to install such a builtin into function must safely crash.
++Sandbox.setFunctionCodeToBuiltin(f, kBuiltins.indexOf("CEntry_Return1_ArgvOnStack_NoBuiltinExit"));
++assertUnreachable();
+-- 
+2.43.0
+

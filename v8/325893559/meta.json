@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:325893559",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--wasm-wrapper-tiering-budget=1",
+  "target_source_files": [
+    "src/runtime/runtime-wasm.cc"
+  ],
+  "target_subdir": [
+    "src/runtime"
+  ],
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "DCHECK",
+  "description": "An out-of-bounds read vulnerability exists in V8's WebAssembly tier-up logic inside Runtime_TierUpWasmToJSWrapper (src/runtime/runtime-wasm.cc). When a Wasm module uses the generic wasm-to-js wrapper and an indirect function call triggers tier-up, the runtime iterates over all WasmDispatchTables to locate the entry matching the given WasmApiFunctionRef. It accesses table->ref(entry_index) on every table using the same entry_index without first verifying that entry_index is within the table's bounds. Because individual dispatch tables can have different sizes, a small table processed before the correct (larger) table will be accessed at an index that exceeds its length(), triggering a fatal DCHECK failure (index < length()) in debug builds and an out-of-bounds memory read in release builds. The vulnerability is exploitable by constructing a Wasm module with at least two tables of different sizes (e.g., size 1 and size 3), placing the target import in the larger table at an index beyond the smaller table's length, and invoking the function enough times to trigger tier-up. The fix is to add a bounds check (entry_index < table->length()) before calling table->ref(entry_index) at both affected sites in Runtime_TierUpWasmToJSWrapper.",
+  "vrp": 12000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 550,
+      "evidence_text": "Please merge [https://crrev.com/c/5309898](<https://crrev.com/c/5309898>) to M123 Beta by EOD Tuesday, 27 February, and M122 Stable by EOD, Thursday, 29 February so this fix can be included in their next respective updates -- thank you and apologies for all the email pings that would have resulted from all my tag changes.",
+      "url": "https://crrev.com/c/5309898",
+      "cl": 5309898,
+      "commit": "7330f46163e8a2c10a3d40ecbf554656f0ac55e8",
+      "description": "Local patch exported from https://crrev.com/c/5309898 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/5309898",
+      "source_cl": 5309898,
+      "source_commit": "7330f46163e8a2c10a3d40ecbf554656f0ac55e8",
+      "source_ref": "refs/changes/98/5309898/2",
+      "source_patchset": 2
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+From 6c5f6bdc3652c1bed3b5f3e4a42090cd684e4d75 Mon Sep 17 00:00:00 2001
+From: pthier <pthier@chromium.org>
+Date: Thu, 6 Feb 2025 13:34:30 +0100
+Subject: [PATCH] [regexp] Harden access of captures during RegExp parsing
+
+Capture indices are calculated while parsing a RegExp pattern and
+used to retrieve capture objects from a ZoneList. Since the pattern
+is allocated inside the sandbox, we can't trust any calculated value
+based on it.
+
+Drive-by: Remove unused member variable.
+
+Fixed: 394635429
+Change-Id: If85dab92b59ce8af6dd742dc7721fb40828ee510
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6239220
+Auto-Submit: Patrick Thier <pthier@chromium.org>
+Reviewed-by: Camillo Bruni <cbruni@chromium.org>
+Commit-Queue: Camillo Bruni <cbruni@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98543}
+---
+ src/regexp/regexp-parser.cc | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/regexp/regexp-parser.cc b/src/regexp/regexp-parser.cc
+index c8c3dde7066..5db28d189ff 100644
+--- a/src/regexp/regexp-parser.cc
++++ b/src/regexp/regexp-parser.cc
+@@ -636,7 +636,6 @@ class RegExpParserImpl final {
+   ZoneMap<RegExpCapture*, ZoneList<int>*, RegExpCaptureNameLess>*
+       named_captures_;
+   ZoneList<RegExpBackReference*>* named_back_references_;
+-  ZoneList<CharacterRange>* temp_ranges_;
+   const CharT* const input_;
+   const int input_length_;
+   base::uc32 current_;
+@@ -1741,7 +1740,7 @@ RegExpCapture* RegExpParserImpl<CharT>::GetCapture(int index) {
+   // zero-based.
+   const int known_captures =
+       is_scanned_for_captures_ ? capture_count_ : captures_started_;
+-  DCHECK(index <= known_captures);
++  SBXCHECK(index >= 1 && index <= known_captures);
+   if (captures_ == nullptr) {
+     captures_ =
+         zone()->template New<ZoneList<RegExpCapture*>>(known_captures, zone());
+-- 
+2.43.0
+

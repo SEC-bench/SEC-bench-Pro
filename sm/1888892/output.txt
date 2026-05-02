@@ -1,0 +1,94 @@
+=================================================================
+==13==ERROR: AddressSanitizer: use-after-poison on address 0x702a0edbfa60 at pc 0x6350be058102 bp 0x7ffe81c880e0 sp 0x7ffe81c880d8
+READ of size 8 at 0x702a0edbfa60 thread T0
+    #0 0x6350be058101 in js::gc::HeaderWord::getAtomic() const /src/gecko-dev/js/src/gc/Cell.h:100:12
+    #1 0x6350be058101 in js::gc::HeaderWord::flags() const /src/gecko-dev/js/src/gc/Cell.h:116:36
+    #2 0x6350be058101 in js::gc::HeaderWord::isForwarded() const /src/gecko-dev/js/src/gc/Cell.h:117:37
+    #3 0x6350be058101 in js::gc::Cell::isForwarded() const /src/gecko-dev/js/src/gc/Cell.h:153:45
+    #4 0x6350be058101 in bool js::gc::IsForwarded<js::Shape>(js::Shape const*) /src/gecko-dev/js/src/gc/Marking-inl.h:101:13
+    #5 0x6350be058101 in void js::CheckTracedThing<js::Shape>(JSTracer*, js::Shape*) /src/gecko-dev/js/src/gc/Marking.cpp:136:7
+    #6 0x6350be05ec68 in js::gc::TraceEdgeInternal(JSTracer*, js::Shape**, char const*) /src/gecko-dev/js/src/gc/Tracer.h:109:1
+    #7 0x6350be05ec68 in void js::TraceSameZoneCrossCompartmentEdge<js::Shape*>(JSTracer*, js::BarrieredBase<js::Shape*> const*, char const*) /src/gecko-dev/js/src/gc/Marking.cpp:529:3
+    #8 0x6350bebdef4d in void js::jit::TraceCacheIRStub<js::jit::ICCacheIRStub>(JSTracer*, js::jit::ICCacheIRStub*, js::jit::CacheIRStubInfo const*) /src/gecko-dev/js/src/jit/CacheIRCompiler.cpp
+    #9 0x6350be3c4b15 in js::jit::ICCacheIRStub::trace(JSTracer*) /src/gecko-dev/js/src/jit/BaselineIC.cpp:458:3
+    #10 0x6350befcd8d6 in js::jit::TraceBaselineStubFrame(JSTracer*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:1172:30
+    #11 0x6350befcd8d6 in js::jit::TraceJitActivation(JSTracer*, js::jit::JitActivation*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1472:11
+    #12 0x6350befcd8d6 in js::jit::TraceJitActivations(JSContext*, JSTracer*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1517:5
+    #13 0x6350be1017e7 in js::gc::GCRuntime::traceRuntimeCommon(JSTracer*, js::gc::GCRuntime::TraceOrMarkRuntime) /src/gecko-dev/js/src/gc/RootMarking.cpp:303:5
+    #14 0x6350be0e8a76 in js::gc::GCRuntime::traceRuntimeForMinorGC(JSTracer*, js::gc::AutoGCSession&) /src/gecko-dev/js/src/gc/RootMarking.cpp:258:3
+    #15 0x6350be0e6934 in js::Nursery::traceRoots(js::gc::AutoGCSession&, js::gc::TenuringTracer&) /src/gecko-dev/js/src/gc/Nursery.cpp:1634:9
+    #16 0x6350be0e0351 in js::Nursery::doCollection(js::gc::AutoGCSession&, JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1494:3
+    #17 0x6350be0de75a in js::Nursery::collect(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1264:31
+    #18 0x6350bdfa0616 in js::gc::GCRuntime::collectNursery(JS::GCOptions, JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:4750:13
+    #19 0x6350bdf92e65 in js::gc::GCRuntime::collectNurseryFromMajorGC(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3893:3
+    #20 0x6350bdf922e5 in js::gc::GCRuntime::endPreparePhase(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:2830:3
+    #21 0x6350bdf9e01b in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3733:7
+    #22 0x6350bdfa5159 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4322:3
+    #23 0x6350bdfa84e7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4513:9
+    #24 0x6350bdf478ff in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp:4976:5
+    #25 0x6350bdfb0aad in bool js::gc::CellAllocator::PreAllocChecks<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:257:11
+    #26 0x6350bc9a3aaa in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:114:8
+    #27 0x6350bc9a3735 in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:94:16
+    #28 0x6350bc9a1c3c in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #29 0x6350bc9a1c3c in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:359:10
+    #30 0x6350bc9a1c3c in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:495:28
+    #31 0x6350bcf33074 in NewObject(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject.cpp:769:23
+    #32 0x6350bd264e9f in js::NativeObject* js::NewObjectWithGivenTaggedProto<(js::NewObjectKind)1>(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject-inl.h:371:10
+    #33 0x6350bd264e9f in js::SavedFrame* js::detail::NewObjectWithGivenTaggedProtoForKind<js::SavedFrame, (js::NewObjectKind)1>(JSContext*, JS::Handle<js::TaggedProto>) /src/gecko-dev/js/src/vm/JSObject-inl.h:380:19
+    #34 0x6350bd264e9f in js::SavedFrame* js::NewTenuredObjectWithGivenProto<js::SavedFrame>(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/JSObject-inl.h:416:10
+    #35 0x6350bd264e9f in js::SavedFrame::create(JSContext*) /src/gecko-dev/js/src/vm/SavedStacks.cpp:587:10
+    #36 0x6350bd2771e1 in js::SavedStacks::createFrameFromLookup(JSContext*, JS::Handle<js::SavedFrame::Lookup>) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1815:33
+    #37 0x6350bd276d3a in js::SavedStacks::getOrCreateSavedFrame(JSContext*, JS::Handle<js::SavedFrame::Lookup>) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1801:33
+    #38 0x6350bd271255 in js::SavedStacks::insertFrames(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1638:15
+    #39 0x6350bd26f2dc in js::SavedStacks::saveCurrentStack(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1326:10
+    #40 0x6350bd7cc041 in JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/jsapi.cpp:4936:29
+    #41 0x6350bd7ff730 in js::CaptureStack(JSContext*, JS::MutableHandle<JSObject*>) /src/gecko-dev/js/src/jsexn.cpp:229:10
+    #42 0x6350bd7ff730 in js::ErrorToException(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/jsexn.cpp:346:8
+    #43 0x6350bcdfe281 in ReportError(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:173:10
+    #44 0x6350bcdfe281 in js::ReportErrorNumberVA(JSContext*, js::IsWarning, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, js::ErrorArgumentsType, __va_list_tag*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:487:8
+    #45 0x6350bd773e92 in JS_ReportErrorNumberASCIIVA(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, __va_list_tag*) /src/gecko-dev/js/src/jsapi.cpp:3788:3
+    #46 0x6350bd773e92 in JS_ReportErrorNumberASCII(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, ...) /src/gecko-dev/js/src/jsapi.cpp:3778:3
+    #47 0x6350bcefeda2 in JSContext::onOverRecursed() /src/gecko-dev/js/src/vm/JSContext.cpp:325:3
+    #48 0x6350bca0dbb3 in js::AutoCheckRecursionLimit::check(JSContext*) const /src/gecko-dev/obj-debug-asan/dist/include/js/friend/StackLimits.h:223:5
+    #49 0x6350bd890f42 in js::Proxy::getInternal(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:487:18
+    #50 0x6350bd86f2e4 in js::Proxy::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:534:10
+    #51 0x6350bc885b52 in js::GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:114:12
+    #52 0x6350bef7c2c7 in js::GetElement(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, unsigned int, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:149:10
+    #53 0x6350bef7c2c7 in js::GetObjectElementOperation(JSContext*, JSOp, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:394:12
+    #54 0x6350bef7b303 in js::jit::IonGetPropSuperIC::update(JSContext*, JS::Handle<JSScript*>, js::jit::IonGetPropSuperIC*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/IonIC.cpp:218:10
+    #55 0x702a102149ed  (<unknown module>)
+
+Address 0x702a0edbfa60 is a wild pointer inside of access range of size 0x000000000008.
+SUMMARY: AddressSanitizer: use-after-poison /src/gecko-dev/js/src/gc/Cell.h:100:12 in js::gc::HeaderWord::getAtomic() const
+Shadow bytes around the buggy address:
+  0x702a0edbf780: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbf800: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbf880: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbf900: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbf980: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+=>0x702a0edbfa00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7[f7]f7 f7 f7
+  0x702a0edbfa80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbfb00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbfb80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbfc00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x702a0edbfc80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

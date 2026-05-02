@@ -1,0 +1,121 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+=================================================================
+==10==ERROR: AddressSanitizer: heap-use-after-free on address 0x7335e4be0426 at pc 0x5ba09f40b9a1 bp 0x7ffcff99b010 sp 0x7ffcff99b008
+WRITE of size 1 at 0x7335e4be0426 thread T0
+    #0 0x5ba09f40b9a0 in WriteRawBytes src/objects/value-serializer.cc:391:5
+    #1 0x5ba09f40b9a0 in WriteVarint<unsigned char> src/objects/value-serializer.cc:343:3
+    #2 0x5ba09f40b9a0 in v8::internal::ValueSerializer::WriteJSError(v8::internal::DirectHandle<v8::internal::JSObject>) src/objects/value-serializer.cc:1111:3
+    #3 0x5ba09f40139c in v8::internal::ValueSerializer::WriteJSReceiver(v8::internal::Handle<v8::internal::JSReceiver>) src/objects/value-serializer.cc:646:14
+    #4 0x5ba09f4008d5 in v8::internal::ValueSerializer::WriteObject(v8::internal::Handle<v8::internal::Object>) src/objects/value-serializer.cc
+    #5 0x5ba09e244a04 in v8::ValueSerializer::WriteValue(v8::Local<v8::Context>, v8::Local<v8::Value>) src/api/api.cc:3520:45
+    #6 0x5ba09e1d1b65 in v8::Shell::SerializerSerialize(v8::FunctionCallbackInfo<v8::Value> const&) src/d8/d8.cc:2718:21
+    #7 0x5ba0a23a3a3f in Builtins_CallApiCallbackGeneric setup-isolate-deserialize.cc
+    #8 0x5ba0a23a1c74 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #9 0x5ba0a239f75b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #10 0x5ba0a239f4aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #11 0x5ba09e6cc6d4 in Call src/execution/simulator.h:191:12
+    #12 0x5ba09e6cc6d4 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:437:22
+    #13 0x5ba09e6cdc78 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:537:10
+    #14 0x5ba09e230597 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2147:7
+    #15 0x5ba09e1b91e7 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1014:44
+    #16 0x5ba09e1e5403 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4956:10
+    #17 0x5ba09e1efece in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5900:37
+    #18 0x5ba09e1ef5c6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5809:18
+    #19 0x5ba09e1f2638 in v8::Shell::Main(int, char**) src/d8/d8.cc:6664:18
+    #20 0x76c5e5b9f1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x76c5e5b9f28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x5ba09e0b3029 in _start (/src/v8/out/x64.asan/d8+0x1111029) (BuildId: a612d09b0cdc4bd9)
+
+0x7335e4be0426 is located 22 bytes inside of 65-byte region [0x7335e4be0410,0x7335e4be0451)
+freed by thread T0 here:
+    #0 0x5ba09e152b0c in realloc /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_malloc_linux.cpp:81:3
+    #1 0x5ba09f3ffe46 in Realloc src/base/platform/memory.h:56:10
+    #2 0x5ba09f3ffe46 in v8::internal::ValueSerializer::ExpandBuffer(unsigned long) src/objects/value-serializer.cc:418:18
+    #3 0x5ba09f4026ee in ReserveRawBytes src/objects/value-serializer.cc:400:10
+    #4 0x5ba09f4026ee in WriteRawBytes src/objects/value-serializer.cc:390:7
+    #5 0x5ba09f4026ee in WriteTwoByteString src/objects/value-serializer.cc:375:3
+    #6 0x5ba09f4026ee in v8::internal::ValueSerializer::WriteString(v8::internal::Handle<v8::internal::String>) src/objects/value-serializer.cc:569:5
+    #7 0x5ba09f40b5db in v8::internal::ValueSerializer::WriteJSError(v8::internal::DirectHandle<v8::internal::JSObject>) src/objects/value-serializer.cc:1097:5
+    #8 0x5ba09f40139c in v8::internal::ValueSerializer::WriteJSReceiver(v8::internal::Handle<v8::internal::JSReceiver>) src/objects/value-serializer.cc:646:14
+    #9 0x5ba09f4008d5 in v8::internal::ValueSerializer::WriteObject(v8::internal::Handle<v8::internal::Object>) src/objects/value-serializer.cc
+    #10 0x5ba09e244a04 in v8::ValueSerializer::WriteValue(v8::Local<v8::Context>, v8::Local<v8::Value>) src/api/api.cc:3520:45
+    #11 0x5ba09e1d1b65 in v8::Shell::SerializerSerialize(v8::FunctionCallbackInfo<v8::Value> const&) src/d8/d8.cc:2718:21
+    #12 0x5ba0a23a3a3f in Builtins_CallApiCallbackGeneric setup-isolate-deserialize.cc
+    #13 0x5ba0a23a1c74 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #14 0x5ba0a239f75b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #15 0x5ba0a239f4aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #16 0x5ba09e6cc6d4 in Call src/execution/simulator.h:191:12
+    #17 0x5ba09e6cc6d4 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:437:22
+    #18 0x5ba09e6cdc78 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:537:10
+    #19 0x5ba09e230597 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2147:7
+    #20 0x5ba09e1b91e7 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1014:44
+    #21 0x5ba09e1e5403 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4956:10
+    #22 0x5ba09e1efece in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5900:37
+    #23 0x5ba09e1ef5c6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5809:18
+    #24 0x5ba09e1f2638 in v8::Shell::Main(int, char**) src/d8/d8.cc:6664:18
+    #25 0x76c5e5b9f1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x76c5e5b9f28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #27 0x5ba09e0b3029 in _start (/src/v8/out/x64.asan/d8+0x1111029) (BuildId: a612d09b0cdc4bd9)
+
+previously allocated by thread T0 here:
+    #0 0x5ba09e152b0c in realloc /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_malloc_linux.cpp:81:3
+    #1 0x5ba09f3ffe46 in Realloc src/base/platform/memory.h:56:10
+    #2 0x5ba09f3ffe46 in v8::internal::ValueSerializer::ExpandBuffer(unsigned long) src/objects/value-serializer.cc:418:18
+    #3 0x5ba09f3ff70e in ReserveRawBytes src/objects/value-serializer.cc:400:10
+    #4 0x5ba09f3ff70e in WriteRawBytes src/objects/value-serializer.cc:390:7
+    #5 0x5ba09f3ff70e in WriteTag src/objects/value-serializer.cc:324:3
+    #6 0x5ba09f3ff70e in v8::internal::ValueSerializer::WriteHeader() src/objects/value-serializer.cc:314:3
+    #7 0x5ba09e1d1afe in v8::Shell::SerializerSerialize(v8::FunctionCallbackInfo<v8::Value> const&) src/d8/d8.cc:2715:14
+    #8 0x5ba0a23a3a3f in Builtins_CallApiCallbackGeneric setup-isolate-deserialize.cc
+    #9 0x5ba0a23a1c74 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #10 0x5ba0a239f75b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #11 0x5ba0a239f4aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #12 0x5ba09e6cc6d4 in Call src/execution/simulator.h:191:12
+    #13 0x5ba09e6cc6d4 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:437:22
+    #14 0x5ba09e6cdc78 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:537:10
+    #15 0x5ba09e230597 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2147:7
+    #16 0x5ba09e1b91e7 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1014:44
+    #17 0x5ba09e1e5403 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4956:10
+    #18 0x5ba09e1efece in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5900:37
+    #19 0x5ba09e1ef5c6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5809:18
+    #20 0x5ba09e1f2638 in v8::Shell::Main(int, char**) src/d8/d8.cc:6664:18
+    #21 0x76c5e5b9f1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x76c5e5b9f28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #23 0x5ba09e0b3029 in _start (/src/v8/out/x64.asan/d8+0x1111029) (BuildId: a612d09b0cdc4bd9)
+
+SUMMARY: AddressSanitizer: heap-use-after-free src/objects/value-serializer.cc:391:5 in WriteRawBytes
+Shadow bytes around the buggy address:
+  0x7335e4be0180: 00 00 00 00 00 00 00 fa fa fa fa fa 00 00 00 00
+  0x7335e4be0200: 00 00 00 00 00 00 fa fa fa fa 00 00 00 00 00 00
+  0x7335e4be0280: 00 00 00 00 fa fa fa fa 00 00 00 00 00 00 00 00
+  0x7335e4be0300: 00 00 fa fa fa fa 00 00 00 00 00 00 00 00 00 fa
+  0x7335e4be0380: fa fa fa fa fd fd fd fd fd fd fd fd fd fa fa fa
+=>0x7335e4be0400: fa fa fd fd[fd]fd fd fd fd fd fd fa fa fa fa fa
+  0x7335e4be0480: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7335e4be0500: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7335e4be0580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7335e4be0600: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7335e4be0680: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==10==ABORTING
+
+## V8 sandbox violation detected!
+

@@ -1,0 +1,3 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Received signal 4 ILL_ILLOPN 55cdcf100682
+Segmentation fault (core dumped)

@@ -1,0 +1,425 @@
+From 9115ac056da8285348457b5c206636c280636cbb Mon Sep 17 00:00:00 2001
+From: Ryan Hunt <rhunt@eqrion.net>
+Date: Fri, 8 Sep 2023 17:56:47 +0000
+Subject: [PATCH] Bug 1841119 - wasm: Keep recursion group alive for globals,
+ tables, and tags. r=yury
+
+Globals, tables, and tags can refer to specific TypeDef objects stored in RecGroups with the GC extension. These are normally kept alive by their containing instance, but it's possible for exported version of these to outlive their containing instance. This commit adds a strong reference from the JS-API objects to the
+RecGroup that a TypeDef is in.
+
+Differential Revision: https://phabricator.services.mozilla.com/D187568
+---
+ js/src/jit-test/tests/wasm/gc/bug-1841119.js | 18 +++++++++++++
+ js/src/wasm/WasmBaselineCompile.cpp          |  6 ++---
+ js/src/wasm/WasmIonCompile.cpp               | 10 +++----
+ js/src/wasm/WasmJS.cpp                       | 28 ++++++++++++--------
+ js/src/wasm/WasmModuleTypes.cpp              | 17 ++++++++++++
+ js/src/wasm/WasmModuleTypes.h                | 18 +++++--------
+ js/src/wasm/WasmSerialize.cpp                | 17 +++++++++---
+ js/src/wasm/WasmTable.cpp                    | 11 ++++++++
+ js/src/wasm/WasmTable.h                      |  1 +
+ js/src/wasm/WasmTypeDef.h                    | 28 ++++++++++++++++++++
+ js/src/wasm/WasmValType.h                    |  6 +++++
+ 11 files changed, 126 insertions(+), 34 deletions(-)
+ create mode 100644 js/src/jit-test/tests/wasm/gc/bug-1841119.js
+
+diff --git a/js/src/jit-test/tests/wasm/gc/bug-1841119.js b/js/src/jit-test/tests/wasm/gc/bug-1841119.js
+new file mode 100644
+index 0000000000000..42c20c4e91deb
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/gc/bug-1841119.js
+@@ -0,0 +1,18 @@
++// |jit-test| --fuzzing-safe; --ion-offthread-compile=off; skip-if: !wasmGcEnabled()
++
++function f() {
++}
++
++gczeal(9,10);
++
++let t = wasmEvalText(`
++(module
++  (type (struct))
++  (table (export "table") (ref null 0)
++    (elem ( ref.null 0 ))
++  )
++  (global (export "global") (ref null 0) ref.null 0)
++  (tag (export "tag") (param (ref null 0)))
++)`).exports;
++
++f();
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index ff3536c27f42f..9a85a3b567010 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -4102,8 +4102,8 @@ bool BaseCompiler::emitCatch() {
+ 
+   // Extract the arguments in the exception package and push them.
+   const SharedTagType& tagType = moduleEnv_.tags[tagIndex].type;
+-  const ValTypeVector& params = tagType->argTypes_;
+-  const TagOffsetVector& offsets = tagType->argOffsets_;
++  const ValTypeVector& params = tagType->argTypes();
++  const TagOffsetVector& offsets = tagType->argOffsets();
+ 
+   // The landing pad uses the block return protocol to communicate the
+   // exception object pointer to the catch block.
+@@ -4442,7 +4442,7 @@ bool BaseCompiler::emitThrow() {
+ 
+   const TagDesc& tagDesc = moduleEnv_.tags[tagIndex];
+   const ResultType& params = tagDesc.type->resultType();
+-  const TagOffsetVector& offsets = tagDesc.type->argOffsets_;
++  const TagOffsetVector& offsets = tagDesc.type->argOffsets();
+ 
+   // Load the tag object
+ #ifdef RABALDR_PIN_INSTANCE
+diff --git a/js/src/wasm/WasmIonCompile.cpp b/js/src/wasm/WasmIonCompile.cpp
+index 308f0ad2376d0..7a45d950c80d0 100644
+--- a/js/src/wasm/WasmIonCompile.cpp
++++ b/js/src/wasm/WasmIonCompile.cpp
+@@ -3279,8 +3279,8 @@ class FunctionCompiler {
+   [[nodiscard]] bool loadExceptionValues(MDefinition* exception,
+                                          uint32_t tagIndex, DefVector* values) {
+     SharedTagType tagType = moduleEnv().tags[tagIndex].type;
+-    const ValTypeVector& params = tagType->argTypes_;
+-    const TagOffsetVector& offsets = tagType->argOffsets_;
++    const ValTypeVector& params = tagType->argTypes();
++    const TagOffsetVector& offsets = tagType->argOffsets();
+ 
+     // Get the data pointer from the exception object
+     auto* data = MWasmLoadField::New(
+@@ -3413,12 +3413,12 @@ class FunctionCompiler {
+ 
+     // Store the params into the data pointer
+     SharedTagType tagType = moduleEnv_.tags[tagIndex].type;
+-    for (size_t i = 0; i < tagType->argOffsets_.length(); i++) {
++    for (size_t i = 0; i < tagType->argOffsets().length(); i++) {
+       if (!mirGen_.ensureBallast()) {
+         return false;
+       }
+-      ValType type = tagType->argTypes_[i];
+-      uint32_t offset = tagType->argOffsets_[i];
++      ValType type = tagType->argTypes()[i];
++      uint32_t offset = tagType->argOffsets()[i];
+ 
+       if (!type.isRefRepr()) {
+         auto* store = MWasmStoreFieldKA::New(alloc(), exception, data, offset,
+diff --git a/js/src/wasm/WasmJS.cpp b/js/src/wasm/WasmJS.cpp
+index 06e8c7ff8bf04..ee7f0176aba2b 100644
+--- a/js/src/wasm/WasmJS.cpp
++++ b/js/src/wasm/WasmJS.cpp
+@@ -1139,7 +1139,7 @@ bool WasmModuleObject::imports(JSContext* cx, unsigned argc, Value* vp) {
+       case DefinitionKind::Tag: {
+         size_t tagIndex = numTagImport++;
+         const TagDesc& tag = metadata.tags[tagIndex];
+-        typeObj = TagTypeToObject(cx, tag.type->argTypes_);
++        typeObj = TagTypeToObject(cx, tag.type->argTypes());
+         break;
+       }
+     }
+@@ -1243,7 +1243,7 @@ bool WasmModuleObject::exports(JSContext* cx, unsigned argc, Value* vp) {
+       }
+       case DefinitionKind::Tag: {
+         const TagDesc& tag = metadata.tags[exp.tagIndex()];
+-        typeObj = TagTypeToObject(cx, tag.type->argTypes_);
++        typeObj = TagTypeToObject(cx, tag.type->argTypes());
+         break;
+       }
+     }
+@@ -3186,6 +3186,9 @@ void WasmGlobalObject::trace(JSTracer* trc, JSObject* obj) {
+ void WasmGlobalObject::finalize(JS::GCContext* gcx, JSObject* obj) {
+   WasmGlobalObject* global = reinterpret_cast<WasmGlobalObject*>(obj);
+   if (!global->isNewborn()) {
++    // Release the strong reference to the type definitions this global could
++    // be referencing.
++    global->type().Release();
+     gcx->delete_(obj, &global->val(), MemoryUse::WasmGlobalCell);
+   }
+ }
+@@ -3213,6 +3216,9 @@ WasmGlobalObject* WasmGlobalObject::create(JSContext* cx, HandleVal value,
+   // It's simpler to initialize the cell after the object has been created,
+   // to avoid needing to root the cell before the object creation.
+   obj->val() = value.get();
++  // Acquire a strong reference to a type definition this global could
++  // be referencing.
++  obj->type().AddRef();
+ 
+   MOZ_ASSERT(!obj->isNewborn());
+ 
+@@ -3544,7 +3550,7 @@ const TagType* WasmTagObject::tagType() const {
+ };
+ 
+ const wasm::ValTypeVector& WasmTagObject::valueTypes() const {
+-  return tagType()->argTypes_;
++  return tagType()->argTypes();
+ };
+ 
+ wasm::ResultType WasmTagObject::resultType() const {
+@@ -3593,7 +3599,7 @@ void WasmExceptionObject::finalize(JS::GCContext* gcx, JSObject* obj) {
+   if (exnObj.isNewborn()) {
+     return;
+   }
+-  gcx->free_(obj, exnObj.typedMem(), exnObj.tagType()->size_,
++  gcx->free_(obj, exnObj.typedMem(), exnObj.tagType()->tagSize(),
+              MemoryUse::WasmExceptionData);
+   exnObj.tagType()->Release();
+ }
+@@ -3606,8 +3612,8 @@ void WasmExceptionObject::trace(JSTracer* trc, JSObject* obj) {
+   }
+ 
+   wasm::SharedTagType tag = exnObj.tagType();
+-  const wasm::ValTypeVector& params = tag->argTypes_;
+-  const wasm::TagOffsetVector& offsets = tag->argOffsets_;
++  const wasm::ValTypeVector& params = tag->argTypes();
++  const wasm::TagOffsetVector& offsets = tag->argOffsets();
+   uint8_t* typedMem = exnObj.typedMem();
+   for (size_t i = 0; i < params.length(); i++) {
+     ValType paramType = params[i];
+@@ -3708,8 +3714,8 @@ bool WasmExceptionObject::construct(JSContext* cx, unsigned argc, Value* vp) {
+   }
+ 
+   wasm::SharedTagType tagType = exnObj->tagType();
+-  const wasm::ValTypeVector& params = tagType->argTypes_;
+-  const wasm::TagOffsetVector& offsets = tagType->argOffsets_;
++  const wasm::ValTypeVector& params = tagType->argTypes();
++  const wasm::TagOffsetVector& offsets = tagType->argOffsets();
+ 
+   RootedValue nextArg(cx);
+   for (size_t i = 0; i < params.length(); i++) {
+@@ -3754,7 +3760,7 @@ WasmExceptionObject* WasmExceptionObject::create(JSContext* cx,
+ 
+   // Allocate the data buffer before initializing the object so that an OOM
+   // does not result in a partially constructed object.
+-  uint8_t* data = (uint8_t*)js_calloc(tagType->size_);
++  uint8_t* data = (uint8_t*)js_calloc(tagType->tagSize());
+   if (!data) {
+     ReportOutOfMemory(cx);
+     return nullptr;
+@@ -3764,7 +3770,7 @@ WasmExceptionObject* WasmExceptionObject::create(JSContext* cx,
+   obj->initFixedSlot(TAG_SLOT, ObjectValue(*tag));
+   tagType->AddRef();
+   obj->initFixedSlot(TYPE_SLOT, PrivateValue((void*)tagType));
+-  InitReservedSlot(obj, DATA_SLOT, data, tagType->size_,
++  InitReservedSlot(obj, DATA_SLOT, data, tagType->tagSize(),
+                    MemoryUse::WasmExceptionData);
+   obj->initFixedSlot(STACK_SLOT, ObjectOrNullValue(stack));
+ 
+@@ -3846,7 +3852,7 @@ bool WasmExceptionObject::getArgImpl(JSContext* cx, const CallArgs& args) {
+     return false;
+   }
+ 
+-  uint32_t offset = exnTag->tagType()->argOffsets_[index];
++  uint32_t offset = exnTag->tagType()->argOffsets()[index];
+   RootedValue result(cx);
+   if (!exnObj->loadValue(cx, offset, params[index], &result)) {
+     return false;
+diff --git a/js/src/wasm/WasmModuleTypes.cpp b/js/src/wasm/WasmModuleTypes.cpp
+index 365609b6ede5a..f0906feef85aa 100644
+--- a/js/src/wasm/WasmModuleTypes.cpp
++++ b/js/src/wasm/WasmModuleTypes.cpp
+@@ -119,10 +119,26 @@ size_t GlobalDesc::sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {
+   return initial_.sizeOfExcludingThis(mallocSizeOf);
+ }
+ 
++TagType::~TagType() {
++  // Release strong references to any type definitions this tag could
++  // be referencing.
++  for (const ValType& argType : argTypes_) {
++    argType.Release();
++  }
++}
++
+ bool TagType::initialize(ValTypeVector&& argTypes) {
+   MOZ_ASSERT(argTypes_.empty() && argOffsets_.empty() && size_ == 0);
+ 
+   argTypes_ = std::move(argTypes);
++
++  // Acquire a strong reference to any type definitions this tag could
++  // be referencing.
++  for (const ValType& argType : argTypes_) {
++    argType.AddRef();
++  }
++
++  // Compute the byte offsets for arguments when we layout an exception.
+   if (!argOffsets_.resize(argTypes_.length())) {
+     return false;
+   }
+@@ -136,6 +152,7 @@ bool TagType::initialize(ValTypeVector&& argTypes) {
+     argOffsets_[i] = offset.value();
+   }
+ 
++  // Find the total size of all the arguments.
+   CheckedInt32 size = layout.close();
+   if (!size.isValid()) {
+     return false;
+diff --git a/js/src/wasm/WasmModuleTypes.h b/js/src/wasm/WasmModuleTypes.h
+index 8b61288015320..6aea9766fd6cf 100644
+--- a/js/src/wasm/WasmModuleTypes.h
++++ b/js/src/wasm/WasmModuleTypes.h
+@@ -339,26 +339,22 @@ using GlobalDescVector = Vector<GlobalDesc, 0, SystemAllocPolicy>;
+ // data buffer stored in a Wasm exception.
+ using TagOffsetVector = Vector<uint32_t, 2, SystemAllocPolicy>;
+ 
+-struct TagType : AtomicRefCounted<TagType> {
++class TagType : public AtomicRefCounted<TagType> {
+   ValTypeVector argTypes_;
+   TagOffsetVector argOffsets_;
+   uint32_t size_;
+ 
++ public:
+   TagType() : size_(0) {}
++  ~TagType();
+ 
++  const ValTypeVector& argTypes() const { return argTypes_; }
++  const TagOffsetVector& argOffsets() const { return argOffsets_; }
+   ResultType resultType() const { return ResultType::Vector(argTypes_); }
+ 
+-  [[nodiscard]] bool initialize(ValTypeVector&& argTypes);
++  uint32_t tagSize() const { return size_; }
+ 
+-  [[nodiscard]] bool clone(const TagType& src) {
+-    MOZ_ASSERT(argTypes_.empty() && argOffsets_.empty() && size_ == 0);
+-    if (!argTypes_.appendAll(src.argTypes_) ||
+-        !argOffsets_.appendAll(src.argOffsets_)) {
+-      return false;
+-    }
+-    size_ = src.size_;
+-    return true;
+-  }
++  [[nodiscard]] bool initialize(ValTypeVector&& argTypes);
+ 
+   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
+ };
+diff --git a/js/src/wasm/WasmSerialize.cpp b/js/src/wasm/WasmSerialize.cpp
+index a487d2ebcfd19..c36d9f6a868d0 100644
+--- a/js/src/wasm/WasmSerialize.cpp
++++ b/js/src/wasm/WasmSerialize.cpp
+@@ -692,10 +692,19 @@ CoderResult CodeGlobalDesc(Coder<mode>& coder,
+ template <CoderMode mode>
+ CoderResult CodeTagType(Coder<mode>& coder, CoderArg<mode, TagType> item) {
+   WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::TagType, 232);
+-  MOZ_TRY(
+-      (CodeVector<mode, ValType, &CodeValType<mode>>(coder, &item->argTypes_)));
+-  MOZ_TRY(CodePodVector(coder, &item->argOffsets_));
+-  MOZ_TRY(CodePod(coder, &item->size_));
++  // We skip serializing/deserializing the size and argOffsets fields because
++  // those are computed from the argTypes field when we deserialize.
++  if constexpr (mode == MODE_DECODE) {
++    ValTypeVector argTypes;
++    MOZ_TRY((CodeVector<MODE_DECODE, ValType, &CodeValType<MODE_DECODE>>(
++        coder, &argTypes)));
++    if (!item->initialize(std::move(argTypes))) {
++      return Err(OutOfMemory());
++    }
++  } else {
++    MOZ_TRY((CodeVector<mode, ValType, &CodeValType<mode>>(coder,
++                                                           &item->argTypes())));
++  }
+   return Ok();
+ }
+ 
+diff --git a/js/src/wasm/WasmTable.cpp b/js/src/wasm/WasmTable.cpp
+index e555631b84ea6..b1b228293bc29 100644
+--- a/js/src/wasm/WasmTable.cpp
++++ b/js/src/wasm/WasmTable.cpp
+@@ -44,6 +44,9 @@ Table::Table(JSContext* cx, const TableDesc& desc,
+       isAsmJS_(desc.isAsmJS),
+       length_(desc.initialLength),
+       maximum_(desc.maximumLength) {
++  // Acquire a strong reference to the type definition this table may be
++  // referencing.
++  elemType_.AddRef();
+   MOZ_ASSERT(repr() == TableRepr::Func);
+ }
+ 
+@@ -56,9 +59,17 @@ Table::Table(JSContext* cx, const TableDesc& desc,
+       isAsmJS_(desc.isAsmJS),
+       length_(desc.initialLength),
+       maximum_(desc.maximumLength) {
++  // Acquire a strong reference to the type definition this table may be
++  // referencing.
++  elemType_.AddRef();
+   MOZ_ASSERT(repr() == TableRepr::Ref);
+ }
+ 
++Table::~Table() {
++  // Release the strong reference, if any.
++  elemType_.Release();
++}
++
+ /* static */
+ SharedTable Table::create(JSContext* cx, const TableDesc& desc,
+                           Handle<WasmTableObject*> maybeObject) {
+diff --git a/js/src/wasm/WasmTable.h b/js/src/wasm/WasmTable.h
+index 2cd5e65059543..f8f59644bbe95 100644
+--- a/js/src/wasm/WasmTable.h
++++ b/js/src/wasm/WasmTable.h
+@@ -64,6 +64,7 @@ class Table : public ShareableBase<Table> {
+  public:
+   static RefPtr<Table> create(JSContext* cx, const TableDesc& desc,
+                               Handle<WasmTableObject*> maybeObject);
++  ~Table();
+   void trace(JSTracer* trc);
+ 
+   RefType elemType() const { return elemType_; }
+diff --git a/js/src/wasm/WasmTypeDef.h b/js/src/wasm/WasmTypeDef.h
+index 342e85a417b9a..51d176ad5fcdd 100644
+--- a/js/src/wasm/WasmTypeDef.h
++++ b/js/src/wasm/WasmTypeDef.h
+@@ -1292,6 +1292,34 @@ inline MatchTypeCode MatchTypeCode::forMatch(PackedTypeCode ptc,
+   return mtc;
+ }
+ 
++template <class T>
++void PackedType<T>::AddRef() const {
++  if (!isRefType()) {
++    return;
++  }
++  refType().AddRef();
++}
++template <class T>
++void PackedType<T>::Release() const {
++  if (!isRefType()) {
++    return;
++  }
++  refType().Release();
++}
++
++void RefType::AddRef() const {
++  if (!isTypeRef()) {
++    return;
++  }
++  typeDef()->recGroup().AddRef();
++}
++void RefType::Release() const {
++  if (!isTypeRef()) {
++    return;
++  }
++  typeDef()->recGroup().Release();
++}
++
+ inline RefTypeHierarchy RefType::hierarchy() const {
+   switch (kind()) {
+     case RefType::Func:
+diff --git a/js/src/wasm/WasmValType.h b/js/src/wasm/WasmValType.h
+index 6dd7dc0f8672f..a0f134a560b48 100644
+--- a/js/src/wasm/WasmValType.h
++++ b/js/src/wasm/WasmValType.h
+@@ -420,6 +420,9 @@ class RefType {
+   // for RefType::Struct.
+   TypeDefKind typeDefKind() const;
+ 
++  inline void AddRef() const;
++  inline void Release() const;
++
+   bool operator==(const RefType& that) const { return ptc_ == that.ptc_; }
+   bool operator!=(const RefType& that) const { return ptc_ != that.ptc_; }
+ };
+@@ -610,6 +613,9 @@ class PackedType : public T {
+ 
+   explicit PackedType(PackedTypeCode ptc) : tc_(ptc) { MOZ_ASSERT(isValid()); }
+ 
++  inline void AddRef() const;
++  inline void Release() const;
++
+   static PackedType fromMIRType(jit::MIRType mty) {
+     switch (mty) {
+       case jit::MIRType::Int32:

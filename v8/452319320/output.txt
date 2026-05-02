@@ -1,0 +1,29 @@
+
+
+#
+# Fatal error in ../../src/objects/descriptor-array-inl.h, line 222
+# Debug check failed: descriptor_number.as_int() < number_of_descriptors() (1 vs. 1).
+#
+#
+#
+#FailureMessage Object: 0x7ffd17c216a8
+==== C stack trace ===============================
+
+    /src/v8/out/x64.debug/libv8_libbase.so(v8::base::debug::StackTrace::StackTrace()+0x1e) [0x7fe498ba86ce]
+    /src/v8/out/x64.debug/libv8_libplatform.so(+0x4f15d) [0x7fe498b1015d]
+    /src/v8/out/x64.debug/libv8_libbase.so(V8_Fatal(char const*, int, char const*, ...)+0x205) [0x7fe498b80245]
+    /src/v8/out/x64.debug/libv8_libbase.so(+0x4fbfc) [0x7fe498b7fbfc]
+    /src/v8/out/x64.debug/libv8_libbase.so(V8_Dcheck(char const*, int, char const*)+0x4d) [0x7fe498b8031d]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::DescriptorArray::GetKey(v8::internal::PtrComprCageBase, v8::internal::InternalIndex) const+0x6e) [0x7fe4a134ce6e]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::DescriptorArray::GetKey(v8::internal::InternalIndex) const+0x65) [0x7fe4a134cc75]
+    /src/v8/out/x64.debug/libv8.so(bool v8::internal::JsonParser<unsigned char>::ParseJsonObjectProperties<(v8::internal::DescriptorArray::FastIterableState)3>(v8::internal::JsonParser<unsigned char>::JsonContinuation*, v8::internal::MessageTemplate, v8::internal::Handle<v8::internal::DescriptorArray>)+0x22d) [0x7fe4a1fa95ad]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::ParseJsonObject(v8::internal::Handle<v8::internal::Map>)+0x31e) [0x7fe4a1fa68ce]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::ParseJsonValueRecursive(v8::internal::Handle<v8::internal::Map>)+0x180) [0x7fe4a1fa37f0]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::ParseJsonArray()+0xbe5) [0x7fe4a1fa7615]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::ParseJsonValueRecursive(v8::internal::Handle<v8::internal::Map>)+0x18f) [0x7fe4a1fa37ff]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::ParseJson(bool)+0xc4) [0x7fe4a1fa0bb4]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::JsonParser<unsigned char>::Parse(v8::internal::Isolate*, v8::internal::Handle<v8::internal::String>, v8::internal::Handle<v8::internal::Object>, std::__Cr::optional<v8::internal::ScriptDetails>)+0x31f) [0x7fe4a1fa08cf]
+    /src/v8/out/x64.debug/libv8.so(+0x884b1d6) [0x7fe4a14051d6]
+    /src/v8/out/x64.debug/libv8.so(v8::internal::Builtin_JsonParse(int, unsigned long*, v8::internal::Isolate*)+0xfb) [0x7fe4a1404d4b]
+    /src/v8/out/x64.debug/libv8.so(+0x7ae01bd) [0x7fe4a069a1bd]
+Trace/breakpoint trap (core dumped)

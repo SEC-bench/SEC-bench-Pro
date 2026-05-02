@@ -1,0 +1,3 @@
+Verified with `out/x64.asan/d8 --fuzzing --sandbox-fuzzing --single-threaded poc.js` in `hwiwonlee/v8.x86_64:444048032`.
+
+A direct standalone run reproduces the reported `heap-buffer-overflow` in `v8::bigint::AddAndReturnOverflow` / `ProcessorImpl::MultiplyToomCook` from `src/bigint/mul-toom.cc`, and the saved `output.txt` already captures the same crash family ending in `## V8 sandbox violation detected!`.

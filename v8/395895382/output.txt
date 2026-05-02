@@ -1,0 +1,72 @@
+[*] spraying...
+[*] spray 0 / 260 (0.00%)
+[*] spray 16 / 260 (6.15%)
+[*] spray 32 / 260 (12.31%)
+[*] spray 48 / 260 (18.46%)
+[*] spray 64 / 260 (24.62%)
+[*] spray 80 / 260 (30.77%)
+[*] spray 96 / 260 (36.92%)
+[*] spray 112 / 260 (43.08%)
+[*] spray 128 / 260 (49.23%)
+[*] spray 144 / 260 (55.38%)
+[*] spray 160 / 260 (61.54%)
+[*] spray 176 / 260 (67.69%)
+[*] spray 192 / 260 (73.85%)
+[*] spray 208 / 260 (80.00%)
+[*] spray 224 / 260 (86.15%)
+[*] spray 240 / 260 (92.31%)
+[*] spray 256 / 260 (98.46%)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x7df5bd810e28 (pc 0x55e04a33e87d bp 0x7b65a4390130 sp 0x7b65a4390100 T23)
+==10==The signal is caused by a READ memory access.
+    #0 0x55e04a33e87d in ReplaceInput src/compiler/node.h:81:20
+    #1 0x55e04a33e87d in v8::internal::compiler::NodeProperties::ReplaceEffectInput(v8::internal::compiler::Node*, v8::internal::compiler::Node*, int) src/compiler/node-properties.cc:128:16
+    #2 0x55e04a154aef in v8::internal::compiler::JSCallReducer::ReduceCallOrConstructWithArrayLikeOrSpread(v8::internal::compiler::Node*, int, int, v8::internal::compiler::CallFrequency const&, v8::internal::compiler::FeedbackSource const&, v8::internal::SpeculationMode, v8::internal::compiler::CallFeedbackRelation, v8::internal::compiler::Node*, v8::internal::compiler::Effect, v8::internal::compiler::Control) src/compiler/js-call-reducer.cc:4551:3
+    #3 0x55e04a138c7d in v8::internal::compiler::JSCallReducer::ReduceJSCallWithSpread(v8::internal::compiler::Node*) src/compiler/js-call-reducer.cc:5294:10
+    #4 0x55e04a0d6f96 in Reduce src/compiler/graph-reducer.cc:34:25
+    #5 0x55e04a0d6f96 in v8::internal::compiler::GraphReducer::Reduce(v8::internal::compiler::Node*) src/compiler/graph-reducer.cc:105:35
+    #6 0x55e04a0d626e in v8::internal::compiler::GraphReducer::ReduceTop() src/compiler/graph-reducer.cc:178:25
+    #7 0x55e04a0d5b77 in v8::internal::compiler::GraphReducer::ReduceNode(v8::internal::compiler::Node*) src/compiler/graph-reducer.cc:75:7
+    #8 0x55e04a3f7c09 in v8::internal::compiler::InliningPhase::Run(v8::internal::compiler::TFPipelineData*, v8::internal::Zone*) src/compiler/pipeline.cc:950:19
+    #9 0x55e04a3654cd in auto v8::internal::compiler::PipelineImpl::Run<v8::internal::compiler::InliningPhase>() src/compiler/pipeline.cc:854:16
+    #10 0x55e04a35cd3b in v8::internal::compiler::PipelineImpl::CreateGraph(v8::internal::compiler::Linkage*) src/compiler/pipeline.cc:2274:3
+    #11 0x55e04a35c1a8 in v8::internal::compiler::PipelineCompilationJob::ExecuteJobImpl(v8::internal::RuntimeCallStats*, v8::internal::LocalIsolate*) src/compiler/pipeline.cc:788:20
+    #12 0x55e0477fa3c5 in v8::internal::OptimizedCompilationJob::ExecuteJob(v8::internal::RuntimeCallStats*, v8::internal::LocalIsolate*) src/codegen/compiler.cc:470:22
+    #13 0x55e04789f776 in CompileNext src/compiler-dispatcher/optimizing-compile-dispatcher.cc:168:12
+    #14 0x55e04789f776 in v8::internal::OptimizingCompileDispatcher::CompileTask::RunCompilationJob(v8::internal::Isolate*, v8::internal::LocalIsolate&, v8::internal::TurbofanCompilationJob*) src/compiler-dispatcher/optimizing-compile-dispatcher.cc:99:18
+    #15 0x55e04789ecc2 in v8::internal::OptimizingCompileDispatcher::CompileTask::Run(v8::JobDelegate*) src/compiler-dispatcher/optimizing-compile-dispatcher.cc:60:11
+    #16 0x55e04bb45350 in v8::platform::DefaultJobWorker::Run() src/libplatform/default-job.h:147:18
+    #17 0x55e04bb534f8 in v8::platform::DefaultWorkerThreadsTaskRunner::WorkerThread::Run() src/libplatform/default-worker-threads-task-runner.cc:95:25
+    #18 0x55e04bb3ac67 in NotifyStartedAndRun src/base/platform/platform.h:628:5
+    #19 0x55e04bb3ac67 in v8::base::ThreadEntry(void*) src/base/platform/platform-posix.cc:1230:11
+    #20 0x55e0474398c6 in asan_thread_start(void*) /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+
+==10==Register values:
+rax = 0x00000fbeb7b021c5  rbx = 0x00007df5b8c10de0  rcx = 0x0000000000000001  rdx = 0x000055e04a350e7a  
+rdi = 0x00007df5b8c10e00  rsi = 0x00007e35b8c44f50  rbp = 0x00007b65a4390130  rsp = 0x00007b65a4390100  
+ r8 = 0x00000fc6b71889fb   r9 = 0x0000000000000000  r10 = 0x00000fc6b71889fc  r11 = 0x0000000000000000  
+r12 = 0x00007e35b8c44f50  r13 = 0x0000000000980005  r14 = 0x00000fbeb71821bc  r15 = 0x00007df5bd810e28  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV src/compiler/node.h:81:20 in ReplaceInput
+Thread T23 (V8 DefaultWorke) created by T0 here:
+    #0 0x55e0474200d1 in pthread_create /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x55e04bb3aa61 in v8::base::Thread::Start() src/base/platform/platform-posix.cc:1262:14
+    #2 0x55e04bb52798 in WorkerThread src/libplatform/default-worker-threads-task-runner.cc:80:3
+    #3 0x55e04bb52798 in make_unique<v8::platform::DefaultWorkerThreadsTaskRunner::WorkerThread, v8::platform::DefaultWorkerThreadsTaskRunner *, v8::base::Thread::Priority &, 0> third_party/libc++/src/include/__memory/unique_ptr.h:767:30
+    #4 0x55e04bb52798 in v8::platform::DefaultWorkerThreadsTaskRunner::DefaultWorkerThreadsTaskRunner(unsigned int, double (*)(), v8::base::Thread::Priority) src/libplatform/default-worker-threads-task-runner.cc:18:28
+    #5 0x55e04bb3f2e0 in construct_at<v8::platform::DefaultWorkerThreadsTaskRunner, const int &, double (*)(), v8::base::Thread::Priority, v8::platform::DefaultWorkerThreadsTaskRunner *> third_party/libc++/src/include/__memory/construct_at.h:40:49
+    #6 0x55e04bb3f2e0 in __construct_at<v8::platform::DefaultWorkerThreadsTaskRunner, const int &, double (*)(), v8::base::Thread::Priority, v8::platform::DefaultWorkerThreadsTaskRunner *> third_party/libc++/src/include/__memory/construct_at.h:48:10
+    #7 0x55e04bb3f2e0 in construct<v8::platform::DefaultWorkerThreadsTaskRunner, const int &, double (*)(), v8::base::Thread::Priority, void, 0> third_party/libc++/src/include/__memory/allocator_traits.h:318:5
+    #8 0x55e04bb3f2e0 in __shared_ptr_emplace<const int &, double (*)(), v8::base::Thread::Priority, std::__Cr::allocator<v8::platform::DefaultWorkerThreadsTaskRunner>, 0> third_party/libc++/src/include/__memory/shared_ptr.h:161:5
+    #9 0x55e04bb3f2e0 in allocate_shared<v8::platform::DefaultWorkerThreadsTaskRunner, std::__Cr::allocator<v8::platform::DefaultWorkerThreadsTaskRunner>, const int &, double (*)(), v8::base::Thread::Priority, 0> third_party/libc++/src/include/__memory/shared_ptr.h:733:51
+    #10 0x55e04bb3f2e0 in make_shared<v8::platform::DefaultWorkerThreadsTaskRunner, const int &, double (*)(), v8::base::Thread::Priority, 0> third_party/libc++/src/include/__memory/shared_ptr.h:741:10
+    #11 0x55e04bb3f2e0 in v8::platform::DefaultPlatform::EnsureBackgroundTaskRunnerInitialized() src/libplatform/default-platform.cc:141:9
+    #12 0x55e04bb3dd5f in make_unique<v8::platform::DefaultPlatform, int &, v8::platform::IdleTaskSupport &, std::__Cr::unique_ptr<v8::TracingController, std::__Cr::default_delete<v8::TracingController> >, v8::platform::PriorityMode &, 0> third_party/libc++/src/include/__memory/unique_ptr.h:767:30
+    #13 0x55e04bb3dd5f in v8::platform::NewDefaultPlatform(int, v8::platform::IdleTaskSupport, v8::platform::InProcessStackDumping, std::__Cr::unique_ptr<v8::TracingController, std::__Cr::default_delete<v8::TracingController>>, v8::platform::PriorityMode) src/libplatform/default-platform.cc:54:19
+    #14 0x55e0474daeee in v8::Shell::Main(int, char**) src/d8/d8.cc:6499:18
+    #15 0x7f65b9a401c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #16 0x7f65b9a4028a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #17 0x55e04739c024 in _start (/src/v8/out/x64.asan/d8+0x1151024) (BuildId: 2c4256b201ac8f44)
+
+==10==ABORTING

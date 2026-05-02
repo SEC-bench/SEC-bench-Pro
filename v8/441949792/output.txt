@@ -1,0 +1,23 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: stack-overflow on address 0x7ffef38e87f8 (pc 0x7ffef38e87f8 bp 0x7ffef38e87f8 sp 0x7ffef38e87b8 T0)
+/src/v8/out/x64.asan//../../third_party/llvm-build/Release+Asserts/bin/llvm-symbolizer: error: '[stack]': No such file or directory
+    #0 0x7ffef38e87f8  ([stack]+0x1e7f8)
+    #1 0x625bbe1c1317  (<unknown module>)
+    #2 0x625b5e1dc51b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #3 0x625b5e1dc26a in Builtins_JSEntry setup-isolate-deserialize.cc
+    #4 0x625b5a0e459b in Call src/execution/simulator.h:212:12
+    #5 0x625b5a0e459b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #6 0x625b5a0e5b58 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #7 0x625b59ce32b3 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1964:7
+    #8 0x625b59a0d776 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1035:44
+    #9 0x625b59a4348d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5354:10
+    #10 0x625b59a4f323 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6310:37
+    #11 0x625b59a4e755 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6218:18
+    #12 0x625b59a51e6e in v8::Shell::Main(int, char**) src/d8/d8.cc:7103:18
+    #13 0x7f830f9731c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #14 0x7f830f97328a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #15 0x625b59901024 in _start (/src/v8/out/x64.asan/d8+0x12b7024) (BuildId: 84eb3cd686798587)
+
+SUMMARY: AddressSanitizer: stack-overflow ([stack]+0x1e7f8) 
+==10==ABORTING
