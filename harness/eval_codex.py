@@ -10,7 +10,7 @@ The script:
 1.  Loads a TOML config describing model, instances, timeout, etc.
 2.  For each benchmark instance: starts a privileged container,
     configures Codex auth, runs the agent, collects artifacts
-    (trajectory, audit files, tracking database), and tears down.
+    (Codex sessions, audit files, tracking database), and tears down.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -95,11 +94,11 @@ def _inspect_codex_sessions(sessions_dest: Path) -> tuple[int, Path | None]:
     return session_count, None
 
 
-def _copy_latest_codex_trajectory(
+def _write_codex_session_manifest(
     sessions_dest: Path,
     instance_outdir: Path,
 ) -> tuple[int, Path | None]:
-    """Copy the newest Codex session JSONL to ``trajectory/trajectory.jsonl``."""
+    """Record the selected Codex session without duplicating session JSONL."""
     session_files = sorted(
         sessions_dest.rglob("*.jsonl"),
         key=lambda path: (path.stat().st_mtime, str(path)),
@@ -109,10 +108,6 @@ def _copy_latest_codex_trajectory(
         return 0, None
 
     latest = session_files[0]
-    trajectory_dest = instance_outdir / "trajectory"
-    trajectory_dest.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(latest, trajectory_dest / "trajectory.jsonl")
-
     event_count = 0
     with latest.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -121,7 +116,6 @@ def _copy_latest_codex_trajectory(
 
     manifest = {
         "source": str(latest.relative_to(instance_outdir)),
-        "trajectory": "trajectory/trajectory.jsonl",
         "events": event_count,
         "sessions": len(session_files),
     }
@@ -493,17 +487,17 @@ def run_instance(
                         f"Collect Codex sessions  {DIM}"
                         f"({session_count} valid jsonl files){NC}"
                     )
-                    step_run("Collect Codex trajectory")
-                    event_count, latest_session = _copy_latest_codex_trajectory(
+                    step_run("Write Codex session manifest")
+                    event_count, latest_session = _write_codex_session_manifest(
                         sessions_dest,
                         instance_outdir,
                     )
                     if latest_session is None:
-                        step_warn(f"Collect Codex trajectory  {DIM}not found{NC}")
+                        step_warn(f"Write Codex session manifest  {DIM}not found{NC}")
                     else:
                         rel_latest = latest_session.relative_to(sessions_dest)
                         step_ok(
-                            f"Collect Codex trajectory  {DIM}"
+                            f"Write Codex session manifest  {DIM}"
                             f"{rel_latest} ({event_count} events){NC}"
                         )
             else:

@@ -9,7 +9,7 @@ The script:
 
 1.  Loads a TOML config describing model, instances, timeout, etc.
 2.  For each benchmark instance: starts a container, configures
-    Claude Code, runs the agent, collects artifacts (trajectory,
+    Claude Code, runs the agent, collects artifacts (Claude projects,
     audit files, tracking database), and tears down.
 """
 
@@ -94,6 +94,38 @@ _CLAUDE_PROVIDER_SETTINGS: dict[str, ClaudeProviderSettings] = {
 _CLAUDE_EXTRA_ENV = {
     "IS_SANDBOX": "1",
 }
+
+
+def _write_claude_project_manifest(
+    projects_dest: Path,
+    instance_outdir: Path,
+) -> tuple[int, Path | None, int]:
+    """Record the selected Claude project JSONL without duplicating it."""
+    project_files = sorted(
+        projects_dest.rglob("*.jsonl"),
+        key=lambda path: (path.stat().st_mtime, str(path)),
+        reverse=True,
+    )
+    if not project_files:
+        return 0, None, 0
+
+    latest = project_files[0]
+    event_count = 0
+    with latest.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.strip():
+                event_count += 1
+
+    manifest = {
+        "source": str(latest.relative_to(instance_outdir)),
+        "events": event_count,
+        "projects": len(project_files),
+    }
+    (instance_outdir / "claude_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return event_count, latest, len(project_files)
 
 
 def run_instance(
@@ -398,32 +430,7 @@ def run_instance(
         if common.INTERRUPTED:
             return agent_exit
 
-        step_run("Collect Claude Code trajectory")
-        trajectory_dest = instance_outdir / "trajectory"
-        trajectory_dest.mkdir(parents=True, exist_ok=True)
-
-        trajectory_found = False
-        _rc, stdout, _stderr = docker_exec(
-            container_id,
-            "find ~/.claude/projects/ -name '*.jsonl' -type f 2>/dev/null "
-            "| xargs ls -t 2>/dev/null | head -1",
-            30,
-        )
-        trajectory_file = stdout.strip().rstrip("\r")
-        if trajectory_file:
-            if docker_copy_from(
-                container_id,
-                trajectory_file,
-                str(trajectory_dest / "trajectory.jsonl"),
-            ):
-                trajectory_found = True
-                step_ok(
-                    f"Collect Claude Code trajectory  "
-                    f"{DIM}{Path(trajectory_file).name}{NC}"
-                )
-            else:
-                step_warn(f"Collect Claude Code trajectory  {DIM}copy failed{NC}")
-
+        step_run("Collect Claude projects")
         _rc, stdout, _stderr = docker_exec(
             container_id,
             "[ -d ~/.claude/projects ] && echo yes || echo no",
@@ -437,14 +444,25 @@ def run_instance(
                 "/root/.claude/projects/.",
                 str(projects_dest) + "/",
             ):
-                project_count = sum(1 for _ in projects_dest.rglob("*.jsonl"))
-                step_ok(
-                    f"Collect all Claude projects  "
-                    f"{DIM}({project_count} trajectory files){NC}"
+                event_count, latest_project, project_count = (
+                    _write_claude_project_manifest(projects_dest, instance_outdir)
                 )
-
-        if not trajectory_found:
-            step_warn(f"Collect Claude Code trajectory  {DIM}not found{NC}")
+                step_ok(
+                    f"Collect Claude projects  "
+                    f"{DIM}({project_count} project jsonl files){NC}"
+                )
+                if latest_project is None:
+                    step_warn(f"Write Claude project manifest  {DIM}not found{NC}")
+                else:
+                    rel_latest = latest_project.relative_to(projects_dest)
+                    step_ok(
+                        f"Write Claude project manifest  {DIM}"
+                        f"{rel_latest} ({event_count} events){NC}"
+                    )
+            else:
+                step_warn(f"Collect Claude projects  {DIM}copy failed{NC}")
+        else:
+            step_warn(f"Collect Claude projects  {DIM}not found{NC}")
 
         collect_audit_artifacts(container_id, work_dir, instance_outdir)
 
