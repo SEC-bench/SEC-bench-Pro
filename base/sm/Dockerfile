@@ -78,8 +78,8 @@ RUN apt-get update && apt-get install -y software-properties-common && \
     ln -sf /usr/bin/make /usr/bin/gmake || true
 
 # Shared benchmark runtime and coding agents.
-ARG CODEX_VERSION=0.122.0
-ARG CLAUDE_CODE_VERSION=2.1.116
+ARG CODEX_VERSION=0.128.0
+ARG CLAUDE_CODE_VERSION=2.1.126
 ARG OPENCODE_VERSION=1.14.19
 
 RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash - && \

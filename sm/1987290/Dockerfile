@@ -12,7 +12,6 @@ ENV ARCHITECTURE="x86_64"
 ENV OUT=/out
 
 RUN ln -sf /usr/local/bin/python3 /usr/bin/python || true
-RUN apt-get update && apt-get install -y python3-venv python3-pip
 ENV PATH="/root/.mozbuild/cbindgen:/root/.cargo/bin:${PATH}"
 
 WORKDIR $SRC/gecko-dev

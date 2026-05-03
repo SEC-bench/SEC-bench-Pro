@@ -8,7 +8,6 @@ ENV SANITIZER="address"
 ENV ARCHITECTURE="x86_64"
 ENV OUT=/out
 RUN ln -sf /usr/local/bin/python3 /usr/bin/python
-RUN apt-get update && apt-get install -y python3-venv python3-pip
 ENV PATH="/root/.mozbuild/cbindgen:/root/.cargo/bin:${PATH}"
 WORKDIR $SRC/gecko-dev
 # Wasm baseline emitReturnCallRef incorrectly handled multi-value stack results, leaving stack corruption on tail call. CVE-2024-9402 / MFSA 2024-50 cluster (sec-high, Firefox 130/131). Fix: properly handle return_call_ref results in baseline.
@@ -50,26 +49,3 @@ COPY secb.sh /usr/local/bin/secb
 RUN chmod +x $SRC/build.sh
 RUN chmod +x /usr/local/bin/secb
 RUN mkdir -p /app/artifacts /testcase
-RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash - && apt-get install -y nodejs
-RUN npm i -g npm@latest @openai/codex
-RUN ln -s /usr/bin/make /usr/bin/gmake || true
-RUN npm install -g @beads/bd@0.50.2 || true
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-RUN apt-get update && apt-get install -y gettext-base
-RUN cat > /entrypoint.sh <<'ENTRYEOF'
-#!/bin/bash
-mkdir -p /root/.codex
-cat <<EOT | envsubst > /root/.codex/auth.json
-{
-  "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-  "model": "gpt-5-mini",
-  "provider": "openai"
-}
-EOT
-exec "$@"
-ENTRYEOF
-ENV PATH="/root/.local/bin:${PATH}"
-RUN curl -fsSL https://claude.ai/install.sh | bash
-RUN bd init || true
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]

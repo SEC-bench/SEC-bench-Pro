@@ -12,7 +12,6 @@ ENV ARCHITECTURE="x86_64"
 ENV OUT=/out
 
 RUN ln -sf /usr/local/bin/python3 /usr/bin/python
-RUN apt-get update && apt-get install -y python3-venv python3-pip
 ENV PATH="/root/.mozbuild/cbindgen:/root/.cargo/bin:${PATH}"
 
 WORKDIR $SRC/gecko-dev
@@ -61,40 +60,3 @@ RUN chmod +x $SRC/build.sh
 RUN chmod +x /usr/local/bin/secb
 RUN mkdir -p /app/artifacts
 RUN mkdir -p /testcase
-
-# Install Node.js, latest npm, and OpenAI Codex
-RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash - && \
-  apt-get install -y nodejs
-RUN npm i -g npm@latest @openai/codex
-
-RUN ln -s /usr/bin/make /usr/bin/gmake || true
-
-# Install beads
-RUN npm install -g @beads/bd@0.50.2 || true
-
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# API KEY config entrypoint
-RUN apt-get update && apt-get install -y gettext-base
-RUN cat > /entrypoint.sh <<'ENTRYEOF'
-#!/bin/bash
-mkdir -p /root/.codex
-cat <<EOT | envsubst > /root/.codex/auth.json
-{
-  "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-  "model": "gpt-5-mini",
-  "provider": "openai"
-}
-EOT
-exec "$@"
-ENTRYEOF
-
-# Install Claude Code
-ENV PATH="/root/.local/bin:${PATH}"
-RUN curl -fsSL https://claude.ai/install.sh | bash
-
-RUN bd init || true
-
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
