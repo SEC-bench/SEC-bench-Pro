@@ -33,7 +33,7 @@ from common import (
 ROOT = Path(__file__).resolve().parent
 DEFAULT_FIXED_REPO = "hwiwonlee/sm.x86_64.fixed"
 DEFAULT_ATTEMPTS = 5
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 300
 
 HARMLESS_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"AddressSanitizer failed to allocate", re.I),

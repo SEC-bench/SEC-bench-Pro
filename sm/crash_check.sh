@@ -46,7 +46,7 @@ TAREGET_IMAGE_DIR="$IMAGES_PATH/$ISSUE_ID"
 DOCKER_IMAGE_NAME=$(jq -r '.image_name' "$TAREGET_IMAGE_DIR/meta.json")
 BINARY_NAME=$(jq -r '.verification_binary' "$TAREGET_IMAGE_DIR/meta.json")
 COMMAND_ARG=$(jq -r '.command_options' "$TAREGET_IMAGE_DIR/meta.json")
-ATTEMPT_TIMEOUT="${CRASH_CHECK_TIMEOUT:-600}"
+ATTEMPT_TIMEOUT="${CRASH_CHECK_TIMEOUT:-300}"
 
 # If $2 is missing, use "poc.js by default"
 POC_PATH=$(realpath "${2:-"$TAREGET_IMAGE_DIR/poc.js"}")
