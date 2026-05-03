@@ -1,3 +1,4 @@
+timeout(10);
 gczeal(9, 7)
 while(true)
   for (let a = 2; a;) {

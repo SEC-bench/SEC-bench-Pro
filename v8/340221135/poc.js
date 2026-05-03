@@ -8,6 +8,8 @@ function bar() {
   } catch (e) {}
 }
 
-while (true) {
+for (let i = 0; i < 1000; i++) {
   bar();
 }
+
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);

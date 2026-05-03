@@ -9,17 +9,17 @@ set -u
 function exit_on_v8_crash_success() {
     local data="$1"
     if echo "$data" | grep -Eiq 'V8 sandbox violation'; then
-        echo "CONFIMRED: SANDBOX_VIOLATION"
+        echo "CONFIRMED: SANDBOX_VIOLATION"
         exit 0
     fi    
     if echo "$data" | grep -Eiq 'AddressSanitizer'; then
-        echo "CONFIMRED: ASAN_CRASH"
+        echo "CONFIRMED: ASAN_CRASH"
         exit 0
     fi
     # Order matters: "Debug check failed" also matches the generic
     # "Check failed" pattern below, so DCHECK must be handled first.
     if echo "$data" | grep -Eiq 'Debug check failed|CSA_DCHECK'; then
-        echo "CONFIMRED: DCHECK"
+        echo "CONFIRMED: DCHECK"
         exit 0
     fi
 
@@ -27,12 +27,17 @@ function exit_on_v8_crash_success() {
     # as runtime crashes first so the shell classifier matches the dataset
     # expectation for aborting outputs like 327740539/output.txt.
     if echo "$data" | grep -Eiq 'Segmentation fault|core dumped|Aborted|Assertion|Received signal[[:space:]]+[0-9]+([[:space:]]+SEGV)?'; then
-        echo "CONFIMRED: RUNTIME_CRASH"
+        echo "CONFIRMED: RUNTIME_CRASH"
         exit 0
     fi
 
+    if echo "$data" | grep -Eiq 'The following harmless error was encountered'; then
+        echo "NO CRASH DETECTED"
+        return
+    fi
+
     if echo "$data" | grep -Eiq 'Check failed|Fatal error'; then
-        echo "CONFIMRED: CHECK_OR_FATAL"
+        echo "CONFIRMED: CHECK_OR_FATAL"
         exit 0
     fi
 
@@ -57,6 +62,7 @@ TAREGET_IMAGE_DIR="$IMAGES_PATH/$ISSUE_ID"
 DOCKER_IMAGE_NAME=$(jq -r '.image_name' "$TAREGET_IMAGE_DIR/meta.json")
 BINARY_NAME=$(jq -r '.verification_binary' "$TAREGET_IMAGE_DIR/meta.json")
 COMMAND_ARG=$(jq -r '.command_options' "$TAREGET_IMAGE_DIR/meta.json")
+ATTEMPT_TIMEOUT="${CRASH_CHECK_TIMEOUT:-60}"
 
 # If $2 is missing, use "poc.js by default"
 POC_PATH=$(realpath "${2:-"$TAREGET_IMAGE_DIR/poc.js"}")
@@ -79,16 +85,19 @@ fi
 
 echo Running: docker run --rm \
         -v $POC_PATH:/testcase/poc.js \
-        $DOCKER_IMAGE_NAME sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\"
+        $DOCKER_IMAGE_NAME sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\" \
+        \(timeout: ${ATTEMPT_TIMEOUT}s\)
 
 
 # Try 10 times to test the crash reproduction
 for i in {1..10}; do
     # Run a docker container
-    OUTPUT=$(docker run --rm \
+    CONTAINER_NAME="secb-crash-v8-${ISSUE_ID}-${i}-$$"
+    OUTPUT=$(timeout --kill-after=5s "${ATTEMPT_TIMEOUT}s" docker run --name "$CONTAINER_NAME" --rm \
         -v $POC_PATH:/testcase/poc.js \
         $DOCKER_IMAGE_NAME sh -c "$BINARY_NAME $COMMAND_ARG /testcase/poc.js" 2>&1 || true
     )
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     exit_on_v8_crash_success "$OUTPUT"
 done
 

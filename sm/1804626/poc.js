@@ -7,5 +7,5 @@ function e() {
   verifyprebarriers();
   b(f);
 }
-for (;;)
+for (let i = 0; i < 50; i++)
   new e;

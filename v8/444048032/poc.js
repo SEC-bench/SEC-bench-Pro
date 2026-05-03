@@ -1,3 +1,10 @@
+const DRIVER_TIMEOUT_MS = 10000;
+const DRIVER_ATTEMPTS = 4;
+
+const driverScript = function() {
+  onmessage = function({ data: doneBuffer }) {
+    const driverDone = new Int32Array(doneBuffer);
+    try {
 let sbx_mem = new DataView(new Sandbox.MemoryView(0, 0x500000000));
 
 function corruptInBackground(address) {
@@ -40,3 +47,21 @@ for(var i = 0; i < 0x100; i++) {
     let x = v2 % v3;
 }
 
+worker.terminate();
+    } finally {
+      Atomics.store(driverDone, 0, 1);
+      Atomics.notify(driverDone, 0);
+      if (typeof close === 'function') close();
+    }
+  };
+};
+
+for (let attempt = 0; attempt < DRIVER_ATTEMPTS; attempt++) {
+  const driverDone = new Int32Array(new SharedArrayBuffer(4));
+  const driver = new Worker(driverScript, { type: 'function' });
+  driver.postMessage(driverDone.buffer);
+  Atomics.wait(driverDone, 0, 0, DRIVER_TIMEOUT_MS);
+  driver.terminate();
+}
+
+quit(0);

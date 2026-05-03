@@ -2399,13 +2399,20 @@ let $sig_i_i_1 = builder_1.addType(kSig_i_i);
 let $sig_v_ii_1 = builder_1.addType(kSig_v_ii);
 let $t_1 = builder_1.addImportedTable('import', 'table', 1, 1, wasmRefType($sig_s2_ar_1));
 
-// loop until we detect type incompatibility due to tierup
-builder_1.addFunction('tierup', $sig_v_v_1).addLocals(wasmRefType($s2_1), 1).addBody([
+// Exercise tier-up enough to expose the vulnerable wrapper, but return on fixed
+// builds instead of spinning forever.
+builder_1.addFunction('tierup', $sig_v_v_1)
+    .addLocals(wasmRefType($s2_1), 1)
+    .addLocals(kWasmI32, 1)
+    .addBody([
   // local.set 0 w/ ref $s2_1
   ...wasmI32Const(0),
   kGCPrefix, kExprStructNewDefault, $s0_1,
   kGCPrefix, kExprStructNew, $s2_1,
   kExprLocalSet, 0,
+
+  ...wasmI32Const(0),
+  kExprLocalSet, 1,
 
   kExprLoop, kWasmVoid,
     // call table[0][0]
@@ -2413,7 +2420,13 @@ builder_1.addFunction('tierup', $sig_v_v_1).addLocals(wasmRefType($s2_1), 1).add
     ...wasmI32Const(0),
     kExprCallIndirect, $sig_s2_ar_1, $t_1,
     kExprDrop,
-    kExprBr, 0,
+    kExprLocalGet, 1,
+    ...wasmI32Const(1),
+    kExprI32Add,
+    kExprLocalTee, 1,
+    ...wasmI32Const(100000),
+    kExprI32LtS,
+    kExprBrIf, 0,
   kExprEnd,
 ]).exportFunc();
 

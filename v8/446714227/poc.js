@@ -33,7 +33,7 @@ f0();
 let map_addr = sbx_mem.getUint32(arr_addr, true) - 1;
 let instance_size_in_words_addr = map_addr + 4;
 
-while(true) {
+for (let round = 0; round < 512; round++) {
     let worker = corruptInBackground(instance_size_in_words_addr);
     for(let i = 0; i < 128; i++) {
         %OptimizeMaglevOnNextCall(f0);
@@ -43,4 +43,3 @@ while(true) {
     worker.terminate()
     gc();
 }
-

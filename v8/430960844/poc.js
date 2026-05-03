@@ -29,10 +29,12 @@ function asmjs() {
 }
 
 let warmup = true;
+let getterCount = 0;
 Object.defineProperty(WebAssembly.Instance.prototype, "__single_function__", {
     configurable: true,
     get: () => {
         if (warmup) return;
+        if (++getterCount > 128) quit(0);
         console.log("prop getter");
 
         //Replace the dispatch handle of the asm.js function with the one of bigfunc

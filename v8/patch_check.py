@@ -23,6 +23,7 @@ from common import (
     classify_crash_type_precise,
     compute_match,
     is_defensive_block,
+    is_process_timeout,
 )
 
 
@@ -54,8 +55,16 @@ def image_exists(image: str) -> bool:
 
 
 def classify_fixed_output(
-    output: str, expected_output: str, expected_type: str
+    output: str,
+    expected_output: str,
+    expected_type: str,
+    *,
+    exit_code: int | None,
+    timed_out: bool = False,
 ) -> tuple[str, bool]:
+    if is_process_timeout(exit_code, timed_out):
+        return "TIMEOUT", False
+
     if output.strip() and expected_output.strip():
         match = compute_match(output, expected_output, expected_type_hint=expected_type)
         if match.matched:
@@ -216,7 +225,11 @@ def main(argv: list[str] | None = None) -> int:
             output_file = tmp_dir / f"attempt-{attempt}.output"
             output_file.write_text(output, encoding="utf-8", errors="replace")
             classification, ok = classify_fixed_output(
-                output, expected_output, expected_type
+                output,
+                expected_output,
+                expected_type,
+                exit_code=returncode,
+                timed_out=timed_out,
             )
             exit_text = "timeout" if timed_out else str(returncode)
             print(f"exit={exit_text} classification={classification}")
@@ -225,6 +238,11 @@ def main(argv: list[str] | None = None) -> int:
                 if classification.startswith("REPRODUCED:"):
                     print(
                         "FAILED: PoC reproduced the original vulnerability on fixed image.",
+                        file=sys.stderr,
+                    )
+                elif classification == "TIMEOUT":
+                    print(
+                        "FAILED: PoC timed out on fixed image.",
                         file=sys.stderr,
                     )
                 else:

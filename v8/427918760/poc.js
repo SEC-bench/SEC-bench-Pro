@@ -39,7 +39,8 @@ function GenerateSwitch(begin, end, handle_case) {
     gc();
     let ctr = 0;
 
-    while(true) {
+    let corruptor = null;
+    for (let attempt = 0; attempt < 256; attempt++) {
         let new_str = str;
         let suffix = new Array(128);
         for (let i = 0; i < 128; i++) {
@@ -69,7 +70,7 @@ function GenerateSwitch(begin, end, handle_case) {
             }
             //                      case 855:
             // str_addr points now here ^
-            corruptInBackground(str_addr);
+            corruptor = corruptInBackground(str_addr);
         } else {
             var wasm1 = decl();
             for (var i = 0; i <= 1024; i = i + 3) {
@@ -80,10 +81,10 @@ function GenerateSwitch(begin, end, handle_case) {
         gc();
         gc();
     }
+    if (corruptor) corruptor.terminate();
 }
 var handle_case = function (k) {
     return "return ".concat(k, ";");
 }
 
 wasm = GenerateSwitch(0, 1024, handle_case);
-

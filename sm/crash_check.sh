@@ -9,20 +9,20 @@ set -u
 function exit_on_sm_crash_success() {
     local data="$1"
     if echo "$data" | grep -Eiq 'AddressSanitizer'; then
-        echo "CONFIMRED: ASAN_CRASH"
+        echo "CONFIRMED: ASAN_CRASH"
         exit 0
     fi
     # Order matters: aborting outputs (segfault, SIGABRT signal trailers) must
     # be matched before MOZ_CRASH so signaled assertions land in RUNTIME_CRASH.
     if echo "$data" | grep -Eiq 'Segmentation fault|core dumped|Aborted|Received signal[[:space:]]+[0-9]+([[:space:]]+SEGV)?'; then
-        echo "CONFIMRED: RUNTIME_CRASH"
+        echo "CONFIRMED: RUNTIME_CRASH"
         exit 0
     fi
     # MOZ_CRASH macro / MOZ_ASSERT failures expand to __builtin_trap on debug
     # builds, which produces "Trace/breakpoint trap".  MOZ_RELEASE_ASSERT and
     # explicit MOZ_CRASH("...") calls also print the literal MOZ_CRASH token.
     if echo "$data" | grep -Eiq 'MOZ_CRASH|Trace/breakpoint trap'; then
-        echo "CONFIMRED: MOZ_CRASH"
+        echo "CONFIRMED: MOZ_CRASH"
         exit 0
     fi
     echo "NO CRASH DETECTED"
@@ -46,6 +46,7 @@ TAREGET_IMAGE_DIR="$IMAGES_PATH/$ISSUE_ID"
 DOCKER_IMAGE_NAME=$(jq -r '.image_name' "$TAREGET_IMAGE_DIR/meta.json")
 BINARY_NAME=$(jq -r '.verification_binary' "$TAREGET_IMAGE_DIR/meta.json")
 COMMAND_ARG=$(jq -r '.command_options' "$TAREGET_IMAGE_DIR/meta.json")
+ATTEMPT_TIMEOUT="${CRASH_CHECK_TIMEOUT:-600}"
 
 # If $2 is missing, use "poc.js by default"
 POC_PATH=$(realpath "${2:-"$TAREGET_IMAGE_DIR/poc.js"}")
@@ -68,16 +69,19 @@ fi
 
 echo Running: docker run --rm \
         -v $POC_PATH:/testcase/poc.js \
-        $DOCKER_IMAGE_NAME sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\"
+        $DOCKER_IMAGE_NAME sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\" \
+        \(timeout: ${ATTEMPT_TIMEOUT}s\)
 
 
 # Try 100 times to test the crash reproduction
 for i in {1..100}; do
     # Run a docker container
-    OUTPUT=$(docker run --rm \
+    CONTAINER_NAME="secb-crash-sm-${ISSUE_ID}-${i}-$$"
+    OUTPUT=$(timeout --kill-after=5s "${ATTEMPT_TIMEOUT}s" docker run --name "$CONTAINER_NAME" --rm \
         -v $POC_PATH:/testcase/poc.js \
         $DOCKER_IMAGE_NAME sh -c "$BINARY_NAME $COMMAND_ARG /testcase/poc.js" 2>&1 || true
     )
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     exit_on_sm_crash_success "$OUTPUT"
 done
 

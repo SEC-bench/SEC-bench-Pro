@@ -27,7 +27,8 @@ print("bit_field2_addr value: 0x" + bit_field2_val.toString(16));
 
 let worker = corruptInBackground(bit_field2_addr, bit_field2_val, bit_field2_val ^ 0xff);
 
-while (true) {
+for (let i = 0; i < 100; i++) {
     ar.sort();
 }
 
+worker.terminate();

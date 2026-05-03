@@ -1,6 +1,7 @@
 // CVE-2024-3854: JIT Diamond Condition Folding OOB
 // Bug 1884552 - Assertion failure: ins->isGoto(), at jit/IonAnalysis.cpp:715
 // Run with: --fuzzing-safe
+timeout(10);
 for (let i22 = 0, i23 = 10;
     (() => {
         for (let i26 = 0, i27 = 10;
