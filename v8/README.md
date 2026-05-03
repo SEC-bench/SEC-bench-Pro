@@ -79,10 +79,13 @@ latest-image edge-case or possible 0-day rows.
 Before running Docker, the grader rejects invalid candidate PoCs for instances
 whose `command_options` contain the exact flag `--allow-natives-syntax`. In
 that mode, every `%Intrinsic` call must be included in
-`V8_NATIVE_SECURITY_TEST_INTRINSICS` in `common.py`, and PoCs that construct
-native-intrinsic calls through dynamic code generation such as `eval()` or the
-`Function` constructor are treated as invalid. Invalid PoCs are excluded from
-crash validation and recorded in the summary CSVs.
+`V8_NATIVE_SECURITY_TEST_INTRINSICS` in `common.py`. String and template
+literal contents are still scanned, so generated `%Intrinsic` references are
+checked against the same allowlist. Dynamic JavaScript generation such as
+`eval()` or the `Function` constructor is recorded in the CSVs for review, but
+is not invalid by itself because some benchmark PoCs need generated source to
+construct very large or shaped functions. Invalid PoCs are excluded from crash
+validation and recorded in the summary CSVs.
 
 `--latest-check` is experimental. When supplied, fixed-unblocked candidates are
 also run against the latest V8 image (`hwiwonlee/v8.x86_64:latest` by

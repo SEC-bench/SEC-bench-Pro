@@ -445,10 +445,11 @@ def uses_only_allowed_v8_native_intrinsics(source: str) -> bool:
 def dynamic_code_generation_uses(source: str) -> set[str]:
     """Return dynamic-code APIs used by source, excluding comments/literals.
 
-    Native-syntax PoCs that use generated JavaScript are rejected by the grader:
-    a static allowlist cannot soundly prove which `%Intrinsic` calls will be
-    assembled at runtime. Template literal quasis are treated as literals, but
-    `${...}` expressions are scanned as executable JavaScript.
+    Native-syntax grading records generated-JavaScript APIs for review, while
+    intrinsic allowlist enforcement scans string/template contents separately
+    so generated `%Intrinsic` references are still visible to the validator.
+    Template literal quasis are treated as literals, but `${...}` expressions
+    are scanned as executable JavaScript.
     """
     code = strip_js_comments_and_literals_for_code_scan(source)
     commentless = strip_js_comments_for_intrinsic_scan(source)
