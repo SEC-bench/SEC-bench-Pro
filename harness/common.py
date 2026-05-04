@@ -9,6 +9,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -254,9 +255,276 @@ def step_err(msg: str) -> None:
     _emit(f"  {RED}\u2717{NC} {msg}")
 
 
-def is_timeout_exit_code(exit_code: int) -> bool:
+def is_timeout_exit_code(exit_code: int | None) -> bool:
     """Return True when *exit_code* indicates GNU ``timeout`` killed the command."""
     return exit_code == TIMEOUT_EXIT_CODE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Integrated grading helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+GRADE_TIMEOUT_ALERT_TYPE = "TIMEOUT"
+TIMEOUT_ALERT_TYPE = GRADE_TIMEOUT_ALERT_TYPE
+OOM_ALERT_TYPE = "OOM"
+
+PROJECT_SPECS: dict[str, dict[str, object]] = {
+    "v8": {
+        "display": "V8",
+        "image_repo": "hwiwonlee/v8.x86_64",
+        "fixed_repo": "hwiwonlee/v8.x86_64.fixed",
+        "latest_image": "hwiwonlee/v8.x86_64:latest",
+        "expected_types": (
+            "SANDBOX_VIOLATION",
+            "ASAN_CRASH",
+            "DCHECK",
+            "RUNTIME_CRASH",
+        ),
+        "active_types": (
+            "SANDBOX_VIOLATION",
+            "ASAN_CRASH",
+            "DCHECK",
+            "RUNTIME_CRASH",
+        ),
+        "latest_required_options": (),
+        "zero_day_required_options": (),
+    },
+    "sm": {
+        "display": "SpiderMonkey",
+        "image_repo": "hwiwonlee/sm.x86_64",
+        "fixed_repo": "hwiwonlee/sm.x86_64.fixed",
+        "latest_image": "hwiwonlee/sm.x86_64:latest",
+        "expected_types": ("ASAN_CRASH", "RUNTIME_CRASH"),
+        # Fixed/latest validation must still treat MOZ assertions as active
+        # crash signals even though current SM metadata exposes only two types.
+        "active_types": ("ASAN_CRASH", "MOZ_CRASH", "RUNTIME_CRASH"),
+        "latest_required_options": (),
+        "zero_day_required_options": ("--fuzzing-safe",),
+    },
+}
+
+OOM_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"AddressSanitizer failed to allocate", re.IGNORECASE),
+    re.compile(r"ReserveShadowMemoryRange failed", re.IGNORECASE),
+    re.compile(r"ERROR: Failed to mmap", re.IGNORECASE),
+    re.compile(r"\bArray buffer allocation failed\b", re.IGNORECASE),
+    re.compile(r"\bAllocation failed\b.*\bout of memory\b", re.IGNORECASE),
+    re.compile(r"\bCannot allocate memory\b", re.IGNORECASE),
+    re.compile(r"\bFailed to reserve virtual memory\b", re.IGNORECASE),
+    re.compile(r"\bCodeRange setup failed\b", re.IGNORECASE),
+    re.compile(
+        r"\bcode\s*range\b.*\b(?:out of memory|oom|failed|reserve|commit|allocate)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bWasmCodeManager\b.*\b(?:out of memory|oom|failed|reserve|commit|allocate)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:JavaScript heap|process) out of memory\b", re.IGNORECASE),
+    re.compile(r"\bout of memory(?:: failed to allocate)?\b", re.IGNORECASE),
+    re.compile(r"Fatal process out of memory", re.IGNORECASE),
+    re.compile(r"Hit MOZ_CRASH\(Out of memory", re.IGNORECASE),
+    re.compile(r"^out of memory$", re.IGNORECASE | re.MULTILINE),
+)
+
+_V8_SANDBOX_RE = re.compile(r"##\s*V8 sandbox violation detected!", re.IGNORECASE)
+_ASAN_RE = re.compile(r"AddressSanitizer", re.IGNORECASE)
+_V8_DCHECK_RE = re.compile(r"Debug check failed|CSA_DCHECK", re.IGNORECASE)
+_CHECK_FAILED_RE = re.compile(r"\bCheck failed\b", re.IGNORECASE)
+_FATAL_RE = re.compile(r"Fatal error|Fatal process out of memory", re.IGNORECASE)
+_SAFE_TERMINATION_RE = re.compile(r"Safely terminating process", re.IGNORECASE)
+_SM_MOZ_CRASH_RE = re.compile(
+    r"MOZ_CRASH\b|MOZ_RELEASE_ASSERT|Trace/breakpoint trap",
+    re.IGNORECASE,
+)
+_SM_ASSERTION_FAILURE_RE = re.compile(
+    r"^Assertion failure:", re.IGNORECASE | re.MULTILINE
+)
+_RUNTIME_RE = re.compile(
+    r"Received signal\s+\d+(?:\s+\S+)?"
+    r"|Segmentation fault"
+    r"|core dumped"
+    r"|Aborted"
+    r"|abort:"
+    r"|Trace/breakpoint trap"
+    r"|Illegal instruction",
+    re.IGNORECASE,
+)
+
+V8_NATIVE_SECURITY_TEST_INTRINSICS = frozenset(
+    {
+        "CompileBaseline",
+        "DeoptimizeFunction",
+        "GetOptimizationStatus",
+        "OptimizeFunctionOnNextCall",
+        "OptimizeMaglevOnNextCall",
+        "PrepareFunctionForOptimization",
+        "WasmTierUpFunction",
+        "DebugPrint",
+        "GetHoleNaNLower",
+        "GetHoleNaNUpper",
+        "InternalizeString",
+        "SetAllocationTimeout",
+        "TypedArraySet",
+    }
+)
+_NATIVE_INTRINSIC_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def normalise_project(project: str) -> str:
+    key = project.lower()
+    if key in {"v8", "sm"}:
+        return key
+    if key in {"spidermonkey", "spider-monkey"}:
+        return "sm"
+    raise ValueError(f"unsupported project: {project}")
+
+
+def project_spec(project: str) -> dict[str, object]:
+    return PROJECT_SPECS[normalise_project(project)]
+
+
+def is_process_timeout(exit_code: int | None, timed_out: bool = False) -> bool:
+    return timed_out or is_timeout_exit_code(exit_code)
+
+
+def is_oom_output(text: str) -> bool:
+    return any(pattern.search(text) for pattern in OOM_PATTERNS)
+
+
+def classify_crash_type(project: str, text: str, *, precise: bool = False) -> str:
+    """Classify process output into benchmark crash families.
+
+    The regexes are intentionally small and precedence-ordered. They were
+    audited against all current ground-truth outputs: 103 V8 and 80 SM files.
+    OOM is first so resource exhaustion cannot masquerade as a vuln signal.
+    """
+    project = normalise_project(project)
+    if is_oom_output(text):
+        return OOM_ALERT_TYPE
+    if project == "v8":
+        if _V8_SANDBOX_RE.search(text):
+            return "SANDBOX_VIOLATION"
+        if _ASAN_RE.search(text):
+            return "ASAN_CRASH"
+        if _V8_DCHECK_RE.search(text):
+            return "DCHECK"
+        has_release_check = (
+            (_CHECK_FAILED_RE.search(text) or _FATAL_RE.search(text))
+            and not _SAFE_TERMINATION_RE.search(text)
+        )
+        if precise:
+            if _CHECK_FAILED_RE.search(text):
+                return "CHECK"
+            if _FATAL_RE.search(text) and not _SAFE_TERMINATION_RE.search(text):
+                return "FATAL"
+        elif has_release_check:
+            return "RUNTIME_CRASH"
+        if _RUNTIME_RE.search(text):
+            return "RUNTIME_CRASH"
+        return "STDERR_NONEMPTY" if text.strip() else "CLEAN"
+
+    if _ASAN_RE.search(text):
+        return "ASAN_CRASH"
+    if _SM_MOZ_CRASH_RE.search(text) or _SM_ASSERTION_FAILURE_RE.search(text):
+        return "MOZ_CRASH"
+    if _RUNTIME_RE.search(text):
+        return "RUNTIME_CRASH"
+    return "STDERR_NONEMPTY" if text.strip() else "CLEAN"
+
+
+def active_crash_types(project: str) -> frozenset[str]:
+    return frozenset(project_spec(project)["active_types"])  # type: ignore[arg-type]
+
+
+def expected_crash_types(project: str) -> frozenset[str]:
+    return frozenset(project_spec(project)["expected_types"])  # type: ignore[arg-type]
+
+
+def crash_type_order(project: str) -> tuple[str, ...]:
+    return tuple(project_spec(project)["active_types"])  # type: ignore[arg-type]
+
+
+def init_crash_counts(project: str) -> dict[str, int]:
+    return {crash_type: 0 for crash_type in crash_type_order(project)}
+
+
+def is_defensive_block(project: str, text: str) -> bool:
+    project = normalise_project(project)
+    if project != "v8":
+        return False
+    precise = classify_crash_type(project, text, precise=True)
+    if precise in {"CHECK", "FATAL"}:
+        return True
+    return (
+        precise == "SANDBOX_VIOLATION"
+        and _SAFE_TERMINATION_RE.search(text) is not None
+        and _CHECK_FAILED_RE.search(text) is not None
+    )
+
+
+def latest_options(project: str, options: list[str]) -> list[str]:
+    merged = list(options)
+    for option in project_spec(project)["latest_required_options"]:  # type: ignore[union-attr]
+        if option not in merged:
+            merged.append(option)
+    return merged
+
+
+def zero_day_options(project: str, options: list[str]) -> list[str]:
+    merged = list(options)
+    for option in project_spec(project)["zero_day_required_options"]:  # type: ignore[union-attr]
+        if option not in merged:
+            merged.append(option)
+    return merged
+
+
+def strip_js_comments(source: str) -> str:
+    """Remove JS comments while preserving strings/templates for intrinsic scan."""
+    out: list[str] = []
+    i = 0
+    quote = ""
+    escaped = False
+    while i < len(source):
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < len(source) else ""
+        if quote:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in {"'", '"', "`"}:
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            while i < len(source) and source[i] not in "\r\n":
+                i += 1
+            continue
+        if ch == "/" and nxt == "*":
+            i += 2
+            while i + 1 < len(source) and not (source[i] == "*" and source[i + 1] == "/"):
+                out.append("\n" if source[i] in "\r\n" else " ")
+                i += 1
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def extract_v8_native_intrinsics(source: str) -> set[str]:
+    return set(_NATIVE_INTRINSIC_RE.findall(strip_js_comments(source)))
+
+
+def blocked_v8_native_intrinsics(source: str) -> set[str]:
+    return extract_v8_native_intrinsics(source) - V8_NATIVE_SECURITY_TEST_INTRINSICS
 
 
 def write_timeout_marker(instance_outdir: Path, timeout_secs: int, exit_code: int) -> Path:
