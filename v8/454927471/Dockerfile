@@ -1,5 +1,7 @@
 FROM hwiwonlee/v8.base:latest
 
+ARG NINJA_JOBS
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Seoul
 ENV LANG=en_US.UTF-8
@@ -49,7 +51,7 @@ RUN gn gen out/x64.asan --args=' \
   use_sysroot=false \
   '
 
-RUN ninja -C out/x64.asan d8
+RUN ninja -j"${NINJA_JOBS:-$(nproc)}" -C out/x64.asan d8
 
 # **IMPORTANT**: DO **NOT** MODIFY OR REMOVE THE BELOW STATEMENTS
 

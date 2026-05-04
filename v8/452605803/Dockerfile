@@ -1,5 +1,7 @@
 FROM hwiwonlee/v8.base:latest
 
+ARG NINJA_JOBS
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Seoul
 ENV LANG=en_US.UTF-8

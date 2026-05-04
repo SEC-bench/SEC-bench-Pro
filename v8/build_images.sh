@@ -2,7 +2,7 @@
 
 # Build Docker images for all subdirectories in v8/
 # Each subdirectory name is used as the image ID
-# Usage: build_images.sh [-n NUM_WORKERS] [-f INPUT_FILE]
+# Usage: build_images.sh [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]
 
 # Require bash >= 4.3 for wait -n support
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) )); then
@@ -12,26 +12,64 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NUM_WORKERS=1
+NINJA_JOBS="${NINJA_JOBS:-}"
 INPUT_FILE=""
 
 usage() {
-    echo "Usage: $(basename "$0") [-n NUM_WORKERS] [-f INPUT_FILE]"
-    echo "  -n NUM_WORKERS  Number of parallel build workers (default: 1)"
-    echo "  -f INPUT_FILE   File with case IDs to build (one per line); builds all if omitted"
-    exit 1
+    echo "Usage: $(basename "$0") [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]"
+    echo "  -j, --parallel N  Number of parallel build workers (default: 1)"
+    echo "  -f INPUT_FILE     File with case IDs to build (one per line); builds all if omitted"
+    echo "  --ninja-jobs N    Maximum ninja jobs/vCPUs per Docker build (default: nproc)"
+    exit "${1:-1}"
 }
 
-while getopts ":n:f:" opt; do
-    case $opt in
-        n) NUM_WORKERS="$OPTARG" ;;
-        f) INPUT_FILE="$OPTARG" ;;
-        :) echo "Error: -$OPTARG requires an argument" >&2; usage ;;
-        \?) echo "Error: Unknown option -$OPTARG" >&2; usage ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -j|--parallel)
+            [[ $# -ge 2 ]] || { echo "Error: $1 requires an argument" >&2; usage; }
+            NUM_WORKERS="$2"
+            shift 2
+            ;;
+        -f)
+            [[ $# -ge 2 ]] || { echo "Error: -f requires an argument" >&2; usage; }
+            INPUT_FILE="$2"
+            shift 2
+            ;;
+        --ninja-jobs)
+            [[ $# -ge 2 ]] || { echo "Error: --ninja-jobs requires an argument" >&2; usage; }
+            NINJA_JOBS="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Error: Unknown option $1" >&2
+            usage
+            ;;
+        *)
+            echo "Error: Unexpected argument $1" >&2
+            usage
+            ;;
     esac
 done
 
+if [[ $# -gt 0 ]]; then
+    echo "Error: Unexpected argument $1" >&2
+    usage
+fi
+
 if ! [[ "$NUM_WORKERS" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: -n must be a positive integer, got: '$NUM_WORKERS'" >&2
+    echo "Error: -j must be a positive integer, got: '$NUM_WORKERS'" >&2
+    exit 1
+fi
+
+if [[ -n "$NINJA_JOBS" && ! "$NINJA_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: --ninja-jobs must be a positive integer, got: '$NINJA_JOBS'" >&2
     exit 1
 fi
 
@@ -53,6 +91,11 @@ fi
 
 echo "Building Docker images from: $SCRIPT_DIR"
 echo "Parallel workers: $NUM_WORKERS"
+if [[ -n "$NINJA_JOBS" ]]; then
+    echo "Ninja jobs per build: $NINJA_JOBS"
+else
+    echo "Ninja jobs per build: nproc"
+fi
 [[ -n "$INPUT_FILE" ]] && echo "Input file: $INPUT_FILE (${#allowed_ids[@]} cases)"
 
 # Temp directory for per-image logs and result markers
@@ -82,9 +125,15 @@ build_one() {
     local total="$3"
     local log_file="$TMP_DIR/${id}.log"
     local result_file="$TMP_DIR/${id}.result"
+    local -a cmd=(docker build -t "hwiwonlee/v8.x86_64:$id")
+
+    if [[ -n "$NINJA_JOBS" ]]; then
+        cmd+=(--build-arg "NINJA_JOBS=$NINJA_JOBS")
+    fi
+    cmd+=("$dir")
 
     echo -e "\033[1;34m[START] $id\033[0m"
-    if docker build -t "hwiwonlee/v8.x86_64:$id" "$dir" >"$log_file" 2>&1; then
+    if "${cmd[@]}" >"$log_file" 2>&1; then
         echo "succeeded" >"$result_file"
         # Atomically increment completed counter and print progress
         {

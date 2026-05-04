@@ -1,5 +1,7 @@
 FROM hwiwonlee/v8.base:latest
 
+ARG NINJA_JOBS
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Seoul
 ENV LANG=en_US.UTF-8
@@ -57,7 +59,7 @@ RUN gn gen out/ia32.asan --args=' \
   is_component_build=false \
   '
 
-RUN ninja -C out/ia32.asan d8
+RUN ninja -j"${NINJA_JOBS:-$(nproc)}" -C out/ia32.asan d8
 
 RUN gn gen out/x64.release --args=' \
   is_debug=false \
@@ -73,7 +75,7 @@ RUN gn gen out/x64.release --args=' \
   use_sysroot=true \
   '
 
-RUN autoninja -C out/x64.release d8
+RUN autoninja -j"${NINJA_JOBS:-$(nproc)}" -C out/x64.release d8
 
 # **IMPORTANT**: DO **NOT** MODIFY OR REMOVE THE BELOW STATEMENTS
 

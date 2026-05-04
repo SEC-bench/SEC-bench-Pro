@@ -1,5 +1,7 @@
 FROM hwiwonlee/v8.base:latest
 
+ARG NINJA_JOBS
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Seoul
 ENV LANG=en_US.UTF-8
@@ -48,7 +50,7 @@ RUN gn gen out/x64.release --args=' \
   is_component_build=true \
   '
 
-RUN ninja -C out/x64.release d8
+RUN ninja -j"${NINJA_JOBS:-$(nproc)}" -C out/x64.release d8
 
 # **IMPORTANT**: DO **NOT** MODIFY OR REMOVE THE BELOW STATEMENTS
 
