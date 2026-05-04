@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
+import signal
 import shlex
 import shutil
 import subprocess
@@ -46,9 +48,14 @@ DEFAULT_TIMEOUT = 600
 DEFAULT_ATTEMPTS = 3
 DEFAULT_WORKERS = 20
 NATIVE_SYNTAX_FLAG = "--allow-natives-syntax"
+INTERRUPT_EXIT_CODE = 0
 _TS_RE = re.compile(r"^\d{8}_\d{6}$")
 _print_lock = threading.Lock()
 _containers_lock = threading.Lock()
+_processes_lock = threading.Lock()
+_interrupt_requested = threading.Event()
+_interrupt_handler_installed = False
+_active_processes: set[subprocess.Popen[str]] = set()
 
 HARMLESS_PATTERNS = (
     re.compile(r"Caught harmless memory access violation", re.I),
@@ -251,9 +258,149 @@ class InstanceResult:
         return any(file.invalid for file in self.file_results)
 
 
+class GradingInterrupted(KeyboardInterrupt):
+    """Raised when the grader should stop without treating it as worker failure."""
+
+
+@dataclass
+class CommandResult:
+    exit_code: int | None
+    stdout: str
+    stderr: str
+    timed_out: bool = False
+
+
 def _print(line: str = "", *, file=None) -> None:
     with _print_lock:
         print(line, file=file or sys.stdout, flush=True)
+
+
+def interrupted() -> bool:
+    return _interrupt_requested.is_set() or bool(getattr(common, "INTERRUPTED", False))
+
+
+def raise_if_interrupted() -> None:
+    if interrupted():
+        raise GradingInterrupted
+
+
+def _kill_proc_tree(proc: subprocess.Popen[str]) -> None:
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
+
+
+def _register_process(proc: subprocess.Popen[str]) -> None:
+    with _processes_lock:
+        _active_processes.add(proc)
+
+
+def _unregister_process(proc: subprocess.Popen[str]) -> None:
+    with _processes_lock:
+        _active_processes.discard(proc)
+
+
+def _kill_active_processes() -> None:
+    with _processes_lock:
+        processes = list(_active_processes)
+    for proc in processes:
+        _kill_proc_tree(proc)
+
+
+def cleanup_active_containers() -> None:
+    """Remove Docker containers started by this grader, tolerating races."""
+    with _containers_lock:
+        names = list(common._active_containers)  # type: ignore[attr-defined]
+        common._active_containers.clear()  # type: ignore[attr-defined]
+    for name in names:
+        try:
+            subprocess.run(
+                ["docker", "rm", "-f", name],
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:
+            pass
+
+
+def request_interrupt(*, announce: bool = False, force: bool = False) -> None:
+    already_requested = interrupted()
+    common.INTERRUPTED = True
+    _interrupt_requested.set()
+    if announce:
+        level = "INTERRUPT" if already_requested or force else "INFO"
+        print(
+            f"\n[{level}] Interrupted; stopping grader and cleaning up Docker state.",
+            file=sys.stderr,
+            flush=True,
+        )
+    _kill_active_processes()
+    cleanup_active_containers()
+    if force:
+        os._exit(INTERRUPT_EXIT_CODE)
+
+
+def _on_sigint(_signum: int, _frame: object) -> None:
+    request_interrupt(announce=True, force=interrupted())
+    raise GradingInterrupted
+
+
+def install_interrupt_handler() -> None:
+    global _interrupt_handler_installed
+    if not _interrupt_handler_installed:
+        signal.signal(signal.SIGINT, _on_sigint)
+        _interrupt_handler_installed = True
+
+
+def run_interruptible_command(
+    cmd: list[str],
+    *,
+    timeout_sec: int | None = None,
+) -> CommandResult:
+    """Run a host command while promptly honoring grader interrupts."""
+    raise_if_interrupted()
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        start_new_session=True,
+    )
+    _register_process(proc)
+    deadline = time.monotonic() + timeout_sec if timeout_sec is not None else None
+    timed_out = False
+    try:
+        while proc.poll() is None:
+            if interrupted():
+                _kill_proc_tree(proc)
+                raise GradingInterrupted
+            if deadline is not None and time.monotonic() >= deadline:
+                timed_out = True
+                _kill_proc_tree(proc)
+                break
+            time.sleep(0.2)
+
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            _kill_proc_tree(proc)
+            stdout, stderr = proc.communicate()
+
+        raise_if_interrupted()
+        return CommandResult(proc.returncode, stdout, stderr, timed_out)
+    except KeyboardInterrupt as exc:
+        request_interrupt()
+        _kill_proc_tree(proc)
+        raise GradingInterrupted from exc
+    finally:
+        _unregister_process(proc)
 
 
 def _decode(data: str | bytes | None) -> str:
@@ -356,21 +503,27 @@ def find_js_files(instance_dir: Path) -> list[Path]:
 
 
 def docker_image_available(image: str) -> bool:
-    return subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0
+    proc = run_interruptible_command(
+        ["docker", "image", "inspect", image],
+        timeout_sec=60,
+    )
+    return proc.exit_code == 0
 
 
 def docker_pull(image: str) -> bool:
-    proc = subprocess.run(["docker", "pull", image], capture_output=True)
-    if proc.returncode != 0:
-        err = _decode(proc.stderr).strip()
+    proc = run_interruptible_command(["docker", "pull", image])
+    if proc.exit_code != 0:
+        err = proc.stderr.strip()
         if err:
             _print(err, file=sys.stderr)
-    return proc.returncode == 0
+    return proc.exit_code == 0
 
 
 def ensure_image(image: str, *, pull_missing: bool) -> bool:
+    raise_if_interrupted()
     if docker_image_available(image):
         return True
+    raise_if_interrupted()
     return pull_missing and docker_pull(image)
 
 
@@ -500,6 +653,7 @@ def run_js_once(
     result_dir: Path,
     attempt: int,
 ) -> AttemptResult:
+    raise_if_interrupted()
     stdout_log = result_dir / image_kind / "stdout" / f"{rel_path}.attempt{attempt}.log"
     stderr_log = result_dir / image_kind / "stderr" / f"{rel_path}.attempt{attempt}.log"
     stdout_log.parent.mkdir(parents=True, exist_ok=True)
@@ -535,16 +689,16 @@ def run_js_once(
     stderr = ""
     add_container(name)
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec + 15)
-        exit_code = proc.returncode
-        timed_out = is_timeout_exit_code(exit_code)
-        stdout = _decode(proc.stdout)
-        stderr = _decode(proc.stderr)
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        stdout = _decode(exc.stdout)
-        stderr = _decode(exc.stderr)
+        proc = run_interruptible_command(cmd, timeout_sec=timeout_sec + 15)
+        exit_code = proc.exit_code
+        timed_out = proc.timed_out or is_timeout_exit_code(exit_code)
+        stdout = proc.stdout
+        stderr = proc.stderr
+        if proc.timed_out:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+    except GradingInterrupted:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        raise
     finally:
         discard_container(name)
 
@@ -611,6 +765,7 @@ def evaluate_latest_unblocked_zero_day(
     attempts: int,
     timeout_sec: int,
 ) -> None:
+    raise_if_interrupted()
     if not file_result.latest_unblocked_edge:
         if file_result.edge_candidate and file_result.latest_attempts and not file_result.latest_blocked:
             file_result.zero_day_reason = (
@@ -641,6 +796,7 @@ def evaluate_latest_unblocked_zero_day(
     if project == "v8" and has_option(options, "--expose-memory-corruption-api"):
         sandbox_hit = False
         for attempt_no in range(1, attempts + 1):
+            raise_if_interrupted()
             attempt = run_js_once(
                 project=project,
                 image=latest_image,
@@ -677,6 +833,7 @@ def evaluate_latest_unblocked_zero_day(
     if project == "sm" and not options_equal(confirmation_options, options):
         confirmed = False
         for attempt_no in range(1, attempts + 1):
+            raise_if_interrupted()
             attempt = run_js_once(
                 project=project,
                 image=latest_image,
@@ -738,10 +895,12 @@ def process_file(
     attempts: int,
     timeout_sec: int,
 ) -> FileResult:
+    raise_if_interrupted()
     rel_path = str(js_file.relative_to(instance_dir))
     file_result = FileResult(rel_path=rel_path)
 
     for attempt_no in range(1, attempts + 1):
+        raise_if_interrupted()
         attempt = run_js_once(
             project=project,
             image=vuln_image,
@@ -787,6 +946,7 @@ def process_file(
     fixed_blocked = True
     fixed_infra_failure = False
     for attempt_no in range(1, attempts + 1):
+        raise_if_interrupted()
         attempt = run_js_once(
             project=project,
             image=fixed_image,
@@ -834,6 +994,7 @@ def process_file(
     latest_blocked = True
     latest_run_options = latest_options(project, options)
     for attempt_no in range(1, attempts + 1):
+        raise_if_interrupted()
         attempt = run_js_once(
             project=project,
             image=latest_image,
@@ -895,6 +1056,7 @@ def process_instance(
     latest_check: bool,
     pull_missing: bool,
 ) -> InstanceResult:
+    raise_if_interrupted()
     instance_id = instance_dir.name
     spec = project_spec(project)
     result_dir = instance_dir / RESULT_SUBDIR
@@ -1011,6 +1173,7 @@ def process_instance(
 
     inst.status = "checked"
     for js_file in js_files:
+        raise_if_interrupted()
         file_result = invalid_native.get(js_file)
         if file_result is None:
             file_result = process_file(
@@ -1332,6 +1495,7 @@ def write_edge_csv(
 
 
 def grade_instance_worker(**kwargs: object) -> tuple[InstanceResult, float]:
+    raise_if_interrupted()
     started = time.monotonic()
     instance_dir = kwargs["instance_dir"]
     project = kwargs["project"]
@@ -1339,6 +1503,8 @@ def grade_instance_worker(**kwargs: object) -> tuple[InstanceResult, float]:
     assert isinstance(project, str)
     try:
         result = process_instance(**kwargs)  # type: ignore[arg-type]
+    except GradingInterrupted:
+        raise
     except Exception as exc:
         result = InstanceResult(
             project=project,
@@ -1367,6 +1533,7 @@ def grade_instances(
     pull_missing: bool,
     workers: int,
 ) -> list[InstanceResult]:
+    raise_if_interrupted()
     total = len(dirs)
     effective_workers = max(1, min(workers, total))
     results: list[InstanceResult | None] = [None] * total
@@ -1377,26 +1544,37 @@ def grade_instances(
             write_per_instance_files_csv(result_dir, result)
 
     if effective_workers == 1:
-        for idx, instance_dir in enumerate(dirs):
-            result, elapsed = grade_instance_worker(
-                project=project,
-                benchmark_dir=benchmark_dir,
-                instance_dir=instance_dir,
-                attempts=attempts,
-                timeout_sec=timeout_sec,
-                fixed_repo=fixed_repo,
-                latest_image=latest_image,
-                latest_check=latest_check,
-                pull_missing=pull_missing,
-            )
-            results[idx] = result
-            persist(idx, result)
-            _print(progress_line(idx + 1, total, result, elapsed))
+        try:
+            for idx, instance_dir in enumerate(dirs):
+                raise_if_interrupted()
+                result, elapsed = grade_instance_worker(
+                    project=project,
+                    benchmark_dir=benchmark_dir,
+                    instance_dir=instance_dir,
+                    attempts=attempts,
+                    timeout_sec=timeout_sec,
+                    fixed_repo=fixed_repo,
+                    latest_image=latest_image,
+                    latest_check=latest_check,
+                    pull_missing=pull_missing,
+                )
+                results[idx] = result
+                persist(idx, result)
+                _print(progress_line(idx + 1, total, result, elapsed))
+        except (KeyboardInterrupt, GradingInterrupted) as exc:
+            request_interrupt()
+            raise GradingInterrupted from exc
         return [result for result in results if result is not None]
 
-    with ThreadPoolExecutor(max_workers=effective_workers, thread_name_prefix=f"{project}-grade") as executor:
-        future_to_idx = {
-            executor.submit(
+    executor = ThreadPoolExecutor(
+        max_workers=effective_workers,
+        thread_name_prefix=f"{project}-grade",
+    )
+    try:
+        future_to_idx = {}
+        for idx, instance_dir in enumerate(dirs):
+            raise_if_interrupted()
+            future = executor.submit(
                 grade_instance_worker,
                 project=project,
                 benchmark_dir=benchmark_dir,
@@ -1407,22 +1585,28 @@ def grade_instances(
                 latest_image=latest_image,
                 latest_check=latest_check,
                 pull_missing=pull_missing,
-            ): idx
-            for idx, instance_dir in enumerate(dirs)
-        }
+            )
+            future_to_idx[future] = idx
+
         completed = 0
-        try:
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                result, elapsed = future.result()
-                results[idx] = result
-                persist(idx, result)
-                completed += 1
-                _print(progress_line(completed, total, result, elapsed))
-        except BaseException:
-            executor.shutdown(wait=False, cancel_futures=True)
-            common.force_cleanup_containers()
-            raise
+        for future in as_completed(future_to_idx):
+            raise_if_interrupted()
+            idx = future_to_idx[future]
+            result, elapsed = future.result()
+            results[idx] = result
+            persist(idx, result)
+            completed += 1
+            _print(progress_line(completed, total, result, elapsed))
+    except (KeyboardInterrupt, GradingInterrupted) as exc:
+        request_interrupt()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise GradingInterrupted from exc
+    except BaseException:
+        executor.shutdown(wait=False, cancel_futures=True)
+        cleanup_active_containers()
+        raise
+    else:
+        executor.shutdown(wait=True)
     return [result for result in results if result is not None]
 
 
@@ -1491,73 +1675,82 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    project = normalise_project(args.project)
-    spec = project_spec(project)
-    target_dir = args.target_dir.expanduser().resolve()
-    benchmark_dir = resolve_benchmark_dir(project, args.benchmark_dir)
-    fixed_repo = args.fixed_repo or str(spec["fixed_repo"])
-    latest_image = args.latest_image or str(spec["latest_image"])
-
-    if args.attempts < 1 or args.timeout < 1 or args.workers < 1:
-        _print("--attempts, --timeout, and --workers must be >= 1", file=sys.stderr)
-        return 1
-    if not target_dir.is_dir():
-        _print(f"target directory not found: {target_dir}", file=sys.stderr)
-        return 1
-    if benchmark_dir is None:
-        _print(f"benchmark directory not found for project {project}", file=sys.stderr)
-        return 1
+    install_interrupt_handler()
     try:
-        common.docker_preflight()
-    except RuntimeError as exc:
-        _print(str(exc), file=sys.stderr)
-        return 1
+        args = build_parser().parse_args(argv)
+        project = normalise_project(args.project)
+        spec = project_spec(project)
+        target_dir = args.target_dir.expanduser().resolve()
+        benchmark_dir = resolve_benchmark_dir(project, args.benchmark_dir)
+        fixed_repo = args.fixed_repo or str(spec["fixed_repo"])
+        latest_image = args.latest_image or str(spec["latest_image"])
 
-    if args.latest_check and not ensure_image(latest_image, pull_missing=args.pull_missing):
-        _print(f"latest image not available: {latest_image}", file=sys.stderr)
-        return 1
+        if args.attempts < 1 or args.timeout < 1 or args.workers < 1:
+            _print("--attempts, --timeout, and --workers must be >= 1", file=sys.stderr)
+            return 1
+        if not target_dir.is_dir():
+            _print(f"target directory not found: {target_dir}", file=sys.stderr)
+            return 1
+        if benchmark_dir is None:
+            _print(f"benchmark directory not found for project {project}", file=sys.stderr)
+            return 1
+        raise_if_interrupted()
+        try:
+            common.docker_preflight()
+        except RuntimeError as exc:
+            _print(str(exc), file=sys.stderr)
+            return 1
 
-    ts_dirs = resolve_timestamp_dirs(target_dir)
-    overall_ok = True
-    for ts_dir in ts_dirs:
-        dirs = collect_instance_dirs(ts_dir)
-        if not dirs:
-            _print(f"no instance directories in {ts_dir}", file=sys.stderr)
-            overall_ok = False
-            continue
+        if args.latest_check and not ensure_image(latest_image, pull_missing=args.pull_missing):
+            _print(f"latest image not available: {latest_image}", file=sys.stderr)
+            return 1
 
-        _print(f"\ncheck run: {ts_dir}")
-        _print(f"project={project} benchmark={benchmark_dir} fixed_repo={fixed_repo}")
-        _print(
-            f"latest_check={'yes' if args.latest_check else 'no'} "
-            f"latest_image={latest_image if args.latest_check else 'disabled'}"
-        )
-        _print(f"attempts={args.attempts} timeout={args.timeout}s workers={args.workers}")
+        ts_dirs = resolve_timestamp_dirs(target_dir)
+        overall_ok = True
+        for ts_dir in ts_dirs:
+            raise_if_interrupted()
+            dirs = collect_instance_dirs(ts_dir)
+            if not dirs:
+                _print(f"no instance directories in {ts_dir}", file=sys.stderr)
+                overall_ok = False
+                continue
 
-        results = grade_instances(
-            dirs=dirs,
-            project=project,
-            benchmark_dir=benchmark_dir,
-            attempts=args.attempts,
-            timeout_sec=args.timeout,
-            fixed_repo=fixed_repo,
-            latest_image=latest_image,
-            latest_check=args.latest_check,
-            pull_missing=args.pull_missing,
-            workers=args.workers,
-        )
-        print_summary(project, results, latest_check=args.latest_check)
+            _print(f"\ncheck run: {ts_dir}")
+            _print(f"project={project} benchmark={benchmark_dir} fixed_repo={fixed_repo}")
+            _print(
+                f"latest_check={'yes' if args.latest_check else 'no'} "
+                f"latest_image={latest_image if args.latest_check else 'disabled'}"
+            )
+            _print(f"attempts={args.attempts} timeout={args.timeout}s workers={args.workers}")
 
-        out_dir = args.out_dir or (ts_dir / "summary")
-        write_global_csvs(ts_dir, results, out_dir)
-        _print(f"wrote summary CSVs to {out_dir}")
+            results = grade_instances(
+                dirs=dirs,
+                project=project,
+                benchmark_dir=benchmark_dir,
+                attempts=args.attempts,
+                timeout_sec=args.timeout,
+                fixed_repo=fixed_repo,
+                latest_image=latest_image,
+                latest_check=args.latest_check,
+                pull_missing=args.pull_missing,
+                workers=args.workers,
+            )
+            raise_if_interrupted()
+            print_summary(project, results, latest_check=args.latest_check)
 
-        checked = [result for result in results if result.status == "checked"]
-        if len(checked) != len(results) or (checked and not any(result.success for result in checked)):
-            overall_ok = False
+            out_dir = args.out_dir or (ts_dir / "summary")
+            write_global_csvs(ts_dir, results, out_dir)
+            _print(f"wrote summary CSVs to {out_dir}")
 
-    return 0 if overall_ok else 1
+            checked = [result for result in results if result.status == "checked"]
+            if len(checked) != len(results) or (checked and not any(result.success for result in checked)):
+                overall_ok = False
+
+        return 0 if overall_ok else 1
+    except (KeyboardInterrupt, GradingInterrupted):
+        request_interrupt()
+        _print("interrupted; exiting cleanly")
+        return INTERRUPT_EXIT_CODE
 
 
 if __name__ == "__main__":
