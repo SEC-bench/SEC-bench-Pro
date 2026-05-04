@@ -71,6 +71,15 @@ HARMLESS_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"The following harmless error was encountered", re.I),
 ]
 
+INFRA_FAILURE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^Error: Invalid (?:long|short) option: ", re.MULTILINE),
+    re.compile(r"^Unrecognized option for [A-Za-z0-9_-]+: ", re.MULTILINE),
+    re.compile(
+        r"^(?:.*:\d+:\d+ )?Error: can't open .+: No such file or directory$",
+        re.MULTILINE,
+    ),
+]
+
 
 class _C:
     RED = "\033[0;31m"
@@ -322,6 +331,15 @@ def collect_instance_dirs(ts_dir: Path) -> list[Path]:
     return sorted(path for path in ts_dir.iterdir() if path.is_dir() and path.name != "summary")
 
 
+_JS_SKIP_NAME_PREFIXES: tuple[str, ...] = ("test", "tmp", "temp")
+
+
+def _is_grading_candidate_js(js_path: Path) -> bool:
+    """Exclude scratch / harness-style sources from grading."""
+    name = js_path.name
+    return js_path.suffix == ".js" and not name.startswith(_JS_SKIP_NAME_PREFIXES)
+
+
 def find_js_files(instance_dir: Path) -> list[Path]:
     excluded = {RESULT_SUBDIR, "similarity", "results"}
     files: list[Path] = []
@@ -331,7 +349,7 @@ def find_js_files(instance_dir: Path) -> list[Path]:
             if child.is_dir():
                 if child.name not in excluded:
                     walk(child)
-            elif child.is_file() and child.suffix == ".js":
+            elif child.is_file() and _is_grading_candidate_js(child):
                 files.append(child)
 
     walk(instance_dir)
@@ -407,10 +425,17 @@ def classify_fixed_output(
     exit_code: int | None,
     timed_out: bool = False,
 ) -> tuple[bool, str, str]:
-    """Classify fixed-image output without treating timeouts as mitigation."""
+    """Classify fixed-image output without requiring a zero exit code.
+
+    The fixed image is considered blocked when the PoC completes without a
+    valid crash signal. Nonzero JS-shell exits can be normal no-repro behavior
+    after a patch, but timeouts and infrastructure failures are not mitigation.
+    """
     if is_process_timeout(exit_code, timed_out):
         return False, TIMEOUT_ALERT_TYPE, "timeout"
 
+    if any(pattern.search(output) for pattern in INFRA_FAILURE_PATTERNS):
+        return False, classify_crash_type_precise(output), "infra_failure"
     if output.strip() and is_defensive_block(output):
         return True, classify_crash_type_precise(output), "defensive_block"
     if any(pattern.search(output) for pattern in HARMLESS_PATTERNS):
@@ -421,7 +446,7 @@ def classify_fixed_output(
         return False, alert_type, f"unblocked_crash:{alert_type}"
     if alert_type == "CLEAN":
         if exit_code not in (None, 0):
-            return False, alert_type, f"nonzero_clean_exit:{exit_code}"
+            return True, alert_type, f"nonzero_no_repro:{exit_code}"
         return True, alert_type, "clean"
     return True, alert_type, f"non_crash_stderr:{alert_type}"
 

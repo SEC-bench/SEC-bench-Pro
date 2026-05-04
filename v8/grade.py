@@ -371,6 +371,15 @@ def collect_instance_dirs(ts_dir: Path) -> list[Path]:
     return sorted(path for path in ts_dir.iterdir() if path.is_dir() and path.name != "summary")
 
 
+_JS_SKIP_NAME_PREFIXES: tuple[str, ...] = ("test", "tmp", "temp")
+
+
+def _is_grading_candidate_js(js_path: Path) -> bool:
+    """Exclude scratch / harness-style sources from grading."""
+    name = js_path.name
+    return js_path.suffix == ".js" and not name.startswith(_JS_SKIP_NAME_PREFIXES)
+
+
 def find_js_files(instance_dir: Path) -> list[Path]:
     excluded = {RESULT_SUBDIR, "similarity", "results"}
     files: list[Path] = []
@@ -380,7 +389,7 @@ def find_js_files(instance_dir: Path) -> list[Path]:
             if child.is_dir():
                 if child.name not in excluded:
                     walk(child)
-            elif child.is_file() and child.suffix == ".js":
+            elif child.is_file() and _is_grading_candidate_js(child):
                 files.append(child)
 
     walk(instance_dir)
@@ -467,10 +476,11 @@ def classify_fixed_output(
     exit_code: int | None,
     timed_out: bool = False,
 ) -> tuple[bool, str, str]:
-    """Classify fixed-image output without treating timeouts as mitigation.
+    """Classify fixed-image output without requiring a zero exit code.
 
-    A clean fixed run is acceptable only when the process actually completed.
-    Timeout-wrapper exits can otherwise look like empty-output clean runs.
+    The fixed image is considered blocked when the PoC completes without a
+    valid crash signal. Nonzero d8 exits can be normal no-repro behavior after
+    a patch, but timeouts and infrastructure failures are not mitigation.
     """
     if is_process_timeout(exit_code, timed_out):
         return False, TIMEOUT_ALERT_TYPE, "timeout"
