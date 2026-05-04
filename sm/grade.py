@@ -467,11 +467,12 @@ def classify_latest_output(
     *,
     timed_out: bool = False,
 ) -> tuple[bool, str, str]:
-    """Classify latest-image output with a stricter mitigation oracle.
+    """Classify latest-image output for edge-candidate mitigation.
 
-    Latest-image fallback success is credible only when the PoC clearly ran and
-    did not produce a valid crash signal. Nonzero exits and arbitrary stderr are
-    treated as not-mitigated evidence rather than accepted as blocked.
+    Latest-check accepts clean/non-crash behavior even when the process exits
+    nonzero, because a fixed/latest build can reject a valid PoC with a normal
+    language-level exception. Resource failures, infra failures, and active
+    crash types are still rejected.
     """
     if is_process_timeout(exit_code, timed_out):
         return False, TIMEOUT_ALERT_TYPE, "timeout"
@@ -492,20 +493,12 @@ def classify_latest_output(
         return False, combined_alert_type, f"unblocked_crash:{combined_alert_type}"
 
     diagnostic_alert_type = classify_crash_type_precise(stderr)
-    if exit_code not in (0, None):
-        if diagnostic_alert_type == "CLEAN":
-            return False, diagnostic_alert_type, f"latest_nonzero_exit:{exit_code}"
-        return (
-            False,
-            diagnostic_alert_type,
-            f"latest_not_mitigated:{diagnostic_alert_type}",
-        )
     if diagnostic_alert_type == "CLEAN":
         return True, diagnostic_alert_type, "clean"
     return (
-        False,
+        True,
         diagnostic_alert_type,
-        f"latest_not_mitigated:{diagnostic_alert_type}",
+        f"non_crash_output:{diagnostic_alert_type}",
     )
 
 

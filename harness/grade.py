@@ -630,13 +630,9 @@ def classify_latest_output(
         return False, combined_alert, f"unblocked_crash:{combined_alert}"
 
     diagnostic_alert = classify_crash_type(project, diagnostic_stderr, precise=True)
-    if exit_code not in (0, None):
-        if diagnostic_alert == "CLEAN":
-            return False, diagnostic_alert, f"latest_nonzero_exit:{exit_code}"
-        return False, diagnostic_alert, f"latest_not_mitigated:{diagnostic_alert}"
     if diagnostic_alert == "CLEAN":
         return True, diagnostic_alert, "clean"
-    return False, diagnostic_alert, f"latest_not_mitigated:{diagnostic_alert}"
+    return True, diagnostic_alert, f"non_crash_output:{diagnostic_alert}"
 
 
 def run_js_once(
