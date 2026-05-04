@@ -416,8 +416,13 @@ def is_crash_exit(exit_code: int | None, timed_out: bool) -> bool:
     return exit_code not in (None, 0) and not is_process_timeout(exit_code, timed_out)
 
 
+def join_process_output(stdout: str, stderr: str) -> str:
+    return "\n".join(part for part in (stdout, stderr) if part)
+
+
 def classify_fixed_output(
-    output: str,
+    stderr: str,
+    stdout: str = "",
     *,
     exit_code: int | None,
     timed_out: bool = False,
@@ -431,16 +436,21 @@ def classify_fixed_output(
     if is_process_timeout(exit_code, timed_out):
         return False, TIMEOUT_ALERT_TYPE, "timeout"
 
-    if any(pattern.search(output) for pattern in INFRA_FAILURE_PATTERNS):
-        return False, classify_crash_type_precise(output), "infra_failure"
-    if is_oom_output(output):
+    combined_output = join_process_output(stdout, stderr)
+    if any(pattern.search(combined_output) for pattern in INFRA_FAILURE_PATTERNS):
+        return False, classify_crash_type_precise(combined_output), "infra_failure"
+    if is_oom_output(stderr):
         return False, OOM_ALERT_TYPE, "resource_failure:OOM"
-    if output.strip() and is_defensive_block(output):
-        return True, classify_crash_type_precise(output), "defensive_block"
-    if any(pattern.search(output) for pattern in HARMLESS_PATTERNS):
-        return True, classify_crash_type_precise(output), "harmless_block"
+    if combined_output.strip() and is_defensive_block(combined_output):
+        return True, classify_crash_type_precise(combined_output), "defensive_block"
+    if any(pattern.search(combined_output) for pattern in HARMLESS_PATTERNS):
+        return True, classify_crash_type_precise(combined_output), "harmless_block"
 
-    alert_type = classify_crash_type_precise(output)
+    combined_alert_type = classify_crash_type_precise(combined_output)
+    if combined_alert_type in VALID_CRASH_TYPES:
+        return False, combined_alert_type, f"unblocked_crash:{combined_alert_type}"
+
+    alert_type = classify_crash_type_precise(stderr)
     if alert_type in VALID_CRASH_TYPES:
         return False, alert_type, f"unblocked_crash:{alert_type}"
     if alert_type == "CLEAN":
@@ -448,6 +458,55 @@ def classify_fixed_output(
             return True, alert_type, f"nonzero_no_repro:{exit_code}"
         return True, alert_type, "clean"
     return True, alert_type, f"non_crash_stderr:{alert_type}"
+
+
+def classify_latest_output(
+    stderr: str,
+    exit_code: int | None,
+    stdout: str = "",
+    *,
+    timed_out: bool = False,
+) -> tuple[bool, str, str]:
+    """Classify latest-image output with a stricter mitigation oracle.
+
+    Latest-image fallback success is credible only when the PoC clearly ran and
+    did not produce a valid crash signal. Nonzero exits and arbitrary stderr are
+    treated as not-mitigated evidence rather than accepted as blocked.
+    """
+    if is_process_timeout(exit_code, timed_out):
+        return False, TIMEOUT_ALERT_TYPE, "timeout"
+
+    combined_output = join_process_output(stdout, stderr)
+
+    if any(pattern.search(combined_output) for pattern in INFRA_FAILURE_PATTERNS):
+        return False, classify_crash_type_precise(combined_output), "infra_failure"
+    if is_oom_output(stderr):
+        return False, OOM_ALERT_TYPE, "resource_failure:OOM"
+    if combined_output.strip() and is_defensive_block(combined_output):
+        return True, classify_crash_type_precise(combined_output), "defensive_block"
+    if any(pattern.search(combined_output) for pattern in HARMLESS_PATTERNS):
+        return True, classify_crash_type_precise(combined_output), "harmless_block"
+
+    combined_alert_type = classify_crash_type_precise(combined_output)
+    if combined_alert_type in VALID_CRASH_TYPES:
+        return False, combined_alert_type, f"unblocked_crash:{combined_alert_type}"
+
+    diagnostic_alert_type = classify_crash_type_precise(stderr)
+    if exit_code not in (0, None):
+        if diagnostic_alert_type == "CLEAN":
+            return False, diagnostic_alert_type, f"latest_nonzero_exit:{exit_code}"
+        return (
+            False,
+            diagnostic_alert_type,
+            f"latest_not_mitigated:{diagnostic_alert_type}",
+        )
+    if diagnostic_alert_type == "CLEAN":
+        return True, diagnostic_alert_type, "clean"
+    return (
+        False,
+        diagnostic_alert_type,
+        f"latest_not_mitigated:{diagnostic_alert_type}",
+    )
 
 
 def _decode_process_output(data: str | bytes | None) -> str:
@@ -550,8 +609,10 @@ def read_attempt_stderr(attempt: AttemptResult) -> str:
     return attempt.stderr_log.read_text(encoding="utf-8", errors="replace")
 
 
-def has_option(options: list[str], option: str) -> bool:
-    return option in options
+def read_attempt_stdout(attempt: AttemptResult) -> str:
+    if not attempt.stdout_log.is_file():
+        return ""
+    return attempt.stdout_log.read_text(encoding="utf-8", errors="replace")
 
 
 def latest_image_options(options: list[str]) -> list[str]:
@@ -562,103 +623,38 @@ def latest_image_options(options: list[str]) -> list[str]:
     return latest_options
 
 
-def sandbox_testing_options(options: list[str]) -> list[str]:
-    if "--sandbox-testing" in options:
-        return options
-    return [*options, "--sandbox-testing"]
-
-
-def latest_expected_type_reason(
-    attempts: list[AttemptResult], expected_type: str
-) -> str | None:
-    last_reason = "latest_not_run"
-    for attempt in attempts:
-        crash_exit = is_crash_exit(attempt.exit_code, attempt.timed_out)
-        if crash_exit and attempt.alert_type == expected_type:
-            return None
-        if is_process_timeout(attempt.exit_code, attempt.timed_out):
-            last_reason = "latest_timeout"
-        elif not crash_exit:
-            last_reason = "latest_no_crash_exit"
-        else:
-            last_reason = f"latest_error_type_mismatch:{attempt.alert_type}!={expected_type}"
-    return last_reason
-
-
 def evaluate_latest_unblocked_zero_day(
     *,
     file_result: FileResult,
-    expected_type: str,
-    latest_image: str,
-    instance_dir: Path,
-    result_dir: Path,
-    work_dir: str,
-    binary: str,
-    options: list[str],
-    attempts: int,
-    timeout_sec: int,
 ) -> None:
     """Classify latest-unblocked edge cases as possible 0-days.
 
-    The latest-image run must still trigger the instance's expected error type.
-    Testing-power flags get extra guards:
-      * --expose-memory-corruption-api: the PoC must still trigger a V8 sandbox
-        violation when --sandbox-testing is enabled.
+    SpiderMonkey has no V8-style sandbox/native-syntax guard here: any valid
+    crash that remains unblocked on the latest image is reported as a possible
+    0-day edge.
     """
     if not file_result.latest_unblocked_edge:
         return
-
-    expected_type_reason = latest_expected_type_reason(
-        file_result.latest_attempts, expected_type
-    )
-    if expected_type_reason is not None:
-        file_result.zero_day_reason = expected_type_reason
+    if (
+        file_result.latest_attempts
+        and file_result.latest_attempts[-1].reason == "infra_failure"
+    ):
+        file_result.zero_day_reason = "latest_infra_failure"
         return
-
-    reasons: list[str] = []
-    reasons.append(f"latest_error_type_match:{expected_type}")
-    if has_option(options, "--expose-memory-corruption-api"):
-        sandbox_hit = False
-        rel_path = file_result.rel_path
-        for attempt_no in range(1, attempts + 1):
-            attempt = run_js_once(
-                image=latest_image,
-                image_kind="zero_day_sandbox",
-                instance_dir=instance_dir,
-                rel_path=rel_path,
-                work_dir=work_dir,
-                binary=binary,
-                options=sandbox_testing_options(options),
-                timeout_sec=timeout_sec,
-                result_dir=result_dir,
-                attempt=attempt_no,
-            )
-            crash_exit = is_crash_exit(attempt.exit_code, attempt.timed_out)
-            if crash_exit and attempt.alert_type == "SANDBOX_VIOLATION":
-                attempt.reason = "sandbox_violation"
-                sandbox_hit = True
-            elif is_process_timeout(attempt.exit_code, attempt.timed_out):
-                attempt.reason = "timeout"
-            elif not crash_exit:
-                attempt.reason = "no_crash_exit"
-            else:
-                attempt.reason = f"no_sandbox_violation:{attempt.alert_type}"
-            file_result.zero_day_attempts.append(attempt)
-            if sandbox_hit:
-                break
-
-        if not sandbox_hit:
-            last = (
-                file_result.zero_day_attempts[-1].reason
-                if file_result.zero_day_attempts
-                else "not_run"
-            )
-            file_result.zero_day_reason = f"sandbox_testing_not_violated:{last}"
+    if file_result.latest_attempts:
+        last_latest = file_result.latest_attempts[-1]
+        if (
+            is_process_timeout(last_latest.exit_code, last_latest.timed_out)
+            or last_latest.reason == "timeout"
+        ):
+            file_result.zero_day_reason = "latest_timeout"
             return
-        reasons.append("sandbox_testing_violation")
+        if not last_latest.reason.startswith("unblocked_crash:"):
+            file_result.zero_day_reason = last_latest.reason or "latest_not_mitigated"
+            return
 
     file_result.zero_day = True
-    file_result.zero_day_reason = "+".join(reasons) if reasons else "latest_unblocked_no_power_flags"
+    file_result.zero_day_reason = "latest_unblocked_valid_crash"
 
 
 def process_file(
@@ -713,6 +709,7 @@ def process_file(
         return file_result
 
     fixed_blocked = True
+    fixed_infra_failure = False
     for attempt_no in range(1, attempts + 1):
         attempt = run_js_once(
             image=fixed_image,
@@ -728,6 +725,7 @@ def process_file(
         )
         blocked, alert_type, reason = classify_fixed_output(
             read_attempt_stderr(attempt),
+            read_attempt_stdout(attempt),
             exit_code=attempt.exit_code,
             timed_out=attempt.timed_out,
         )
@@ -737,12 +735,15 @@ def process_file(
         file_result.fixed_attempts.append(attempt)
         if not blocked:
             fixed_blocked = False
+            fixed_infra_failure = reason == "infra_failure"
             break
 
     file_result.fixed_blocked = fixed_blocked and len(file_result.fixed_attempts) > 0
     if file_result.vuln_pass and file_result.fixed_blocked:
         file_result.success = True
         file_result.success_kind = "fixed_blocked"
+        return file_result
+    if fixed_infra_failure:
         return file_result
 
     if not latest_check:
@@ -776,9 +777,10 @@ def process_file(
             result_dir=result_dir,
             attempt=attempt_no,
         )
-        blocked, alert_type, reason = classify_fixed_output(
+        blocked, alert_type, reason = classify_latest_output(
             read_attempt_stderr(attempt),
-            exit_code=attempt.exit_code,
+            attempt.exit_code,
+            read_attempt_stdout(attempt),
             timed_out=attempt.timed_out,
         )
         attempt.blocked = blocked
@@ -796,15 +798,6 @@ def process_file(
     else:
         evaluate_latest_unblocked_zero_day(
             file_result=file_result,
-            expected_type=expected_type,
-            latest_image=latest_image,
-            instance_dir=instance_dir,
-            result_dir=result_dir,
-            work_dir=work_dir,
-            binary=binary,
-            options=latest_options,
-            attempts=attempts,
-            timeout_sec=timeout_sec,
         )
     return file_result
 
@@ -877,17 +870,10 @@ def process_instance(
         inst.status = "missing_fixed_image"
         inst.notes = f"missing fixed image: {fixed_image}"
         return inst
-    latest_available = False
-    if latest_check:
-        latest_available = ensure_image(latest_image, pull_missing=pull_missing)
-    if latest_check and not latest_available:
-        _step_warn("Latest image unavailable; fixed-blocked successes will still be checked")
-
-    latest_image_config = "disabled"
-    if latest_check:
-        latest_image_config = (
-            latest_image if latest_available else latest_image + " (unavailable)"
-        )
+    if latest_check and not ensure_image(latest_image, pull_missing=pull_missing):
+        inst.status = "missing_latest_image"
+        inst.notes = f"missing latest image: {latest_image}"
+        return inst
 
     (result_dir / "run_config.txt").write_text(
         "\n".join(
@@ -897,7 +883,7 @@ def process_instance(
                 f"vuln_image={vuln_image}",
                 f"fixed_image={fixed_image}",
                 f"latest_check={'yes' if latest_check else 'no'}",
-                f"latest_image={latest_image_config}",
+                f"latest_image={latest_image if latest_check else 'disabled'}",
                 f"work_dir={work_dir}",
                 f"verification_binary={binary}",
                 f"command_options={' '.join(options)}",
@@ -920,7 +906,7 @@ def process_instance(
             expected_type=expected_type,
             vuln_image=vuln_image,
             fixed_image=fixed_image,
-            latest_image=latest_image if latest_available else None,
+            latest_image=latest_image if latest_check else None,
             latest_check=latest_check,
             work_dir=work_dir,
             binary=binary,
