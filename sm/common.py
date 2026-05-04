@@ -34,6 +34,17 @@ VALID_CRASH_TYPE_ORDER = (
 VALID_CRASH_TYPES = frozenset(VALID_CRASH_TYPE_ORDER)
 TIMEOUT_EXIT_CODE = 124
 TIMEOUT_ALERT_TYPE = "TIMEOUT"
+OOM_ALERT_TYPE = "OOM"
+
+OOM_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"AddressSanitizer failed to allocate", re.IGNORECASE),
+    re.compile(r"ReserveShadowMemoryRange failed", re.IGNORECASE),
+    re.compile(r"ERROR: Failed to mmap", re.IGNORECASE),
+    re.compile(r"Fatal process out of memory", re.IGNORECASE),
+    re.compile(r"Hit MOZ_CRASH\(Out of memory", re.IGNORECASE),
+    re.compile(r"out of memory: failed to allocate", re.IGNORECASE),
+    re.compile(r"^out of memory$", re.IGNORECASE | re.MULTILINE),
+)
 
 
 def is_timeout_exit_code(exit_code: int | None) -> bool:
@@ -44,6 +55,11 @@ def is_timeout_exit_code(exit_code: int | None) -> bool:
 def is_process_timeout(exit_code: int | None, timed_out: bool = False) -> bool:
     """Return True for either local subprocess timeouts or timeout-wrapper exits."""
     return timed_out or is_timeout_exit_code(exit_code)
+
+
+def is_oom_output(text: str) -> bool:
+    """Return True for allocator/heap exhaustion diagnostics, not vulnerability crashes."""
+    return any(pattern.search(text) for pattern in OOM_PATTERNS)
 
 _ASAN_RE = re.compile(r"AddressSanitizer", re.IGNORECASE)
 _MOZ_CRASH_RE = re.compile(
@@ -66,10 +82,13 @@ def init_crash_counts() -> dict[str, int]:
 
 
 def _classify_crash_type(text: str) -> str:
-    """Order matters: ASAN > MOZ_CRASH > RUNTIME_CRASH > CLEAN.
+    """Order matters: OOM > ASAN > MOZ_CRASH > RUNTIME_CRASH > CLEAN.
 
-    Matches the precedence used by ``spidermonkey/crash_check.sh``.
+    OOM is classified first so resource exhaustion cannot masquerade as a
+    vulnerability crash in graders and fixed-image checks.
     """
+    if is_oom_output(text):
+        return OOM_ALERT_TYPE
     if _ASAN_RE.search(text):
         return "ASAN_CRASH"
     if _MOZ_CRASH_RE.search(text) or _ASSERTION_FAILURE_RE.search(text):

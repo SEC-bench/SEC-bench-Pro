@@ -20,6 +20,15 @@ VALID_CRASH_TYPE_ORDER = (
 VALID_CRASH_TYPES = frozenset[str](VALID_CRASH_TYPE_ORDER)
 TIMEOUT_EXIT_CODE = 124
 TIMEOUT_ALERT_TYPE = "TIMEOUT"
+OOM_ALERT_TYPE = "OOM"
+
+OOM_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"AddressSanitizer failed to allocate", re.IGNORECASE),
+    re.compile(r"ReserveShadowMemoryRange failed", re.IGNORECASE),
+    re.compile(r"ERROR: Failed to mmap", re.IGNORECASE),
+    re.compile(r"\b(?:JavaScript heap|process) out of memory\b", re.IGNORECASE),
+    re.compile(r"\bout of memory(?:: failed to allocate)?\b", re.IGNORECASE),
+)
 
 
 def is_timeout_exit_code(exit_code: int | None) -> bool:
@@ -30,6 +39,11 @@ def is_timeout_exit_code(exit_code: int | None) -> bool:
 def is_process_timeout(exit_code: int | None, timed_out: bool = False) -> bool:
     """Return True for either local subprocess timeouts or timeout-wrapper exits."""
     return timed_out or is_timeout_exit_code(exit_code)
+
+
+def is_oom_output(text: str) -> bool:
+    """Return True for allocator/heap exhaustion diagnostics, not vulnerability crashes."""
+    return any(pattern.search(text) for pattern in OOM_PATTERNS)
 
 # Native-syntax intrinsics observed in verified V8 instance PoCs that require
 # `--allow-natives-syntax`. Keep this list conservative: these intrinsics are
@@ -487,6 +501,8 @@ def init_crash_counts() -> dict[str, int]:
 
 def _classify_crash_type(text: str, *, precise: bool) -> str:
     """Classify stderr into benchmark-level or precise crash categories."""
+    if is_oom_output(text):
+        return OOM_ALERT_TYPE
     if _SANDBOX_RE.search(text):
         return "SANDBOX_VIOLATION"
     if _ASAN_RE.search(text):

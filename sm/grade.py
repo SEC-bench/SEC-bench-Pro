@@ -37,6 +37,7 @@ from rich.console import Console
 from rich.table import Table
 
 from common import (
+    OOM_ALERT_TYPE,
     TIMEOUT_ALERT_TYPE,
     VALID_CRASH_TYPE_ORDER,
     VALID_CRASH_TYPES,
@@ -44,6 +45,7 @@ from common import (
     classify_crash_type_precise,
     init_crash_counts,
     is_defensive_block,
+    is_oom_output,
     is_process_timeout,
     is_timeout_exit_code,
 )
@@ -60,11 +62,6 @@ LATEST_REQUIRED_OPTIONS = ("--fuzzing-safe",)
 _CONSOLE = Console()
 
 HARMLESS_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"AddressSanitizer failed to allocate", re.I),
-    re.compile(r"ReserveShadowMemoryRange failed", re.I),
-    re.compile(r"out of memory: failed to allocate", re.I),
-    re.compile(r"ERROR: Failed to mmap", re.I),
-    re.compile(r"Fatal process out of memory: decommitting WasmNull payload", re.I),
     re.compile(r"Caught harmless memory access violation", re.I),
     re.compile(r"Caught harmless ASan fault", re.I),
     re.compile(r"Caught harmless signal", re.I),
@@ -436,6 +433,8 @@ def classify_fixed_output(
 
     if any(pattern.search(output) for pattern in INFRA_FAILURE_PATTERNS):
         return False, classify_crash_type_precise(output), "infra_failure"
+    if is_oom_output(output):
+        return False, OOM_ALERT_TYPE, "resource_failure:OOM"
     if output.strip() and is_defensive_block(output):
         return True, classify_crash_type_precise(output), "defensive_block"
     if any(pattern.search(output) for pattern in HARMLESS_PATTERNS):
@@ -695,7 +694,9 @@ def process_file(
             attempt=attempt_no,
         )
         crash_exit = is_crash_exit(attempt.exit_code, attempt.timed_out)
-        if crash_exit and attempt.alert_type == expected_type and attempt.alert_type in VALID_CRASH_TYPES:
+        if crash_exit and attempt.alert_type == OOM_ALERT_TYPE:
+            attempt.reason = "invalid_error_type:OOM"
+        elif crash_exit and attempt.alert_type == expected_type and attempt.alert_type in VALID_CRASH_TYPES:
             attempt.reason = "error_type_match"
             file_result.vuln_pass = True
         elif is_process_timeout(attempt.exit_code, attempt.timed_out):

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shlex
 import subprocess
 import sys
@@ -22,10 +21,12 @@ import uuid
 from pathlib import Path
 
 from common import (
+    OOM_ALERT_TYPE,
     VALID_CRASH_TYPES,
     classify_crash_type_precise,
     compute_match,
     is_defensive_block,
+    is_oom_output,
     is_process_timeout,
 )
 
@@ -34,17 +35,6 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_FIXED_REPO = "hwiwonlee/sm.x86_64.fixed"
 DEFAULT_ATTEMPTS = 5
 DEFAULT_TIMEOUT = 300
-
-HARMLESS_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"AddressSanitizer failed to allocate", re.I),
-    re.compile(r"ReserveShadowMemoryRange failed", re.I),
-    re.compile(r"out of memory: failed to allocate", re.I),
-    re.compile(r"ERROR: Failed to mmap", re.I),
-    # SpiderMonkey-specific OOM signatures from the JS shell.
-    re.compile(r"out of memory$", re.I | re.M),
-    re.compile(r"Hit MOZ_CRASH\(Out of memory", re.I),
-]
-
 
 def image_exists(image: str) -> bool:
     proc = subprocess.run(
@@ -71,11 +61,11 @@ def classify_fixed_output(
         if match.matched:
             return f"REPRODUCED:{match.reason}", False
 
+    if is_oom_output(output):
+        return f"RESOURCE_FAILURE:{OOM_ALERT_TYPE}", False
+
     if output.strip() and is_defensive_block(output):
         return "BLOCKED_DEFENSIVE", True
-
-    if any(pattern.search(output) for pattern in HARMLESS_PATTERNS):
-        return "BLOCKED_HARMLESS", True
 
     actual_type = classify_crash_type_precise(output)
     if actual_type in VALID_CRASH_TYPES:

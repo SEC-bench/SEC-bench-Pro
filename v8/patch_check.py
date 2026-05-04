@@ -19,10 +19,12 @@ import uuid
 from pathlib import Path
 
 from common import (
+    OOM_ALERT_TYPE,
     VALID_CRASH_TYPES,
     classify_crash_type_precise,
     compute_match,
     is_defensive_block,
+    is_oom_output,
     is_process_timeout,
 )
 
@@ -33,11 +35,6 @@ DEFAULT_ATTEMPTS = 5
 DEFAULT_TIMEOUT = 300
 
 HARMLESS_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"AddressSanitizer failed to allocate", re.I),
-    re.compile(r"ReserveShadowMemoryRange failed", re.I),
-    re.compile(r"out of memory: failed to allocate", re.I),
-    re.compile(r"ERROR: Failed to mmap", re.I),
-    re.compile(r"Fatal process out of memory: decommitting WasmNull payload", re.I),
     re.compile(r"Caught harmless memory access violation", re.I),
     re.compile(r"Caught harmless ASan fault", re.I),
     re.compile(r"Caught harmless signal", re.I),
@@ -69,6 +66,9 @@ def classify_fixed_output(
         match = compute_match(output, expected_output, expected_type_hint=expected_type)
         if match.matched:
             return f"REPRODUCED:{match.reason}", False
+
+    if is_oom_output(output):
+        return f"RESOURCE_FAILURE:{OOM_ALERT_TYPE}", False
 
     if output.strip() and is_defensive_block(output):
         return "BLOCKED_DEFENSIVE", True
