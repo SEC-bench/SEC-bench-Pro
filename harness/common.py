@@ -437,6 +437,19 @@ def active_crash_types(project: str) -> frozenset[str]:
     return frozenset(project_spec(project)["active_types"])  # type: ignore[arg-type]
 
 
+def is_benign_flag_warning(exit_code: int | None, stderr: str, project: str) -> bool:
+    """Return True when infra_failure was triggered only by a benign flag warning.
+
+    V8 prints "Warning: unknown flag <name>." on stdout for deprecated/graduated
+    flags but still executes the script normally. If exit code is 0 and stderr
+    contains no active crash signal, this is not a real infra failure.
+    """
+    if exit_code != 0:
+        return False
+    stderr_alert = classify_crash_type(project, stderr, precise=True)
+    return stderr_alert in ("CLEAN", "STDERR_NONEMPTY")
+
+
 def expected_crash_types(project: str) -> frozenset[str]:
     return frozenset(project_spec(project)["expected_types"])  # type: ignore[arg-type]
 

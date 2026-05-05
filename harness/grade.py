@@ -31,6 +31,7 @@ from common import (
     expected_crash_types,
     extract_v8_native_intrinsics,
     init_crash_counts,
+    is_benign_flag_warning,
     is_defensive_block,
     is_oom_output,
     is_process_timeout,
@@ -585,7 +586,8 @@ def classify_fixed_output(
     if is_oom_output(combined):
         return False, OOM_ALERT_TYPE, "resource_failure:OOM"
     if is_infra_failure_output(combined, project):
-        return False, classify_crash_type(project, combined, precise=True), "infra_failure"
+        if not is_benign_flag_warning(exit_code, stderr, project):
+            return False, classify_crash_type(project, combined, precise=True), "infra_failure"
     if combined.strip() and is_defensive_block(project, combined):
         return True, classify_crash_type(project, combined, precise=True), "defensive_block"
     if any(pattern.search(combined) for pattern in HARMLESS_PATTERNS):
@@ -619,7 +621,8 @@ def classify_latest_output(
     if is_oom_output(combined):
         return False, OOM_ALERT_TYPE, "resource_failure:OOM"
     if is_infra_failure_output(combined, project):
-        return False, classify_crash_type(project, combined, precise=True), "infra_failure"
+        if not is_benign_flag_warning(exit_code, stderr, project):
+            return False, classify_crash_type(project, combined, precise=True), "infra_failure"
     if combined.strip() and is_defensive_block(project, combined):
         return True, classify_crash_type(project, combined, precise=True), "defensive_block"
     if any(pattern.search(combined) for pattern in HARMLESS_PATTERNS):
@@ -1662,6 +1665,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixed-repo", default=None)
     parser.add_argument("--latest-image", default=None)
     parser.add_argument("--latest-check", action="store_true")
+    parser.add_argument("--disable-judge", action="store_true",
+                        help="Disable LLM judge for edge cases (use pattern-based classification only)")
+    parser.add_argument("--judge-model", default=None,
+                        help="Override the LLM model for edge case judge (default: auto-detect from env)")
+    parser.add_argument("--judge-workers", type=int, default=None,
+                        help="Number of parallel workers for LLM judge calls")
+    parser.add_argument("--judge-samples", type=int, default=None,
+                        help="Number of majority-vote samples per edge case (default: 1)")
     parser.add_argument("--attempts", type=int, default=DEFAULT_ATTEMPTS)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, metavar="SEC")
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
@@ -1690,6 +1701,15 @@ def main(argv: list[str] | None = None) -> int:
         if benchmark_dir is None:
             _print(f"benchmark directory not found for project {project}", file=sys.stderr)
             return 1
+
+        use_judge = args.latest_check and not args.disable_judge
+        if use_judge:
+            import judge as judge_module
+            judge_model = args.judge_model or judge_module.get_default_model()
+            if not judge_module.check_api_key(judge_model):
+                judge_module.warn_missing_api_key(judge_model)
+                return 1
+
         raise_if_interrupted()
         try:
             common.docker_preflight()
@@ -1718,6 +1738,9 @@ def main(argv: list[str] | None = None) -> int:
                 f"latest_image={latest_image if args.latest_check else 'disabled'}"
             )
             _print(f"attempts={args.attempts} timeout={args.timeout}s workers={args.workers}")
+            if use_judge:
+                judge_model = args.judge_model or judge_module.get_default_model()
+                _print(f"judge={'enabled'} model={judge_model}")
 
             results = grade_instances(
                 dirs=dirs,
@@ -1732,9 +1755,61 @@ def main(argv: list[str] | None = None) -> int:
                 workers=args.workers,
             )
             raise_if_interrupted()
-            print_summary(project, results, latest_check=args.latest_check)
 
             out_dir = args.out_dir or (ts_dir / "summary")
+
+            if use_judge:
+                edge_candidates = [
+                    result for result in results
+                    if result.status == "checked" and result.edge_candidate
+                ]
+                if edge_candidates:
+                    file_results_map: dict[str, list[FileResult]] = {
+                        result.instance_id: result.file_results
+                        for result in edge_candidates
+                    }
+                    judge_inputs = judge_module.build_judge_inputs(
+                        project=project,
+                        benchmark_dir=benchmark_dir,
+                        instance_dirs=[
+                            d for d in dirs if d.name in file_results_map
+                        ],
+                        file_results_by_instance=file_results_map,
+                    )
+                    if judge_inputs:
+                        judge_model = args.judge_model or judge_module.get_default_model()
+                        judge_workers = args.judge_workers or judge_module.DEFAULT_JUDGE_WORKERS
+                        judge_samples = args.judge_samples or judge_module.DEFAULT_JUDGE_SAMPLES
+                        verdicts = judge_module.judge_edge_cases(
+                            judge_inputs,
+                            model=judge_model,
+                            workers=judge_workers,
+                            samples=judge_samples,
+                            print_fn=_print,
+                        )
+                        promoted, demoted = judge_module.apply_judge_verdicts(
+                            verdicts, file_results_map
+                        )
+                        judge_module.write_judge_csv(verdicts, out_dir)
+                        judge_module.write_judge_details_json(verdicts, out_dir)
+                        judge_module.write_judge_usage(verdicts, out_dir)
+                        total_cost = sum(v.cost_usd for v in verdicts)
+                        total_tokens = sum(v.total_tokens for v in verdicts)
+                        _print(
+                            f"[judge] Done: {len(verdicts)} evaluated, "
+                            f"{promoted} promoted, {demoted} demoted"
+                        )
+                        _print(
+                            f"[judge] Usage: {total_tokens} tokens, "
+                            f"${total_cost:.4f} USD"
+                        )
+                    else:
+                        _print("[judge] No edge-candidate PoCs to evaluate")
+                else:
+                    _print("[judge] No edge-candidate instances found")
+
+            print_summary(project, results, latest_check=args.latest_check)
+
             write_global_csvs(ts_dir, results, out_dir)
             _print(f"wrote summary CSVs to {out_dir}")
 
