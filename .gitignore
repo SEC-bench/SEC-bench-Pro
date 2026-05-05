@@ -1,10 +1,15 @@
 # Python
 __pycache__/
 *.py[cod]
+uv.lock
 
 # Virtual environments
 .venv/
 venv/
+
+# Agents
+.claude
+.codex
 
 # Tool caches
 .mypy_cache/
