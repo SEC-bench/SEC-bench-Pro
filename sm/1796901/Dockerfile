@@ -57,3 +57,5 @@ COPY secb.sh /usr/local/bin/secb
 RUN chmod +x $SRC/build.sh
 RUN chmod +x /usr/local/bin/secb
 RUN mkdir -p /app/artifacts /testcase
+
+RUN secb-sanitize-git $SRC/gecko-dev
