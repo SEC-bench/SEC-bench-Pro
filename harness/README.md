@@ -85,7 +85,7 @@ A config (see `harness/configs/*`) specifies at minimum:
 ```toml
 model           = "us.anthropic.claude-sonnet-4-6-v1"
 provider        = "bedrock"                                 # agent-specific
-instances       = ["41494611", "324596281", ...]            # instance ids to evaluate
+instances       = ["41494611", "324596281"]                 # instance ids to evaluate
 outdir          = "output/path"
 timeout         = 5400                                      # per-instance agent timeout, seconds
 prompt_template = "../prompts/baseline/task_prompt_v8.j2"
