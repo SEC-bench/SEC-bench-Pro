@@ -56,3 +56,5 @@ RUN chmod +x $SRC/build.sh
 RUN chmod +x /usr/local/bin/secb
 RUN mkdir -p /app/artifacts
 RUN mkdir -p /testcase
+
+RUN secb-sanitize-git $SRC/gecko-dev
