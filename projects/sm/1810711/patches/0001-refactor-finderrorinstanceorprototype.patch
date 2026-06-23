@@ -1,0 +1,69 @@
+From 5461a647546a79ff479804263a3b7ef114eaf0f7 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 24 Jan 2023 00:27:33 +0000
+Subject: [PATCH] Bug 1810711: Refactor FindErrorInstanceOrPrototype r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D167105
+---
+ js/src/vm/ErrorObject.cpp | 42 +++++++++++++++++----------------------
+ 1 file changed, 18 insertions(+), 24 deletions(-)
+
+diff --git a/js/src/vm/ErrorObject.cpp b/js/src/vm/ErrorObject.cpp
+index 69f51dda01583..4cc3e075a4d87 100644
+--- a/js/src/vm/ErrorObject.cpp
++++ b/js/src/vm/ErrorObject.cpp
+@@ -615,36 +615,30 @@ static bool FindErrorInstanceOrPrototype(JSContext* cx, HandleObject obj,
+   //   (new NYI).stack
+   // to continue returning stacks that are useless, but at least don't throw.
+ 
+-  RootedObject target(cx, CheckedUnwrapStatic(obj));
+-  if (!target) {
+-    ReportAccessDenied(cx);
+-    return false;
+-  }
+-
+-  RootedObject proto(cx);
+-  while (!IsErrorProtoKey(StandardProtoKeyOrNull(target))) {
+-    if (!GetPrototype(cx, target, &proto)) {
++  RootedObject curr(cx, obj);
++  RootedObject target(cx);
++  do {
++    target = CheckedUnwrapStatic(curr);
++    if (!target) {
++      ReportAccessDenied(cx);
+       return false;
+     }
+-
+-    if (!proto) {
+-      // We walked the whole prototype chain and did not find an Error
+-      // object.
+-      JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+-                                JSMSG_INCOMPATIBLE_PROTO, js_Error_str,
+-                                "(get stack)", obj->getClass()->name);
+-      return false;
++    if (IsErrorProtoKey(StandardProtoKeyOrNull(target))) {
++      result.set(target);
++      return true;
+     }
+ 
+-    target = CheckedUnwrapStatic(proto);
+-    if (!target) {
+-      ReportAccessDenied(cx);
++    if (!GetPrototype(cx, curr, &curr)) {
+       return false;
+     }
+-  }
+-
+-  result.set(target);
+-  return true;
++  } while (curr);
++
++  // We walked the whole prototype chain and did not find an Error
++  // object.
++  JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
++                            JSMSG_INCOMPATIBLE_PROTO, js_Error_str,
++                            "(get stack)", obj->getClass()->name);
++  return false;
+ }
+ 
+ static MOZ_ALWAYS_INLINE bool IsObject(HandleValue v) { return v.isObject(); }

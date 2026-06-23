@@ -1,0 +1,24 @@
+From 2b8155c2c4c299955d4ae81423992ed56a838aee Mon Sep 17 00:00:00 2001
+From: "Rong \"Mantle\" Bao" <webmaster@csmantle.top>
+Date: Mon, 8 Sep 2025 15:03:03 +0000
+Subject: [PATCH] Bug 1987290 - Part 1: Use get() instead of operator[] to get
+ arguments in FinalizationRegistryObject::unregister. r=jonco
+
+Differential Revision: https://phabricator.services.mozilla.com/D264002
+---
+ js/src/builtin/FinalizationRegistryObject.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/js/src/builtin/FinalizationRegistryObject.cpp b/js/src/builtin/FinalizationRegistryObject.cpp
+index fc855aff4e0d4..73492edadc146 100644
+--- a/js/src/builtin/FinalizationRegistryObject.cpp
++++ b/js/src/builtin/FinalizationRegistryObject.cpp
+@@ -617,7 +617,7 @@ bool FinalizationRegistryObject::unregister(JSContext* cx, unsigned argc,
+       cx, &args.thisv().toObject().as<FinalizationRegistryObject>());
+ 
+   // 4. If Type(unregisterToken) is not Object, throw a TypeError exception.
+-  RootedValue unregisterToken(cx, args[0]);
++  RootedValue unregisterToken(cx, args.get(0));
+   if (!CanBeHeldWeakly(unregisterToken)) {
+     JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+                               JSMSG_BAD_UNREGISTER_TOKEN,

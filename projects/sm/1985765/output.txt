@@ -1,0 +1,63 @@
+[11] Assertion failure: !gc::IsAboutToBeFinalized(r.front().value()), at /src/gecko-dev/js/src/gc/WeakMap-inl.h:424
+#01: ???[/out/js +0x3b66e7d]
+#02: ???[/out/js +0x3b60900]
+#03: JS::Zone::sweepWeakMaps(JSTracer*)[/out/js +0x45550e3]
+#04: ???[/out/js +0x4554d44]
+#05: ???[/out/js +0x447aff4]
+#06: ???[/out/js +0x4418b03]
+#07: ???[/out/js +0x44192a9]
+#08: ???[/out/js +0x32afbea]
+#09: ???[/out/js +0x32af956]
+#10: ???[/out/js +0x331624f]
+#11: ???[/out/js +0x3315c8c]
+#12: ???[/out/js +0x333d33f]
+#13: ???[/out/js +0x2d31ca7]
+#14: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x9caa4]
+#15: __clone[/lib/x86_64-linux-gnu/libc.so.6 +0x129a64]
+#16: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x561ad8ebeea9 bp 0x7ba52f182650 sp 0x7ba52f182580 T5)
+==11==The signal is caused by a WRITE memory access.
+==11==Hint: address points to the zero page.
+    #0 0x561ad8ebeea9 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:248:3
+    #1 0x561ad8ebeea9 in js::WeakMap<JS::Value, JS::Value>::assertEntriesNotAboutToBeFinalized() /src/gecko-dev/js/src/gc/WeakMap-inl.h:424:5
+    #2 0x561ad8eb88ff in js::WeakMap<JS::Value, JS::Value>::traceWeakEdges(JSTracer*) /src/gecko-dev/js/src/gc/WeakMap-inl.h:340:3
+    #3 0x561ad98ad0e2 in JS::Zone::sweepWeakMaps(JSTracer*) /src/gecko-dev/js/src/gc/WeakMap.cpp:144:10
+    #4 0x561ad98acd43 in js::gc::GCRuntime::sweepWeakMaps() /src/gecko-dev/js/src/gc/Sweeping.cpp:1387:11
+    #5 0x561ad97d2ff3 in js::gc::AutoRunParallelTask::run(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCInternals.h:155:5
+    #6 0x561ad9770b02 in js::GCParallelTask::runTask(JS::GCContext*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:218:3
+    #7 0x561ad97712a8 in js::GCParallelTask::runHelperThreadTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/gc/GCParallelTask.cpp:200:3
+    #8 0x561ad8607be9 in js::GlobalHelperThreadState::runTaskLocked(JS::HelperThreadTask*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:668:11
+    #9 0x561ad8607955 in js::GlobalHelperThreadState::runOneTask(JS::HelperThreadTask*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:624:3
+    #10 0x561ad866e24e in js::HelperThread::threadLoop(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:324:25
+    #11 0x561ad866dc8b in js::HelperThread::ThreadMain(js::InternalThreadPool*, js::HelperThread*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:251:11
+    #12 0x561ad869533e in void js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::callMain<0ul, 1ul>(std::integer_sequence<unsigned long, 0ul, 1ul>) /src/gecko-dev/js/src/threading/Thread.h:228:5
+    #13 0x561ad869533e in js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::Start(void*) /src/gecko-dev/js/src/threading/Thread.h:217:11
+    #14 0x561ad8089ca6 in asan_thread_start(void*) /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+    #15 0x7fa53297daa3  (/lib/x86_64-linux-gnu/libc.so.6+0x9caa3) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #16 0x7fa532a0aa63 in clone (/lib/x86_64-linux-gnu/libc.so.6+0x129a63) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+
+==11==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ba52f1825e0  rcx = 0x00000000000001a8  rdx = 0x0000000000000000  
+rdi = 0x0000561adc0ff0f0  rsi = 0x00007ba52f182538  rbp = 0x00007ba52f182650  rsp = 0x00007ba52f182580  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000f74a5e304b8  r13 = 0xaaaaaaaaaaaaaaaa  r14 = 0x00007ba52f182580  r15 = 0xfffba5d537968100  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:248:3 in MOZ_CrashSequence(void*, long)
+Thread T5 created by T0 here:
+    #0 0x561ad8071e51 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x561ad84233ed in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x561ad868863e in bool js::Thread::init<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>(void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*&&) /src/gecko-dev/js/src/threading/Thread.h:90:16
+    #3 0x561ad866c394 in js::HelperThread::init(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:241:17
+    #4 0x561ad866c394 in js::InternalThreadPool::ensureThreadCount(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:147:29
+    #5 0x561ad866c0f9 in js::InternalThreadPool::Initialize(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:121:18
+    #6 0x561ad85fff91 in js::GlobalHelperThreadState::ensureInitialized() /src/gecko-dev/js/src/vm/HelperThreads.cpp:175:10
+    #7 0x561ad89f4c6c in JSRuntime::init(JSContext*, unsigned int) /src/gecko-dev/js/src/vm/Runtime.cpp:181:32
+    #8 0x561ad86ad75d in js::NewContext(unsigned int, JSRuntime*) /src/gecko-dev/js/src/vm/JSContext.cpp:189:17
+    #9 0x561ad80e7cc5 in main /src/gecko-dev/js/src/shell/js.cpp:12570:25
+    #10 0x7fa53290b1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x7fa53290b28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x561ad7feaa44 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c92a44) (BuildId: 6bdfa0215200b8a8e8bb550f0c5a364e)
+
+==11==ABORTING

@@ -1,0 +1,47 @@
+[13] Assertion failure: generator->isCompleted(), at /src/gecko-dev/js/src/vm/AsyncIteration.cpp:605
+#01: ???[/out/js +0x3152b72]
+#02: ???[/out/js +0x312138f]
+#03: ???[/out/js +0x35fbd63]
+#04: ???[/out/js +0x2e8b248]
+#05: ???[/out/js +0x2e3d29f]
+#06: ???[/out/js +0x2e3f261]
+#07: JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>)[/out/js +0x317b7e2]
+#08: ???[/out/js +0x338fcb6]
+#09: js::RunJobs(JSContext*)[/out/js +0x338f373]
+#10: ???[/out/js +0x2c50fc8]
+#11: ???[/out/js +0x2c2d7e0]
+#12: ???[/out/js +0x2c1f54c]
+#13: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#14: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#15: _start[/out/js +0x2b21fe5]
+#16: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6015326c1ba7 bp 0x7fff78193c30 sp 0x7fff78193aa0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6015326c1ba7 in AsyncGeneratorDrainQueue(JSContext*, JS::Handle<js::AsyncGeneratorObject*>) /src/gecko-dev/js/src/vm/AsyncIteration.cpp:605:3
+    #1 0x60153269038e in js::AsyncGeneratorPromiseReactionJob(JSContext*, js::PromiseHandler, JS::Handle<js::AsyncGeneratorObject*>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/AsyncIteration.cpp
+    #2 0x601532b6ad62 in PromiseReactionJob(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/Promise.cpp:2185:12
+    #3 0x6015323fa247 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:487:13
+    #4 0x6015323ac29e in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:581:12
+    #5 0x6015323ae260 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:680:8
+    #6 0x6015326ea7e1 in JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CallAndConstruct.cpp:119:10
+    #7 0x6015328fecb5 in JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JSObject*>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/obj-debug-asan/dist/include/js/CallAndConstruct.h:110:10
+    #8 0x6015328fecb5 in js::InternalJobQueue::runJobs(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:873:14
+    #9 0x6015328fe372 in js::RunJobs(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:810:17
+    #10 0x6015321bffc7 in RunShellJobs(JSContext*) /src/gecko-dev/js/src/shell/js.cpp:1292:5
+    #11 0x60153219c7df in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11517:5
+    #12 0x60153218e54b in main /src/gecko-dev/js/src/shell/js.cpp:12033:12
+    #13 0x7a7c96d5f1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #14 0x7a7c96d5f28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #15 0x601532090fe4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b21fe4) (BuildId: fcad7a375712729bf803c37ed1c5b104)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fff78194090  rcx = 0x00006015300dc540  rdx = 0x0000000000000000  
+rdi = 0x0000601536297c90  rsi = 0x00007fff78193a58  rbp = 0x00007fff78193c30  rsp = 0x00007fff78193aa0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fffef03275c  r13 = 0x0000767c8d2006e0  r14 = 0x0000786c961e0080  r15 = 0x00000fffef032812  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/vm/AsyncIteration.cpp:605:3 in AsyncGeneratorDrainQueue(JSContext*, JS::Handle<js::AsyncGeneratorObject*>)
+==13==ABORTING

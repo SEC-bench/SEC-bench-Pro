@@ -1,0 +1,46 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:379140430",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/runtime/runtime-wasm.cc"
+  ],
+  "target_subdir": [
+    "src/runtime"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability exists in Runtime_TierUpWasmToJSWrapper (src/runtime/runtime-wasm.cc). When a JS function is exported from one Wasm module and imported into another module's indirect function table, WasmImportData::call_origin is set to an in-sandbox (untrusted) Tuple2 object containing (WasmInstanceObject, Smi call_origin_index). The sign of the Smi encodes the origin type: negative means import table index, positive means indirect function table index. In Runtime_TierUpWasmToJSWrapper, the runtime reads call_origin_index directly from the untrusted Tuple2 without verifying it is consistent with the actual signature stored in the trusted WasmImportData. An attacker can corrupt the in-sandbox Tuple2 to set call_origin_index to a negative Smi, causing CallOriginIsImportIndex() to return true. This forces the runtime to look up sig_index from a different function's canonical signature (from call_origin_module->functions[func_index]) rather than validating it against import_data->sig(). The existing SBXCHECK(sig_index.valid()) only confirms a signature was found, but cannot detect the mismatch between the retrieved sig_index and the actual sig from the trusted WasmImportData. The compiled WasmToJsWrapper is then compiled using sig (correct) but installed under the wrong sig_index (confused), creating a signature confusion that results in calling a JS function with an incorrect calling convention and enabling arbitrary address read/write outside the V8 sandbox.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Minimal compatibility fix: derive Runtime_TierUpWasmToJSWrapper's canonical signature index from trusted WasmImportData::sig() and validate table call_origin only as an origin check.",
+      "context": "compatibility-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "0d15bbf1fb92f435e10c14f858d82d4cca851bf4 [wasm] Store canonicalized signature pointers on imports",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5890288",
+      "source_cl": 5890288,
+      "source_commit": "0d15bbf1fb92f435e10c14f858d82d4cca851bf4"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-reject-corrupt-cross-instance-call-origin.patch",
+      "apply_in_v8_repo": true,
+      "role": "auxiliary",
+      "sequence": 2,
+      "description": "Reject corrupted cross-instance WasmImportData call origins before wrapper tier-up when the Tuple2 origin no longer encodes a table slot.",
+      "context": "compatibility-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "74caf5449508c72236970e5d9e01b7212d609122 [wasm][sandbox] One WasmDispatchTable per WasmTableObject",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6035506",
+      "source_cl": 6035506,
+      "source_commit": "74caf5449508c72236970e5d9e01b7212d609122"
+    }
+  ]
+}

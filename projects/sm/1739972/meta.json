@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1739972",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/vm/Interpreter.cpp"
+  ],
+  "target_subdir": [
+    "js/src/vm"
+  ],
+  "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --baseline-eager --ion-warmup-threshold=1",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "RUNTIME_CRASH",
+  "description": "When a scripted constructor of a cross-compartment wrapper was invoked and the Baseline IC fell back to the NewPlainObject runtime helper, the helper used the JSContext realm rather than the shape realm \u2014 triggering the CCW realm-consistency assert `obj->maybeCCWRealm() == this` at Realm.cpp:445 once a metadata-builder side effect cross-compartment allocation kicked in (enableShellAllocationMetadataBuilder + newGlobal). sec-high csectype-uaf realm-confusion assert. Fix: switch realm in the NewPlainObject fallback (git 76e93f9f269b, jcoppeard, 2021-11-09).",
+  "fix_commits": [
+    "76e93f9f269b"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-76e93f9f269b.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1739972 fix",
+      "source_commit": "76e93f9f269b",
+      "commit": "76e93f9f269b",
+      "url": "https://github.com/mozilla/gecko-dev/commit/76e93f9f269b",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/76e93f9f269b"
+    }
+  ],
+  "vrp": null
+}

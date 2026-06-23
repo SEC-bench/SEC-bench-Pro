@@ -1,0 +1,61 @@
+Assertion failure: storageBytes.isValid(), at /src/gecko-dev/js/src/wasm/WasmGcObject.h:223
+#01: ???[/out/js +0x4ed69e3]
+#02: ???[/out/js +0x4eac1f3]
+#03: ???[/out/js +0x4f948d7]
+#04: ???[/out/js +0x5903fb1]
+#05: ???[/out/js +0x58bd826]
+#06: ???[/out/js +0x58bd218]
+#07: ???[/out/js +0x3226873]
+#08: ???[/out/js +0x3226462]
+#09: ???[/out/js +0x328ac4c]
+#10: ???[/out/js +0x328a6bc]
+#11: ???[/out/js +0x32d041f]
+#12: ???[/out/js +0x2b75607]
+#13: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x9caa4]
+#14: __clone[/lib/x86_64-linux-gnu/libc.so.6 +0x129a64]
+#15: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6470b7666a18 bp 0x7390ba2f27b0 sp 0x7390ba2f2740 T7)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6470b7666a18 in js::WasmArrayObject::calcStorageBytes(unsigned int, unsigned int) /src/gecko-dev/js/src/wasm/WasmGcObject.h:223:5
+    #1 0x6470b7666a18 in js::jit::CodeGenerator::visitWasmNewArrayObject(js::jit::LWasmNewArrayObject*) /src/gecko-dev/js/src/jit/CodeGenerator.cpp:19181:9
+    #2 0x6470b763c1f2 in js::jit::CodeGenerator::generateBody() /src/gecko-dev/js/src/jit/CodeGenerator.cpp:7399:9
+    #3 0x6470b77248d6 in js::jit::CodeGenerator::generateWasm(js::wasm::CallIndirectId, js::wasm::BytecodeOffset, js::wasm::ArgTypeVector const&, js::jit::RegisterOffsets const&, unsigned long, js::wasm::FuncOffsets*, js::wasm::StackMaps*, js::wasm::Decoder*) /src/gecko-dev/js/src/jit/CodeGenerator.cpp:15269:8
+    #4 0x6470b8093fb0 in js::wasm::IonCompileFunctions(js::wasm::ModuleEnvironment const&, js::wasm::CompilerEnvironment const&, js::LifoAlloc&, mozilla::Vector<js::wasm::FuncCompileInput, 8ul, js::SystemAllocPolicy> const&, js::wasm::CompiledCode*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmIonCompile.cpp:9393:20
+    #5 0x6470b804d825 in ExecuteCompileTask(js::wasm::CompileTask*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:729:12
+    #6 0x6470b804d217 in js::wasm::CompileTask::runHelperThreadTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:755:10
+    #7 0x6470b59b6872 in js::GlobalHelperThreadState::runTaskLocked(js::HelperThreadTask*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1728:9
+    #8 0x6470b59b6461 in js::GlobalHelperThreadState::runOneTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1697:5
+    #9 0x6470b5a1ac4b in js::HelperThread::threadLoop(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:282:27
+    #10 0x6470b5a1a6bb in js::HelperThread::ThreadMain(js::InternalThreadPool*, js::HelperThread*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:225:11
+    #11 0x6470b5a6041e in void js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::callMain<0ul, 1ul>(std::integer_sequence<unsigned long, 0ul, 1ul>) /src/gecko-dev/js/src/threading/Thread.h:228:5
+    #12 0x6470b5a6041e in js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::Start(void*) /src/gecko-dev/js/src/threading/Thread.h:217:11
+    #13 0x6470b5305606 in asan_thread_start(void*) /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+    #14 0x77913cfe8aa3  (/lib/x86_64-linux-gnu/libc.so.6+0x9caa3) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #15 0x77913d075a63 in clone (/lib/x86_64-linux-gnu/libc.so.6+0x129a63) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007390ba2f48a0  rcx = 0x00006470b38f6d40  rdx = 0x0000000000000000  
+rdi = 0x00006470b924c5d0  rsi = 0x00007390ba2f26f8  rbp = 0x00007390ba2f27b0  rsp = 0x00007390ba2f2740  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000008  r13 = 0x0000000100000000  r14 = 0x00007390b98851f0  r15 = 0x00007390b988a7e8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/wasm/WasmGcObject.h:223:5 in js::WasmArrayObject::calcStorageBytes(unsigned int, unsigned int)
+Thread T7 created by T0 here:
+    #0 0x6470b52ed8b1 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x6470b639966d in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x6470b5a4539e in bool js::Thread::init<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>(void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*&&) /src/gecko-dev/js/src/threading/Thread.h:90:16
+    #3 0x6470b5a1996e in js::HelperThread::init(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:215:17
+    #4 0x6470b5a1996e in js::InternalThreadPool::ensureThreadCount(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:133:29
+    #5 0x6470b5a19689 in js::InternalThreadPool::Initialize(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:112:18
+    #6 0x6470b59a3cea in js::GlobalHelperThreadState::ensureInitialized() /src/gecko-dev/js/src/vm/HelperThreads.cpp:805:10
+    #7 0x6470b5dd49bb in JSRuntime::init(JSContext*, unsigned int) /src/gecko-dev/js/src/vm/Runtime.cpp:182:32
+    #8 0x6470b5a7d2be in js::NewContext(unsigned int, JSRuntime*) /src/gecko-dev/js/src/vm/JSContext.cpp:184:17
+    #9 0x6470b5361e50 in main /src/gecko-dev/js/src/shell/js.cpp:11641:25
+    #10 0x77913cf761c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x77913cf7628a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x6470b5267f28 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2ad7f28) (BuildId: 52ef99c87017732624950d113da4e640)
+
+==13==ABORTING

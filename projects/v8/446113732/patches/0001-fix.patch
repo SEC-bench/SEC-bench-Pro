@@ -1,0 +1,360 @@
+diff --git a/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc b/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc
+index c8d6693a442..f6905e68dbe 100644
+--- a/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc
++++ b/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc
+@@ -445,7 +445,10 @@ void WasmGCTypeAnalyzer::ProcessBranchOnTarget(const BranchOp& branch,
+       } else {
+         DCHECK_EQ(branch.if_false, &target);
+         if (wasm::IsSubtypeOf(GetResolvedType(check.object()), check.config.to,
+-                              module_)) {
++                              module_) &&
++            // When checking for a particular custom descriptor, static types
++            // cannot predict the outcome.
++            !(IsCastToCustomDescriptor(module_, check.config))) {
+           // The type check always succeeds, the target is impossible to be
+           // reached.
+           DCHECK_EQ(target.PredecessorCount(), 1);
+diff --git a/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.h b/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.h
+index a571fe4966e..2ba8fbe58c5 100644
+--- a/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.h
++++ b/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.h
+@@ -18,6 +18,13 @@
+ 
+ namespace v8::internal::compiler::turboshaft {
+ 
++inline bool IsCastToCustomDescriptor(const wasm::WasmModule* module,
++                                     WasmTypeCheckConfig config) {
++  return config.to.has_index() &&
++         module->type(config.to.ref_index()).has_descriptor() &&
++         config.exactness == compiler::kExactMatchOnly;
++}
++
+ // The WasmGCTypedOptimizationReducer infers type information based on the input
+ // graph and reduces type checks and casts based on that information.
+ //
+@@ -179,7 +186,7 @@ class WasmGCTypedOptimizationReducer : public Next {
+       bool to_nullable = cast_op.config.to.is_nullable();
+       if (wasm::IsHeapSubtypeOf(type.heap_type(), cast_op.config.to.heap_type(),
+                                 module_) &&
+-          !IsCastToCustomDescriptor(cast_op.config)) {
++          !IsCastToCustomDescriptor(module_, cast_op.config)) {
+         if (to_nullable || type.is_non_nullable()) {
+           // The inferred type is already as specific as the cast target, the
+           // cast is guaranteed to always succeed and can therefore be removed.
+@@ -247,7 +254,7 @@ class WasmGCTypedOptimizationReducer : public Next {
+                                 type_check.config.to.heap_type(), module_) &&
+           // When checking for a particular custom descriptor, static types
+           // cannot guarantee success.
+-          !(IsCastToCustomDescriptor(type_check.config))) {
++          !(IsCastToCustomDescriptor(module_, type_check.config))) {
+         if (to_nullable || type.is_non_nullable()) {
+           // The inferred type is guaranteed to be a subtype of the checked
+           // type.
+@@ -435,12 +442,6 @@ class WasmGCTypedOptimizationReducer : public Next {
+   }
+ 
+  private:
+-  bool IsCastToCustomDescriptor(WasmTypeCheckConfig config) {
+-    return config.to.has_index() &&
+-           module_->type(config.to.ref_index()).has_descriptor() &&
+-           config.exactness == compiler::kExactMatchOnly;
+-  }
+-
+   Graph& graph_ = __ modifiable_input_graph();
+   const wasm::WasmModule* module_ = __ data() -> wasm_module();
+   WasmGCTypeAnalyzer analyzer_{__ data(), graph_, __ phase_zone()};
+diff --git a/src/wasm/canonical-types.cc b/src/wasm/canonical-types.cc
+index 359ca5ef38b..50120e0a567 100644
+--- a/src/wasm/canonical-types.cc
++++ b/src/wasm/canonical-types.cc
+@@ -243,15 +243,19 @@ void TypeCanonicalizer::AddPredefinedArrayTypes() {
+ }
+ 
+ bool TypeCanonicalizer::IsCanonicalSubtype(CanonicalTypeIndex sub_index,
+-                                           CanonicalTypeIndex super_index) {
++                                           CanonicalValueType super_type) {
++  DCHECK(super_type.has_index());
+   // Fast path without synchronization:
+-  if (sub_index == super_index) return true;
++  if (sub_index == super_type.ref_index()) return true;
++  // If the supertype is exact, then only the equality case above is
++  // successful.
++  if (super_type.is_exact()) return false;
+ 
+   // Multiple threads could try to register and access recursive groups
+   // concurrently.
+   // TODO(manoskouk): Investigate if we can improve this synchronization.
+   base::MutexGuard mutex_guard(&mutex_);
+-  return IsCanonicalSubtype_Locked(sub_index, super_index);
++  return IsCanonicalSubtype_Locked(sub_index, super_type.ref_index());
+ }
+ bool TypeCanonicalizer::IsCanonicalSubtype_Locked(
+     CanonicalTypeIndex sub_index, CanonicalTypeIndex super_index) const {
+@@ -266,16 +270,6 @@ bool TypeCanonicalizer::IsCanonicalSubtype_Locked(
+   return false;
+ }
+ 
+-bool TypeCanonicalizer::IsCanonicalSubtype(ModuleTypeIndex sub_index,
+-                                           ModuleTypeIndex super_index,
+-                                           const WasmModule* sub_module,
+-                                           const WasmModule* super_module) {
+-  CanonicalTypeIndex canonical_super =
+-      super_module->canonical_type_id(super_index);
+-  CanonicalTypeIndex canonical_sub = sub_module->canonical_type_id(sub_index);
+-  return IsCanonicalSubtype(canonical_sub, canonical_super);
+-}
+-
+ bool TypeCanonicalizer::IsHeapSubtype(CanonicalTypeIndex sub,
+                                       CanonicalTypeIndex super) const {
+   DCHECK_NE(sub, super);
+diff --git a/src/wasm/canonical-types.h b/src/wasm/canonical-types.h
+index b992652d5f6..5301224b0f1 100644
+--- a/src/wasm/canonical-types.h
++++ b/src/wasm/canonical-types.h
+@@ -85,17 +85,12 @@ class TypeCanonicalizer {
+   V8_EXPORT_PRIVATE const CanonicalArrayType* LookupArray(
+       CanonicalTypeIndex index) const;
+ 
+-  // Returns if {canonical_sub_index} is a canonical subtype of
+-  // {canonical_super_index}.
++  // Returns if {sub_index} is a canonical subtype of {super_type}, which must
++  // be an indexed type. Interprets {sub_index} as (exact sub_index), which is
++  // appropriate for checking the actual type of a thing against a required
++  // type.
+   V8_EXPORT_PRIVATE bool IsCanonicalSubtype(CanonicalTypeIndex sub_index,
+-                                            CanonicalTypeIndex super_index);
+-
+-  // Returns if the type at {sub_index} in {sub_module} is a subtype of the
+-  // type at {super_index} in {super_module} after canonicalization.
+-  V8_EXPORT_PRIVATE bool IsCanonicalSubtype(ModuleTypeIndex sub_index,
+-                                            ModuleTypeIndex super_index,
+-                                            const WasmModule* sub_module,
+-                                            const WasmModule* super_module);
++                                            CanonicalValueType super_type);
+ 
+   // Deletes recursive groups. Used by fuzzers to avoid accumulating memory, and
+   // used by specific tests e.g. for serialization / deserialization.
+diff --git a/src/wasm/constant-expression-interface.cc b/src/wasm/constant-expression-interface.cc
+index 0bd4c138e0d..757b4a18119 100644
+--- a/src/wasm/constant-expression-interface.cc
++++ b/src/wasm/constant-expression-interface.cc
+@@ -124,8 +124,13 @@ void ConstantExpressionInterface::RefFunc(FullDecoder* decoder,
+   bool function_is_shared = module_->type(sig_index).is_shared;
+   CanonicalValueType type =
+       CanonicalValueType::Ref(module_->canonical_type_id(sig_index),
+-                              function_is_shared, RefTypeKind::kFunction)
+-          .AsExactIfEnabled(decoder->enabled_);
++                              function_is_shared, RefTypeKind::kFunction);
++  // Imported functions can be subtypes of their static import type,
++  // for non-imported functions we can return an exact type.
++  if (decoder->enabled_.has_custom_descriptors() &&
++      function_index >= module_->num_imported_functions) {
++    type = type.AsExact();
++  }
+   DirectHandle<WasmFuncRef> func_ref =
+       WasmTrustedInstanceData::GetOrCreateFuncRef(
+           isolate_,
+diff --git a/src/wasm/function-body-decoder-impl.h b/src/wasm/function-body-decoder-impl.h
+index 6aa071e7c19..5a6a2ec9bc5 100644
+--- a/src/wasm/function-body-decoder-impl.h
++++ b/src/wasm/function-body-decoder-impl.h
+@@ -4243,9 +4243,17 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
+     if (!this->ValidateFunction(this->pc_ + 1, imm)) return 0;
+     ModuleTypeIndex index = this->module_->functions[imm.index].sig_index;
+     const TypeDefinition& type_def = this->module_->type(index);
+-    Value* value =
+-        Push(ValueType::Ref(index, type_def.is_shared, RefTypeKind::kFunction)
+-                 .AsExactIfEnabled(this->enabled_));
++    ValueType result_type =
++        ValueType::Ref(index, type_def.is_shared, RefTypeKind::kFunction);
++    // For imported functions, we must return an inexact type, because
++    // importing checks subtyping, i.e. for function types f1 <: f2, it is
++    // legal to provide a function with type f1 when one with type f2 is
++    // expected.
++    if (this->enabled_.has_custom_descriptors() &&
++        imm.index >= this->module_->num_imported_functions) {
++      result_type = result_type.AsExact();
++    }
++    Value* value = Push(result_type);
+     CALL_INTERFACE_IF_OK_AND_REACHABLE(RefFunc, imm.index, value);
+     return 1 + imm.length;
+   }
+@@ -6018,6 +6026,11 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
+         } else {
+           // All other generic types would have failed validation above.
+           DCHECK(ref.type.has_index());
++          // Exactness is only propagated if the actual type on the stack
++          // exactly matched the type immediate.
++          if (ref.type.ref_index() != imm.index) {
++            result_exactness = kAnySubtype;
++          }
+         }
+         Value* desc =
+             Push(ValueType::Ref(this->module_->heap_type(type.descriptor))
+diff --git a/src/wasm/module-decoder-impl.h b/src/wasm/module-decoder-impl.h
+index 69e538fe9af..3756ee4243c 100644
+--- a/src/wasm/module-decoder-impl.h
++++ b/src/wasm/module-decoder-impl.h
+@@ -2584,8 +2584,11 @@ class ModuleDecoderImpl : public Decoder {
+           ModuleTypeIndex functype{module->functions[index].sig_index};
+           bool functype_is_shared = module->type(functype).is_shared;
+           ValueType type = ValueType::Ref(functype, functype_is_shared,
+-                                          RefTypeKind::kFunction)
+-                               .AsExactIfEnabled(enabled_features_);
++                                          RefTypeKind::kFunction);
++          if (enabled_features_.has_custom_descriptors() &&
++              index >= module->num_imported_functions) {
++            type = type.AsExact();
++          }
+           TYPE_CHECK(type)
+           if (V8_UNLIKELY(is_shared && !type.is_shared())) {
+             error(pc(), "ref.func does not have a shared type");
+diff --git a/src/wasm/module-instantiate.cc b/src/wasm/module-instantiate.cc
+index cd54025149c..ba2fa7b14bd 100644
+--- a/src/wasm/module-instantiate.cc
++++ b/src/wasm/module-instantiate.cc
+@@ -732,7 +732,11 @@ ImportCallKind ResolvedWasmImport::ComputeKind(
+   if (!trusted_function_data_.is_null()) {
+     if (Tagged<WasmExportedFunctionData> data;
+         TryCast(*trusted_function_data_, &data)) {
+-      if (!data->MatchesSignature(expected_sig->index())) {
++      if (!wasm::GetTypeCanonicalizer()->IsCanonicalSubtype(
++              data->sig()->index(),
++              wasm::CanonicalValueType::RefNull(expected_sig->index(),
++                                                false /* ignored by callee */,
++                                                RefTypeKind::kFunction))) {
+         return ImportCallKind::kLinkError;
+       }
+       uint32_t function_index = static_cast<uint32_t>(data->function_index());
+diff --git a/src/wasm/wasm-objects.cc b/src/wasm/wasm-objects.cc
+index 6026c9e89e0..77b38a07d9b 100644
+--- a/src/wasm/wasm-objects.cc
++++ b/src/wasm/wasm-objects.cc
+@@ -510,6 +510,7 @@ void WasmTableObject::Fill(Isolate* isolate,
+ bool FunctionSigMatchesTable(wasm::CanonicalTypeIndex sig_id,
+                              wasm::CanonicalValueType table_type) {
+   DCHECK(table_type.is_object_reference());
++  DCHECK(!table_type.is_shared());  // This code will need updating.
+   // When in-sandbox data is corrupted, we can't trust the statically
+   // checked types; to prevent sandbox escapes, we have to verify actual
+   // types before installing the dispatch table entry. There are three
+@@ -521,11 +522,11 @@ bool FunctionSigMatchesTable(wasm::CanonicalTypeIndex sig_id,
+   }
+   // (2) Most function types are expected to be final, so they can be compared
+   //     cheaply by canonicalized index equality.
+-  wasm::CanonicalTypeIndex canonical_table_type = table_type.ref_index();
+-  if (V8_LIKELY(sig_id == canonical_table_type)) return true;
++  wasm::CanonicalTypeIndex canonical_index = table_type.ref_index();
++  if (V8_LIKELY(sig_id == canonical_index)) return true;
+   // (3) In the remaining cases, perform the full subtype check.
+   return wasm::GetWasmEngine()->type_canonicalizer()->IsCanonicalSubtype(
+-      sig_id, canonical_table_type);
++      sig_id, table_type);
+ }
+ 
+ // static
+@@ -3051,12 +3052,6 @@ DirectHandle<WasmExportedFunction> WasmExportedFunction::New(
+   return Cast<WasmExportedFunction>(js_function);
+ }
+ 
+-bool WasmExportedFunctionData::MatchesSignature(
+-    wasm::CanonicalTypeIndex other_canonical_type_index) {
+-  return wasm::GetTypeCanonicalizer()->IsCanonicalSubtype(
+-      sig()->index(), other_canonical_type_index);
+-}
+-
+ // static
+ std::unique_ptr<char[]> WasmExportedFunction::GetDebugName(
+     const wasm::CanonicalSig* sig) {
+@@ -3306,7 +3301,7 @@ bool WasmJSFunctionData::MatchesSignature(
+ #if DEBUG
+   // TODO(14034): Change this if indexed types are allowed.
+   const wasm::CanonicalSig* sig = GetSignature();
+-  for (wasm::CanonicalValueType type : sig->all()) CHECK(!type.has_index());
++  for (wasm::CanonicalValueType type : sig->all()) DCHECK(!type.has_index());
+ #endif
+   // TODO(14034): Check for subtyping instead if WebAssembly.Function can define
+   // signature supertype.
+@@ -3588,7 +3583,7 @@ MaybeDirectHandle<Object> JSToWasmObject(Isolate* isolate,
+         CanonicalTypeIndex real_type_index =
+             function->shared()->wasm_exported_function_data()->sig()->index();
+         if (!type_canonicalizer->IsCanonicalSubtype(real_type_index,
+-                                                    canonical_index)) {
++                                                    expected)) {
+           *error_message =
+               "assigned exported function has to be a subtype of the "
+               "expected type";
+@@ -3622,8 +3617,7 @@ MaybeDirectHandle<Object> JSToWasmObject(Isolate* isolate,
+         DirectHandle<WasmObject> wasm_obj = Cast<WasmObject>(value);
+         Tagged<WasmTypeInfo> type_info = wasm_obj->map()->wasm_type_info();
+         CanonicalTypeIndex actual_type = type_info->type_index();
+-        if (!type_canonicalizer->IsCanonicalSubtype(actual_type,
+-                                                    canonical_index)) {
++        if (!type_canonicalizer->IsCanonicalSubtype(actual_type, expected)) {
+           *error_message = "object is not a subtype of expected type";
+           return {};
+         }
+diff --git a/src/wasm/wasm-objects.h b/src/wasm/wasm-objects.h
+index ee418da8d4c..23ec4303c0f 100644
+--- a/src/wasm/wasm-objects.h
++++ b/src/wasm/wasm-objects.h
+@@ -1105,8 +1105,6 @@ class WasmExportedFunctionData
+ 
+   inline bool is_promising() const;
+ 
+-  bool MatchesSignature(wasm::CanonicalTypeIndex other_canonical_sig_index);
+-
+   // Dispatched behavior.
+   DECL_PRINTER(WasmExportedFunctionData)
+   DECL_VERIFIER(WasmExportedFunctionData)
+diff --git a/src/wasm/wasm-subtyping.cc b/src/wasm/wasm-subtyping.cc
+index 0bf8b006dde..42ed054b710 100644
+--- a/src/wasm/wasm-subtyping.cc
++++ b/src/wasm/wasm-subtyping.cc
+@@ -42,20 +42,26 @@ bool ValidStructSubtypeDefinition(ModuleTypeIndex subtype_index,
+   }
+   if (sub_def.descriptor.valid()) {
+     // If a type has a descriptor, its supertype must either have no descriptor,
+-    // or the supertype's descriptor must be a supertype of the subtype's
+-    // descriptor.
++    // or the supertype's descriptor must be a declared supertype of the
++    // subtype's descriptor.
+     if (super_def.descriptor.valid() &&
+-        !IsHeapSubtypeOf(module->heap_type(sub_def.descriptor),
+-                         module->heap_type(super_def.descriptor), module)) {
++        module->supertype(sub_def.descriptor) != super_def.descriptor) {
+       return false;
+     }
+   } else {
+     // If a type has no descriptor, its supertype must not have one either.
+     if (super_def.descriptor.valid()) return false;
+   }
+-  // A type and its supertype must either both be descriptors, or both not.
+-  if (sub_def.describes.valid() != super_def.describes.valid()) {
+-    return false;
++  if (sub_def.describes.valid()) {
++    // If a type is a descriptor, its supertype must also be a descriptor, and
++    // must describe a declared supertype of the subtype's described type.
++    if (!super_def.describes.valid()) return false;
++    if (module->supertype(sub_def.describes) != super_def.describes) {
++      return false;
++    }
++  } else {
++    // A type and its supertype must either both be descriptors, or both not.
++    if (super_def.describes.valid()) return false;
+   }
+   return true;
+ }
+diff --git a/test/mjsunit/wasm/custom-descriptors-validity.js b/test/mjsunit/wasm/custom-descriptors-validity.js
+index 9b3118f2de6..204d0a5bde1 100644
+--- a/test/mjsunit/wasm/custom-descriptors-validity.js
++++ b/test/mjsunit/wasm/custom-descriptors-validity.js
+@@ -119,7 +119,7 @@ CheckValid((builder) => {
+   builder.addStruct({describes: 2, supertype: 1});   // 3
+ });
+ 
+-CheckValid((builder) => {
++CheckInvalid(/type 4 has invalid explicit supertype 2/, (builder) => {
+   builder.addStruct({final: false});  // 0
+ }, (builder) => {
+   builder.addStruct({descriptor: 2});  // 1

@@ -1,0 +1,112 @@
+[13] Assertion failure: obj == cacheResult, at /src/gecko-dev/js/src/vm/Compartment-inl.h:105
+#01: JS::Compartment::wrap(JSContext*, JS::MutableHandle<JS::Value>)[/out/js +0x2f0928e]
+#02: js::CrossCompartmentWrapper::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) const[/out/js +0x3da591f]
+#03: ???[/out/js +0x3deaab4]
+#04: ???[/out/js +0x3dc68e6]
+#05: ???[/out/js +0x2f12374]
+#06: ???[/out/js +0x32e1a07]
+#07: ???[/out/js +0x2f12374]
+#08: ???[/out/js +0x32c870f]
+#09: ???[/out/js +0x3ec029b]
+#10: ???[/out/js +0x3ebfc81]
+#11: ???[/out/js +0x3f12b8d]
+#12: ???[/out/js +0x302f283]
+#13: ???[/out/js +0x2ff1d06]
+#14: ???[/out/js +0x300d327]
+#15: ???[/out/js +0x2ff0724]
+#16: ???[/out/js +0x2ff1e2e]
+#17: ???[/out/js +0x2ff389f]
+#18: ???[/out/js +0x3dec3b3]
+#19: ???[/out/js +0x3e76bac]
+#20: ???[/out/js +0x3e6dab0]
+#21: ???[/out/js +0x300f0d4]
+#22: ???[/out/js +0x2ff0724]
+#23: ???[/out/js +0x2ff1e2e]
+#24: ???[/out/js +0x2ff389f]
+#25: js::ForwardingProxyHandler::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x3de40f3]
+#26: js::CrossCompartmentWrapper::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x3da6b55]
+#27: ???[/out/js +0x3dc8dc5]
+#28: ???[/out/js +0x2ff248e]
+#29: ???[/out/js +0x300d327]
+#30: ???[/out/js +0x2ff0724]
+#31: ???[/out/js +0x2ff641d]
+#32: ???[/out/js +0x2ff6c57]
+#33: ???[/out/js +0x327a795]
+#34: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x327aae3]
+#35: ???[/out/js +0x2ed7880]
+#36: ???[/out/js +0x2ed655d]
+#37: ???[/out/js +0x2e64750]
+#38: ???[/out/js +0x2e5503e]
+#39: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#40: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#41: _start[/out/js +0x2d58ab5]
+#42: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x62914c8ee2ba bp 0x7ffeb62886b0 sp 0x7ffeb62884a0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x62914c8ee2ba in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x62914c8ee2ba in JS::Compartment::wrap(JSContext*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Compartment-inl.h:105:3
+    #2 0x62914d78a91e in js::CrossCompartmentWrapper::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) const /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:184:29
+    #3 0x62914d7cfab3 in js::Proxy::getInternal(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:526:19
+    #4 0x62914d7ab8e5 in js::Proxy::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:534:10
+    #5 0x62914c8f7373 in js::GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:110:12
+    #6 0x62914ccc6a06 in with_GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/EnvironmentObject.cpp:870:10
+    #7 0x62914c8f7373 in js::GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:110:12
+    #8 0x62914ccad70e in js::GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:127:10
+    #9 0x62914ccad70e in (anonymous namespace)::DebugEnvironmentProxyHandler::getMaybeSentinelValue(JSContext*, JS::Handle<js::DebugEnvironmentProxy*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) const /src/gecko-dev/js/src/vm/EnvironmentObject.cpp:2391:14
+    #10 0x62914ccad70e in js::DebugEnvironmentProxy::getMaybeSentinelValue(JSContext*, JS::Handle<js::DebugEnvironmentProxy*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/EnvironmentObject.cpp:2655:50
+    #11 0x62914d8a529a in js::DebuggerEnvironment::getVariable(JSContext*, JS::Handle<js::DebuggerEnvironment*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/debugger/Environment.cpp:602:12
+    #12 0x62914d8a4c80 in js::DebuggerEnvironment::CallData::getVariableMethod() /src/gecko-dev/js/src/debugger/Environment.cpp:324:10
+    #13 0x62914d8f7b8c in bool js::DebuggerEnvironment::CallData::ToNative<&js::DebuggerEnvironment::CallData::getVariableMethod()>(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/debugger/Environment.cpp:140:10
+    #14 0x62914ca14282 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #15 0x62914c9d6d05 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #16 0x62914c9f2326 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #17 0x62914c9f2326 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #18 0x62914c9d5723 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #19 0x62914c9d6e2d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:618:13
+    #20 0x62914c9d889e in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:685:8
+    #21 0x62914d7d13b2 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:128:10
+    #22 0x62914d85bbab in js::Debugger::fireDebuggerStatement(JSContext*, js::ResumeMode&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/debugger/Debugger.cpp:2276:13
+    #23 0x62914d852aaf in js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1::operator()(js::Debugger*, js::ResumeMode&, JS::MutableHandle<JS::Value>) const /src/gecko-dev/js/src/debugger/Debugger.cpp:1348:33
+    #24 0x62914d852aaf in bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'(js::Debugger*)::operator()(js::Debugger*) const /src/gecko-dev/js/src/debugger/Debugger.cpp:887:32
+    #25 0x62914d852aaf in bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchHook<bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'(js::Debugger*)>(JSContext*, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'()::operator()() const /src/gecko-dev/js/src/debugger/Debugger.cpp:855:61
+    #26 0x62914d852aaf in bool js::Debugger::enterDebuggerHook<bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchHook<bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'(js::Debugger*)>(JSContext*, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'()>(JSContext*, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1) /src/gecko-dev/js/src/debugger/Debugger.h:1063:10
+    #27 0x62914d852aaf in bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchHook<bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1)::'lambda'(js::Debugger*)>(JSContext*, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1) /src/gecko-dev/js/src/debugger/Debugger.cpp:855:16
+    #28 0x62914d852aaf in bool js::DebuggerList<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0>::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1) /src/gecko-dev/js/src/debugger/Debugger.cpp:885:10
+    #29 0x62914d852aaf in bool js::Debugger::dispatchResumptionHook<js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1>(JSContext*, js::AbstractFramePtr, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_0, js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr)::$_1) /src/gecko-dev/js/src/debugger/Debugger.cpp:2483:23
+    #30 0x62914d852aaf in js::DebugAPI::slowPathOnDebuggerStatement(JSContext*, js::AbstractFramePtr) /src/gecko-dev/js/src/debugger/Debugger.cpp:1342:10
+    #31 0x62914c9f40d3 in js::DebugAPI::onDebuggerStatement(JSContext*, js::AbstractFramePtr) /src/gecko-dev/js/src/debugger/DebugAPI-inl.h:156:12
+    #32 0x62914c9f40d3 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:4064:12
+    #33 0x62914c9d5723 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #34 0x62914c9d6e2d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:618:13
+    #35 0x62914c9d889e in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:685:8
+    #36 0x62914d7c90f2 in js::ForwardingProxyHandler::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/Wrapper.cpp:168:10
+    #37 0x62914d78bb54 in js::CrossCompartmentWrapper::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:230:19
+    #38 0x62914d7addc4 in js::Proxy::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) /src/gecko-dev/js/src/proxy/Proxy.cpp:705:19
+    #39 0x62914c9d748d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:566:14
+    #40 0x62914c9f2326 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #41 0x62914c9f2326 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #42 0x62914c9d5723 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #43 0x62914c9db41c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #44 0x62914c9dbc56 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #45 0x62914cc5f794 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #46 0x62914cc5fae2 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #47 0x62914c8bc87f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1360:10
+    #48 0x62914c8bb55c in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #49 0x62914c84974f in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12174:10
+    #50 0x62914c84974f in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12427:12
+    #51 0x62914c83a03d in main /src/gecko-dev/js/src/shell/js.cpp:12830:12
+    #52 0x73f6414a31c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #53 0x73f6414a328a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #54 0x62914c73dab4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2d58ab4) (BuildId: 10c74c3d853c21ff290f127eb9080954)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffeb62885e0  rcx = 0x0000000000000069  rdx = 0x0000000000000000  
+rdi = 0x00006291508f1f50  rsi = 0x00007ffeb6288458  rbp = 0x00007ffeb62886b0  rsp = 0x00007ffeb62884a0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000100056c4909c  r13 = 0x00000e3cc811c013  r14 = 0x00007ffeb62885e0  r15 = 0x00007ffeb6288620  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

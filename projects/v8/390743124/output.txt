@@ -1,0 +1,18 @@
+Received signal 11 SEGV_ACCERR 097a001402c0
+
+==== C stack trace ===============================
+
+out/x64.debug/d8(+0x4072817)[0x600eeb3c8817]
+/lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x79ddfc716420]
+out/x64.debug/d8(+0xde1c20)[0x600ee8137c20]
+out/x64.debug/d8(+0xde2487)[0x600ee8138487]
+out/x64.debug/d8(+0xdec658)[0x600ee8142658]
+out/x64.debug/d8(+0xdeb9ec)[0x600ee81419ec]
+out/x64.debug/d8(+0xde297e)[0x600ee813897e]
+out/x64.debug/d8(+0xde25ad)[0x600ee81385ad]
+out/x64.debug/d8(+0xdd3700)[0x600ee8129700]
+out/x64.debug/d8(+0x198edb4)[0x600ee8ce4db4]
+out/x64.debug/d8(+0x198e7a9)[0x600ee8ce47a9]
+out/x64.debug/d8(+0x372313d)[0x600eeaa7913d]
+[end of stack trace]
+Segmentation fault (core dumped)

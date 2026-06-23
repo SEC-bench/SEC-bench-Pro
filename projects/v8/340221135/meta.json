@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:340221135",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--module",
+  "target_source_files": [
+    "src/compiler/access-info.cc",
+    "src/maglev/maglev-graph-builder.cc"
+  ],
+  "target_subdir": [
+    "src/compiler",
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Incorrect JIT optimization",
+  "error_type": "DCHECK",
+  "description": "TurboFan's JSNativeContextSpecialization::BuildPropertyStore function (js-native-context-specialization.cc) does not handle the kModuleExport PropertyAccessInfo kind. When a JIT-compiled function attempts to store to a module namespace export (e.g., m.foo = 2), TurboFan obtains kModuleExport access info for the named property. BuildPropertyStore only checks for IsFastAccessorConstant(), then falls into the else branch which has a disabled DCHECK assuming the access info is a DataField or FastDataConstant. For kModuleExport, field_representation() returns Representation::None(), so when PropertyAccessBuilder::ConvertRepresentation() is called with this value, none of its switch cases match (kSmi, kDouble, kHeapObject, kTagged), triggering UNREACHABLE() and a fatal crash. In release builds without this crash, BuildPropertyStore would generate store instructions with a garbage field_index offset, potentially enabling arbitrary memory writes.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 140,
+      "evidence_text": "Fix at CL 5534518; Bug: 340221135",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5534518",
+      "cl": 5534518,
+      "commit": "b3c01ac1e60afc9addad9942f7a9a6c5e8a4a6da",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/5534518 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5534518",
+      "source_cl": 5534518,
+      "source_commit": "b3c01ac1e60afc9addad9942f7a9a6c5e8a4a6da",
+      "source_ref": "refs/changes/18/5534518/3",
+      "source_patchset": 3
+    }
+  ]
+}

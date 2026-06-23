@@ -1,0 +1,61 @@
+Assertion failure: ins->isGoto(), at /src/gecko-dev/js/src/jit/IonAnalysis.cpp:715
+#01: ???[/out/js +0x53d0278]
+#02: ???[/out/js +0x535b295]
+#03: ???[/out/js +0x518ed06]
+#04: ???[/out/js +0x5191afa]
+#05: ???[/out/js +0x53ad97b]
+#06: ???[/out/js +0x328b063]
+#07: ???[/out/js +0x328ac52]
+#08: ???[/out/js +0x32ed4bc]
+#09: ???[/out/js +0x32ecf2c]
+#10: ???[/out/js +0x331d9cf]
+#11: ???[/out/js +0x2b94527]
+#12: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x9caa4]
+#13: __clone[/lib/x86_64-linux-gnu/libc.so.6 +0x129a64]
+#14: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x61449d8492ad bp 0x76a1d50a5e80 sp 0x76a1d50a5e40 T4)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x61449d8492ad in UpdateTestSuccessors(js::jit::TempAllocator&, js::jit::MBasicBlock*, js::jit::MDefinition*, js::jit::MBasicBlock*, js::jit::MBasicBlock*, js::jit::MBasicBlock*) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:715:3
+    #1 0x61449d7d4294 in MaybeFoldDiamondConditionBlock(js::jit::MIRGraph&, js::jit::MBasicBlock*) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:862:10
+    #2 0x61449d7d4294 in MaybeFoldConditionBlock(js::jit::MIRGraph&, js::jit::MBasicBlock*) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:1095:12
+    #3 0x61449d7d4294 in js::jit::FoldTests(js::jit::MIRGraph&) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:1294:10
+    #4 0x61449d607d05 in js::jit::OptimizeMIR(js::jit::MIRGenerator*) /src/gecko-dev/js/src/jit/Ion.cpp:1037:10
+    #5 0x61449d60aaf9 in js::jit::CompileBackEnd(js::jit::MIRGenerator*, js::jit::WarpSnapshot*) /src/gecko-dev/js/src/jit/Ion.cpp:1605:8
+    #6 0x61449d82697a in js::jit::IonCompileTask::runTask() /src/gecko-dev/js/src/jit/IonCompileTask.cpp:52:24
+    #7 0x61449d82697a in js::jit::IonCompileTask::runHelperThreadTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/jit/IonCompileTask.cpp:30:5
+    #8 0x61449b704062 in js::GlobalHelperThreadState::runTaskLocked(js::HelperThreadTask*, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1728:9
+    #9 0x61449b703c51 in js::GlobalHelperThreadState::runOneTask(js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/HelperThreads.cpp:1697:5
+    #10 0x61449b7664bb in js::HelperThread::threadLoop(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:282:27
+    #11 0x61449b765f2b in js::HelperThread::ThreadMain(js::InternalThreadPool*, js::HelperThread*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:225:11
+    #12 0x61449b7969ce in void js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::callMain<0ul, 1ul>(std::integer_sequence<unsigned long, 0ul, 1ul>) /src/gecko-dev/js/src/threading/Thread.h:228:5
+    #13 0x61449b7969ce in js::detail::ThreadTrampoline<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>::Start(void*) /src/gecko-dev/js/src/threading/Thread.h:217:11
+    #14 0x61449b00d526 in asan_thread_start(void*) /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+    #15 0x7aa1d7b57aa3  (/lib/x86_64-linux-gnu/libc.so.6+0x9caa3) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #16 0x7aa1d7be4a63 in clone (/lib/x86_64-linux-gnu/libc.so.6+0x129a63) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007971d7044420  rcx = 0x0000614499661d20  rdx = 0x0000000000000000  
+rdi = 0x000061449f074c50  rsi = 0x000076a1d50a5df8  rbp = 0x000076a1d50a5e80  rsp = 0x000076a1d50a5e40  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007971d7049530  r13 = 0x00007971d7047f20  r14 = 0x00007971d7048b10  r15 = 0x00007971d70487f8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/IonAnalysis.cpp:715:3 in UpdateTestSuccessors(js::jit::TempAllocator&, js::jit::MBasicBlock*, js::jit::MDefinition*, js::jit::MBasicBlock*, js::jit::MBasicBlock*, js::jit::MBasicBlock*)
+Thread T4 created by T0 here:
+    #0 0x61449aff57d1 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x61449c15b7ad in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x61449b78855e in bool js::Thread::init<void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*>(void (&)(js::InternalThreadPool*, js::HelperThread*), js::InternalThreadPool*&, js::HelperThread*&&) /src/gecko-dev/js/src/threading/Thread.h:90:16
+    #3 0x61449b7651de in js::HelperThread::init(js::InternalThreadPool*) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:215:17
+    #4 0x61449b7651de in js::InternalThreadPool::ensureThreadCount(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:133:29
+    #5 0x61449b764ef9 in js::InternalThreadPool::Initialize(unsigned long, js::AutoLockHelperThreadState&) /src/gecko-dev/js/src/vm/InternalThreadPool.cpp:112:18
+    #6 0x61449b6f1ada in js::GlobalHelperThreadState::ensureInitialized() /src/gecko-dev/js/src/vm/HelperThreads.cpp:805:10
+    #7 0x61449bb0aa1b in JSRuntime::init(JSContext*, unsigned int) /src/gecko-dev/js/src/vm/Runtime.cpp:182:32
+    #8 0x61449b7b558f in js::NewContext(unsigned int, JSRuntime*) /src/gecko-dev/js/src/vm/JSContext.cpp:185:17
+    #9 0x61449b06c9f0 in main /src/gecko-dev/js/src/shell/js.cpp:11798:25
+    #10 0x7aa1d7ae51c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x7aa1d7ae528a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #12 0x61449af6fe44 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2af6e44) (BuildId: 6ea1fe574bdc9acdd23e592bac95f7f6)
+
+==13==ABORTING

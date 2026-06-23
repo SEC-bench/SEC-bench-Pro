@@ -1,0 +1,110 @@
+From 0a30c6b6fc37e95465fbf3c325a97f59ede662dd Mon Sep 17 00:00:00 2001
+From: Tooru Fujisawa <arai_a@mac.com>
+Date: Tue, 13 Jan 2026 04:48:42 +0000
+Subject: [PATCH] Bug 2009303 - Check the corresponding script before trying to
+ get DebugScript. r=jonco
+
+Differential Revision: https://phabricator.services.mozilla.com/D278451
+---
+ js/src/debugger/DebugScript.cpp               | 21 +++++++++++++++++++
+ .../Debugger-clearAllBreakpoints-finalized.js | 17 +++++++++++++++
+ 2 files changed, 38 insertions(+)
+ create mode 100644 js/src/jit-test/tests/debug/Debugger-clearAllBreakpoints-finalized.js
+
+diff --git a/js/src/debugger/DebugScript.cpp b/js/src/debugger/DebugScript.cpp
+index 1ac61ba0cae64..e9c6f03d7ad06 100644
+--- a/js/src/debugger/DebugScript.cpp
++++ b/js/src/debugger/DebugScript.cpp
+@@ -99,6 +99,7 @@ void DebugScriptObject::finalize(JS::GCContext* gcx, JSObject* obj) {
+ 
+ /* static */
+ DebugScript* DebugScript::get(JSScript* script) {
++  MOZ_ASSERT(!IsAboutToBeFinalizedUnbarriered(script));
+   MOZ_ASSERT(script->hasDebugScript());
+   DebugScriptMap* map = script->zone()->debugScriptMap;
+   MOZ_ASSERT(map);
+@@ -109,6 +110,7 @@ DebugScript* DebugScript::get(JSScript* script) {
+ 
+ /* static */
+ DebugScript* DebugScript::getUnbarriered(JSScript* script) {
++  MOZ_ASSERT(!IsAboutToBeFinalizedUnbarriered(script));
+   MOZ_ASSERT(script->hasDebugScript());
+   DebugScriptMap* map = script->zone()->debugScriptMap;
+   MOZ_ASSERT(map);
+@@ -178,6 +180,9 @@ DebugScript* DebugScript::getOrCreate(JSContext* cx, HandleScript script) {
+ 
+ /* static */
+ bool DebugScript::hasBreakpointSite(JSScript* script, jsbytecode* pc) {
++  if (IsAboutToBeFinalizedUnbarriered(script)) {
++    return false;
++  }
+   if (!script->hasDebugScript()) {
+     return false;
+   }
+@@ -225,6 +230,10 @@ JSBreakpointSite* DebugScript::getOrCreateBreakpointSite(JSContext* cx,
+ /* static */
+ void DebugScript::destroyBreakpointSite(JS::GCContext* gcx, JSScript* script,
+                                         jsbytecode* pc) {
++  if (IsAboutToBeFinalizedUnbarriered(script)) {
++    return;
++  }
++
+   // Avoid barriers during sweeping. |debug| does not escape.
+   DebugScript* debug = getUnbarriered(script);
+ 
+@@ -305,6 +314,10 @@ bool DebugScript::incrementStepperCount(JSContext* cx, HandleScript script) {
+ 
+ /* static */
+ void DebugScript::decrementStepperCount(JS::GCContext* gcx, JSScript* script) {
++  if (IsAboutToBeFinalizedUnbarriered(script)) {
++    return;
++  }
++
+   // Avoid barriers during sweeping. |debug| does not escape.
+   DebugScript* debug = getUnbarriered(script);
+   MOZ_ASSERT(debug);
+@@ -351,6 +364,10 @@ bool DebugScript::incrementGeneratorObserverCount(JSContext* cx,
+ /* static */
+ void DebugScript::decrementGeneratorObserverCount(JS::GCContext* gcx,
+                                                   JSScript* script) {
++  if (IsAboutToBeFinalizedUnbarriered(script)) {
++    return;
++  }
++
+   // Avoid barriers during sweeping. |debug| does not escape.
+   DebugScript* debug = getUnbarriered(script);
+   MOZ_ASSERT(debug);
+@@ -416,6 +433,10 @@ void DebugAPI::checkDebugScriptAfterMovingGC(DebugScript* ds) {
+ 
+ /* static */
+ bool DebugAPI::stepModeEnabledSlow(JSScript* script) {
++  if (IsAboutToBeFinalizedUnbarriered(script)) {
++    return false;
++  }
++
+   return DebugScript::getUnbarriered(script)->stepperCount > 0;
+ }
+ 
+diff --git a/js/src/jit-test/tests/debug/Debugger-clearAllBreakpoints-finalized.js b/js/src/jit-test/tests/debug/Debugger-clearAllBreakpoints-finalized.js
+new file mode 100644
+index 0000000000000..bd092e95eab2a
+--- /dev/null
++++ b/js/src/jit-test/tests/debug/Debugger-clearAllBreakpoints-finalized.js
+@@ -0,0 +1,17 @@
++gczeal(23);
++
++String + "";
++
++var g = newGlobal({ newCompartment: true });
++var dbg = Debugger(g);
++dbg.onNewScript = function (script) {
++  script.setBreakpoint(0, () => {});
++};
++g.eval("");
++
++// Trigger GC, which will mark the eval script about to be finalized,
++// and the DebugScriptMap entry will be removed.
++Uint8Array;
++
++// This shouldn't try to use the DebugScriptMap entry.
++dbg.clearAllBreakpoints();

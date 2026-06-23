@@ -1,0 +1,32 @@
+From 6f0d23973709845703363ef7033b1c3de3ba7581 Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Thu, 11 Apr 2024 16:44:58 +0000
+Subject: [PATCH] Bug 1889317: Disable GVN for wasm subtype checks. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D206967
+---
+ js/src/jit/MIR.h | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/js/src/jit/MIR.h b/js/src/jit/MIR.h
+index f6a72ab91ec6a..c672092f04d77 100644
+--- a/js/src/jit/MIR.h
++++ b/js/src/jit/MIR.h
+@@ -11829,8 +11829,6 @@ class MWasmRefIsSubtypeOfAbstract : public MUnaryInstruction,
+     return hn;
+   }
+ 
+-  AliasSet getAliasSet() const override { return AliasSet::None(); }
+-
+   MDefinition* foldsTo(TempAllocator& alloc) override;
+ };
+ 
+@@ -11873,8 +11871,6 @@ class MWasmRefIsSubtypeOfConcrete : public MBinaryInstruction,
+     return hn;
+   }
+ 
+-  AliasSet getAliasSet() const override { return AliasSet::None(); }
+-
+   MDefinition* foldsTo(TempAllocator& alloc) override;
+ };
+ 

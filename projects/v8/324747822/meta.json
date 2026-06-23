@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:324747822",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--allow-natives-syntax --expose-gc --future --fuzzing --jit-fuzzing --harmony --omit-quit --js-staging --wasm-staging --no-wasm-loop-unrolling --no-wasm-loop-peeling",
+  "target_source_files": [
+    "src/compiler/turboshaft/wasm-gc-type-reducer.cc"
+  ],
+  "target_subdir": [
+    "src/compiler/turboshaft"
+  ],
+  "target_vulnerability_type": "Debug assertion failure",
+  "error_type": "DCHECK",
+  "description": "The vulnerability is a fatal debug assertion failure in the Turboshaft WasmGC type analyzer (WasmGCTypeAnalyzer), triggered during JIT compilation of WebAssembly modules containing GC type operations within loops. It was introduced by commit 3f2471d0abe711c92ddb3d6fe17bc22d9955f2b8, which expanded the 'uninhabited' type predicate from checking only kWasmBottom to also include non-nullable references to null heap types (ref none, ref nofunc, ref noextern via is_uninhabited()), and added DCHECKs asserting that reachable predecessors must not carry uninhabited types.\n\nRoot cause: In WasmGCTypeAnalyzer::Run() (wasm-gc-type-reducer.cc), the loop fixed-point convergence check calls CreateMergeSnapshot({old_snapshot, new_snapshot}, {true, true}) with hardcoded reachability (both predecessors assumed reachable). When the loop header is re-processed with backedge type information, operations such as assert_not_null, struct.get, array.len, or WasmTypeCast on values of nullable null-heap types (ref null none, ref null nofunc, ref null noextern) produce uninhabited types via AsNonNull() or type intersection. These uninhabited types are stored in the snapshot and the block is marked unreachable in block_is_unreachable_, but the convergence check ignores this status and passes the snapshot with reachable=true. The newly-added DCHECK(!type.is_uninhabited()) in CreateMergeSnapshot then fires, causing a fatal crash.\n\nTriggering condition: A WebAssembly module with a loop that contains GC operations producing uninhabited types through type narrowing (e.g., ref.as_non_null / assert_not_null applied to a ref null none typed value, type casts to bottom-like reference types, or struct.get/array.len on references to null heap types), compiled via Turboshaft with --wasm-staging.",
+  "vrp": 8000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit 8f1c8131bd1766368e9d006d0bc6b6210dd96303 for fixed-image builds.",
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[wasm-imported-strings][turbofan] Use HeapType::kExternString",
+      "url": "https://crrev.com/c/5339904",
+      "cl": 5339904,
+      "source_commit": "8f1c8131bd1766368e9d006d0bc6b6210dd96303",
+      "commit": "8f1c8131bd1766368e9d006d0bc6b6210dd96303",
+      "patchset": 3,
+      "source_url": "https://crrev.com/c/5339904",
+      "source_cl": 5339904,
+      "source_ref": "refs/changes/04/5339904/3",
+      "source_patchset": 3
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:394350433",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "",
+  "target_source_files": [
+    "src/wasm/wrappers.cc",
+    "src/compiler/turboshaft/operations.h",
+    "src/compiler/backend/instruction-selector.cc"
+  ],
+  "target_subdir": [
+    "src/wasm",
+    "src/compiler/turboshaft",
+    "src/compiler/backend"
+  ],
+  "target_vulnerability_type": "Heap buffer overflow",
+  "error_type": "ASAN_CRASH",
+  "description": "A heap buffer overflow vulnerability exists in V8's Wasm-to-JS wrapper tier-up compilation. In `BuildWasmToJSWrapper()` (src/wasm/wrappers.cc), when a Wasm module imports a JavaScript function with an `expected_arity` of 0xfffa or more, the function constructs an `args` SmallVector of size `pushed_count + 4 + (has_dispatch_handle ? 1 : 0)`. When passed to the Turboshaft `CallOp` via `__ Call()`, the total input count (1 + args.size()) exceeds 65535, overflowing the `uint16_t input_count` field in the `Operation` base class (src/compiler/turboshaft/operations.h). This corrupts the `CallOp`'s stored `input_count` to a small or zero value. During the subsequent instruction selection phase in `InstructionSelectorT::InitializeCallBuffer()` (src/compiler/backend/instruction-selector.cc), the loop iterates over call arguments based on the correct large `CallDescriptor::InputCount()`, while `call.arguments()` returns a span backed by the corrupted (truncated) `input_count`. This mismatch causes the argument iterator to read `OpIndex` values from memory beyond the call operation's input array. When `GetVirtualRegister()` processes these out-of-bounds `OpIndex` values, their computed IDs exceed the size of `virtual_registers_`, resulting in an out-of-bounds heap memory read (and potential write) \u2014 a full out-of-V8-sandbox memory corruption. The vulnerability is triggered during Wasm-to-JS wrapper tier-up (`Runtime_TierUpWasmToJSWrapper`) for an imported JS function whose `length` property reports 0xfffa or more parameters.",
+  "vrp": 11000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 535,
+      "evidence_text": "merges approved for [https://crrev.com/c/6249299](<https://crrev.com/c/6249299>), please merge to the respective V8 branches ASAP, by 10am PT tomorrow (Friday) so this fix can be included in next week's updates.",
+      "url": "https://crrev.com/c/6249299",
+      "cl": 6249299,
+      "commit": "84a0e230dabc2c874a129c2280d6be4f45636225",
+      "description": "Local patch exported from https://crrev.com/c/6249299 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6249299",
+      "source_cl": 6249299,
+      "source_commit": "84a0e230dabc2c874a129c2280d6be4f45636225",
+      "source_ref": "refs/changes/99/6249299/4",
+      "source_patchset": 4
+    }
+  ]
+}

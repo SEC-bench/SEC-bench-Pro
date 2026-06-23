@@ -1,0 +1,280 @@
+From a40af352d29a63054e12d2ae2519ec970f2d8580 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Wed, 18 Jan 2023 13:10:37 +0000
+Subject: [PATCH] Bug 1791520: Add GC unsafe region instructions for JIT code.
+ r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D157781
+---
+ js/src/jit/Bailouts.cpp         | 16 ++++++++++++++++
+ js/src/jit/BaselineBailouts.cpp |  5 +++++
+ js/src/jit/CodeGenerator.cpp    | 30 ++++++++++++++++++++++++++++++
+ js/src/jit/IonAnalysis.cpp      | 19 +++++++++++++++++++
+ js/src/jit/Jit.cpp              |  8 ++++++++
+ js/src/jit/JitFrames.cpp        |  6 ++++++
+ js/src/jit/LIROps.yaml          |  6 ++++++
+ js/src/jit/Lowering.cpp         | 10 ++++++++++
+ js/src/jit/MIROps.yaml          | 10 ++++++++++
+ js/src/vm/JSContext.h           | 12 ++++++++++++
+ 10 files changed, 122 insertions(+)
+
+diff --git a/js/src/jit/Bailouts.cpp b/js/src/jit/Bailouts.cpp
+index fc84969029f8d..3730d8997a554 100644
+--- a/js/src/jit/Bailouts.cpp
++++ b/js/src/jit/Bailouts.cpp
+@@ -118,6 +118,14 @@ bool jit::Bailout(BailoutStack* sp, BaselineBailoutInfo** bailoutInfo) {
+                            0, 0x1000),
+              "Fake exitfp pointer should be within the first page.");
+ 
++#ifdef DEBUG
++  // Reset the counter when we bailed after MDebugEnterGCUnsafeRegion, but
++  // before the matching MDebugLeaveGCUnsafeRegion.
++  //
++  // NOTE: EnterJit ensures the counter is zero when we enter JIT code.
++  cx->resetInUnsafeRegion();
++#endif
++
+   cx->activation()->asJit()->setJSExitFP(FAKE_EXITFP_FOR_BAILOUT);
+ 
+   JitActivationIterator jitActivations(cx);
+@@ -187,6 +195,14 @@ bool jit::InvalidationBailout(InvalidationBailoutStack* sp,
+ 
+   JSContext* cx = TlsContext.get();
+ 
++#ifdef DEBUG
++  // Reset the counter when we bailed after MDebugEnterGCUnsafeRegion, but
++  // before the matching MDebugLeaveGCUnsafeRegion.
++  //
++  // NOTE: EnterJit ensures the counter is zero when we enter JIT code.
++  cx->resetInUnsafeRegion();
++#endif
++
+   // We don't have an exit frame.
+   cx->activation()->asJit()->setJSExitFP(FAKE_EXITFP_FOR_BAILOUT);
+ 
+diff --git a/js/src/jit/BaselineBailouts.cpp b/js/src/jit/BaselineBailouts.cpp
+index 795476c4acfc1..0f1556f2e9ea6 100644
+--- a/js/src/jit/BaselineBailouts.cpp
++++ b/js/src/jit/BaselineBailouts.cpp
+@@ -1735,6 +1735,11 @@ bool jit::FinishBailoutToBaseline(BaselineBailoutInfo* bailoutInfoArg) {
+   MOZ_DIAGNOSTIC_ASSERT(*bailoutInfo->bailoutKind != BailoutKind::Unreachable);
+ 
+   JSContext* cx = TlsContext.get();
++
++  // jit::Bailout(), jit::InvalidationBailout(), and jit::HandleException()
++  // should have reset the counter to zero.
++  MOZ_ASSERT(!cx->isInUnsafeRegion());
++
+   BaselineFrame* topFrame = GetTopBaselineFrame(cx);
+ 
+   // We have to get rid of the rematerialized frame, whether it is
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index a8bd8004c5041..1ffde57052961 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -3893,6 +3893,36 @@ void CodeGenerator::visitKeepAliveObject(LKeepAliveObject* lir) {
+   // No-op.
+ }
+ 
++void CodeGenerator::visitDebugEnterGCUnsafeRegion(
++    LDebugEnterGCUnsafeRegion* lir) {
++  Register temp = ToRegister(lir->temp0());
++
++  masm.loadJSContext(temp);
++
++  Address inUnsafeRegion(temp, JSContext::offsetOfInUnsafeRegion());
++  masm.add32(Imm32(1), inUnsafeRegion);
++
++  Label ok;
++  masm.branch32(Assembler::GreaterThan, inUnsafeRegion, Imm32(0), &ok);
++  masm.assumeUnreachable("unbalanced enter/leave GC unsafe region");
++  masm.bind(&ok);
++}
++
++void CodeGenerator::visitDebugLeaveGCUnsafeRegion(
++    LDebugLeaveGCUnsafeRegion* lir) {
++  Register temp = ToRegister(lir->temp0());
++
++  masm.loadJSContext(temp);
++
++  Address inUnsafeRegion(temp, JSContext::offsetOfInUnsafeRegion());
++  masm.add32(Imm32(-1), inUnsafeRegion);
++
++  Label ok;
++  masm.branch32(Assembler::GreaterThanOrEqual, inUnsafeRegion, Imm32(0), &ok);
++  masm.assumeUnreachable("unbalanced enter/leave GC unsafe region");
++  masm.bind(&ok);
++}
++
+ void CodeGenerator::visitSlots(LSlots* lir) {
+   Address slots(ToRegister(lir->object()), NativeObject::offsetOfSlots());
+   masm.loadPtr(slots, ToRegister(lir->output()));
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 3ce0f283321af..3d7abb3a9f520 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -4011,6 +4011,7 @@ static bool NeedsKeepAlive(MInstruction* slotsOrElements, MInstruction* use) {
+     return true;
+   }
+ 
++  // Allocating a BigInt can GC, so we have to keep the object alive.
+   if (use->type() == MIRType::BigInt) {
+     return true;
+   }
+@@ -4043,6 +4044,8 @@ static bool NeedsKeepAlive(MInstruction* slotsOrElements, MInstruction* use) {
+       case MDefinition::Opcode::BoundsCheck:
+       case MDefinition::Opcode::GuardElementNotHole:
+       case MDefinition::Opcode::SpectreMaskIndex:
++      case MDefinition::Opcode::DebugEnterGCUnsafeRegion:
++      case MDefinition::Opcode::DebugLeaveGCUnsafeRegion:
+         iter++;
+         break;
+       default:
+@@ -4108,6 +4111,22 @@ bool jit::AddKeepAliveInstructions(MIRGraph& graph) {
+         }
+ 
+         if (!NeedsKeepAlive(ins, use)) {
++#ifdef DEBUG
++          // These two instructions don't start a GC unsafe region, because they
++          // overwrite their elements register at the very start. This ensures
++          // there's no invalidated elements value kept on the stack.
++          if (use->isApplyArray() || use->isConstructArray()) {
++            continue;
++          }
++
++          // Enter a GC unsafe region while the elements/slots are on the stack.
++          auto* enter = MDebugEnterGCUnsafeRegion::New(graph.alloc());
++          use->block()->insertAfter(ins, enter);
++
++          // Leave the region after the use.
++          auto* leave = MDebugLeaveGCUnsafeRegion::New(graph.alloc());
++          use->block()->insertAfter(use, leave);
++#endif
+           continue;
+         }
+ 
+diff --git a/js/src/jit/Jit.cpp b/js/src/jit/Jit.cpp
+index cd7cba5b1c5ac..7acd340a9f73f 100644
+--- a/js/src/jit/Jit.cpp
++++ b/js/src/jit/Jit.cpp
+@@ -37,6 +37,11 @@ static EnterJitStatus JS_HAZ_JSNATIVE_CALLER EnterJit(JSContext* cx,
+     return EnterJitStatus::Error;
+   }
+ 
++  // jit::Bailout(), jit::InvalidationBailout(), and jit::HandleException()
++  // reset the counter to zero, so assert here it's also zero when we enter
++  // JIT code.
++  MOZ_ASSERT(!cx->isInUnsafeRegion());
++
+ #ifdef DEBUG
+   // Assert we don't GC before entering JIT code. A GC could discard JIT code
+   // or move the function stored in the CalleeToken (it won't be traced at
+@@ -109,6 +114,9 @@ static EnterJitStatus JS_HAZ_JSNATIVE_CALLER EnterJit(JSContext* cx,
+                         result.address());
+   }
+ 
++  // Ensure the counter was reset to zero after exiting from JIT code.
++  MOZ_ASSERT(!cx->isInUnsafeRegion());
++
+   // Release temporary buffer used for OSR into Ion.
+   cx->runtime()->jitRuntime()->freeIonOsrTempData();
+ 
+diff --git a/js/src/jit/JitFrames.cpp b/js/src/jit/JitFrames.cpp
+index 90ede62a20116..4069d6e7bd886 100644
+--- a/js/src/jit/JitFrames.cpp
++++ b/js/src/jit/JitFrames.cpp
+@@ -663,6 +663,12 @@ void HandleException(ResumeFromException* rfe) {
+ 
+ #ifdef DEBUG
+   cx->runtime()->jitRuntime()->clearDisallowArbitraryCode();
++
++  // Reset the counter when we bailed after MDebugEnterGCUnsafeRegion, but
++  // before the matching MDebugLeaveGCUnsafeRegion.
++  //
++  // NOTE: EnterJit ensures the counter is zero when we enter JIT code.
++  cx->resetInUnsafeRegion();
+ #endif
+ 
+   auto resetProfilerFrame = mozilla::MakeScopeExit([=] {
+diff --git a/js/src/jit/LIROps.yaml b/js/src/jit/LIROps.yaml
+index 822827ba673f6..bd068ee298b58 100644
+--- a/js/src/jit/LIROps.yaml
++++ b/js/src/jit/LIROps.yaml
+@@ -1583,6 +1583,12 @@
+   operands:
+     object: WordSized
+ 
++- name: DebugEnterGCUnsafeRegion
++  num_temps: 1
++
++- name: DebugLeaveGCUnsafeRegion
++  num_temps: 1
++
+ # Load the "slots" member out of a JSObject.
+ #   Input: JSObject pointer
+ #   Output: slots pointer
+diff --git a/js/src/jit/Lowering.cpp b/js/src/jit/Lowering.cpp
+index a7baf9b6b9779..8c5054604f2a5 100644
+--- a/js/src/jit/Lowering.cpp
++++ b/js/src/jit/Lowering.cpp
+@@ -3258,6 +3258,16 @@ void LIRGenerator::visitKeepAliveObject(MKeepAliveObject* ins) {
+   add(new (alloc()) LKeepAliveObject(useKeepalive(obj)), ins);
+ }
+ 
++void LIRGenerator::visitDebugEnterGCUnsafeRegion(
++    MDebugEnterGCUnsafeRegion* ins) {
++  add(new (alloc()) LDebugEnterGCUnsafeRegion(temp()), ins);
++}
++
++void LIRGenerator::visitDebugLeaveGCUnsafeRegion(
++    MDebugLeaveGCUnsafeRegion* ins) {
++  add(new (alloc()) LDebugLeaveGCUnsafeRegion(temp()), ins);
++}
++
+ void LIRGenerator::visitSlots(MSlots* ins) {
+   define(new (alloc()) LSlots(useRegisterAtStart(ins->object())), ins);
+ }
+diff --git a/js/src/jit/MIROps.yaml b/js/src/jit/MIROps.yaml
+index bf525cb62588b..6d140a942697c 100644
+--- a/js/src/jit/MIROps.yaml
++++ b/js/src/jit/MIROps.yaml
+@@ -1259,6 +1259,16 @@
+   result_type: None
+   guard: true
+ 
++- name: DebugEnterGCUnsafeRegion
++  result_type: None
++  guard: true
++  alias_set: none
++
++- name: DebugLeaveGCUnsafeRegion
++  result_type: None
++  guard: true
++  alias_set: none
++
+ - name: Not
+   gen_boilerplate: false
+ 
+diff --git a/js/src/vm/JSContext.h b/js/src/vm/JSContext.h
+index c530ac13e1ff1..84c0bb1cf7b94 100644
+--- a/js/src/vm/JSContext.h
++++ b/js/src/vm/JSContext.h
+@@ -584,6 +584,18 @@ struct JS_PUBLIC_API JSContext : public JS::RootingContext,
+                           "[AutoAssertNoGC] possible GC in GC-unsafe region");
+   }
+ 
++  bool isInUnsafeRegion() const { return bool(inUnsafeRegion); }
++
++  // For JIT use.
++  void resetInUnsafeRegion() {
++    MOZ_ASSERT(inUnsafeRegion >= 0);
++    inUnsafeRegion = 0;
++  }
++
++  static constexpr size_t offsetOfInUnsafeRegion() {
++    return offsetof(JSContext, inUnsafeRegion);
++  }
++
+   /* Whether sampling should be enabled or not. */
+  private:
+   mozilla::Atomic<bool, mozilla::SequentiallyConsistent>

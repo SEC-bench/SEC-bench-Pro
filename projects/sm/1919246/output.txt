@@ -1,0 +1,34 @@
+[12] Assertion failure: pred->isLoopBackedge(), at /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3503
+#01: ???[/out/js +0x61de627]
+#02: ???[/out/js +0x61e1f1a]
+#03: ???[/out/js +0x61d257e]
+#04: ???[/out/js +0x61fb664]
+#05: ???[/out/js +0x61ff8e1]
+#06: ???[/out/js +0x6201f29]
+#07: ???[/out/js +0x620323f]
+#08: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5b3b2757765c bp 0x7fff2d7f3980 sp 0x7fff2d7f3910 T0)
+==12==The signal is caused by a WRITE memory access.
+==12==Hint: address points to the zero page.
+    #0 0x5b3b2757765c in AssertReversePostorder(js::jit::MIRGraph&) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3503:9
+    #1 0x5b3b2757765c in js::jit::AssertGraphCoherency(js::jit::MIRGraph&, bool) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3577:3
+    #2 0x5b3b2757af19 in js::jit::AssertExtendedGraphCoherency(js::jit::MIRGraph&, bool, bool) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3659:3
+    #3 0x5b3b2756b57d in js::jit::OptimizeMIR(js::jit::MIRGenerator*) /src/gecko-dev/js/src/jit/Ion.cpp:1439:5
+    #4 0x5b3b27594663 in js::jit::CompileBackEnd(js::jit::MIRGenerator*, js::jit::WarpSnapshot*) /src/gecko-dev/js/src/jit/Ion.cpp:1632:8
+    #5 0x5b3b275988e0 in js::jit::IonCompile(JSContext*, JS::Handle<JSScript*>, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1767:38
+    #6 0x5b3b275988e0 in js::jit::Compile(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1921:24
+    #7 0x5b3b2759af28 in BaselineCanEnterAtBranch(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2122:25
+    #8 0x5b3b2759af28 in IonCompileScriptForBaseline(JSContext*, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2174:12
+    #9 0x5b3b2759c23e in js::jit::IonCompileScriptForBaselineOSR(JSContext*, js::jit::BaselineFrame*, unsigned int, unsigned char*, js::jit::IonOsrTempData**) /src/gecko-dev/js/src/jit/Ion.cpp:2286:8
+    #10 0x3e2208244cd5  (<unknown module>)
+
+==12==Register values:
+rax = 0x0000000000000000  rbx = 0x0000000000000001  rcx = 0x00005b3b22f680a0  rdx = 0x0000000000000000  
+rdi = 0x00005b3b299ddd90  rsi = 0x00007fff2d7f38c8  rbp = 0x00007fff2d7f3980  rsp = 0x00007fff2d7f3910  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000e42698668f5  r13 = 0x00000e42698668f4  r14 = 0x000072134c3347c0  r15 = 0x000072134c333970  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/IonAnalysis.cpp:3503:9 in AssertReversePostorder(js::jit::MIRGraph&)
+==12==ABORTING

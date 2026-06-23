@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:449910706",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/interpreter/bytecode-generator.cc"
+  ],
+  "target_subdir": [
+    "src/interpreter"
+  ],
+  "command_options": "",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Hole leak",
+  "error_type": "DCHECK",
+  "description": "A hole leak vulnerability exists in V8's Ignition bytecode compiler due to an incorrect hole-check elimination in `VisitDoWhileStatement` (src/interpreter/bytecode-generator.cc). The compiler uses a bitmap-based `HoleCheckElisionScope` mechanism to track which `let`/`const` variables have already been hole-checked, eliding redundant checks as an optimization. In a do-while loop with a non-trivially-boolean condition, the compiler correctly wraps the loop condition in a `HoleCheckElisionScope` when `loop_builder.break_labels()` is non-empty (i.e., when there are `break` statements targeting the do-while loop itself). However, it fails to account for labeled break statements that target an *outer* scope (e.g., `break target` where `target` is a label on an enclosing switch statement). Such outer labeled breaks are handled by the outer `ControlScopeForBreakable`, not by the do-while's `ControlScopeForIteration`, so they do not appear in `loop_builder.break_labels()`. As a result, when the loop body contains only outer labeled breaks (not local breaks), `loop_builder.break_labels()->empty()` returns true, and the loop condition is visited *without* a `HoleCheckElisionScope`. Any hole-check state updates from evaluating the condition (e.g., `x=1` in `(x=1) && false`) are incorrectly propagated to the outer scope. At runtime, when the outer labeled break fires, the loop condition is never actually reached, so the variable remains uninitialized (`the_hole`). But since the hole check was statically elided based on the incorrectly propagated state, accessing the variable after the labeled break does not raise an exception, leaking `the_hole` into JavaScript.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "history-search",
+      "evidence_lineno": 0,
+      "evidence_text": "b371b4f8ba073fb5c054273e8909bee5de574b35 [interpreter] Merge hole elision info on break",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/7026071",
+      "cl": 7026071,
+      "commit": "b371b4f8ba073fb5c054273e8909bee5de574b35",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/7026071 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7026071",
+      "source_cl": 7026071,
+      "source_commit": "b371b4f8ba073fb5c054273e8909bee5de574b35",
+      "source_ref": "refs/changes/71/7026071/3",
+      "source_patchset": 3
+    }
+  ]
+}

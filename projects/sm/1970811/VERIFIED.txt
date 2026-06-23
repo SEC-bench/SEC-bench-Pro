@@ -1,0 +1,7 @@
+VERIFIED at 2026-05-30T05:50:00Z — 2025-Q2 batch on bug 1970811 (sec-high, 2025-Jun)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `AddressSanitizer: use-after-poison` in `JSScript::containsPC<4ul>` via `JSScript::getAtom` → `js::SetIntrinsicOperation` — exact path the report's gdb backtrace shows
+  - root cause: with `experimental.self_hosted_cache=true`, Baseline-Interpreter frames produced by OSR (on-stack replacement, triggered by `--blinterp-eager --baseline-warmup-threshold=1`) did not carry the REALM_INDEPENDENT flag. When the frame later called a self-hosted intrinsic, JSScript::containsPC dereferenced the script's RefPtr<SharedImmutableScriptData> from the cache's freed pool → use-after-poison on the RefPtr field
+  - PoC: tiny 3-line extracted inline from Report.md (`gczeal(14); a = new Set(); for (b of a) 30;`)
+  - flags: `--fuzzing-safe --ion-offthread-compile=off --setpref=experimental.self_hosted_cache=true --blinterp-eager --baseline-warmup-threshold=1` (all required)
+  - fixed image (git 4b63805dcd90 "Set REALM_INDEPENDENT flag on OSR'd frames when self_hosted_cache is enabled", Phabricator D253387) blocks PoC 5/5.

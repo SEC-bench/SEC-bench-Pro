@@ -1,0 +1,54 @@
+[13] Assertion failure: has<CharT>(), at /src/gecko-dev/js/src/builtin/intl/Segmenter.h:141
+#01: ???[/out/js +0x3c3d68a]
+#02: ???[/out/js +0x2e79433]
+#03: ???[/out/js +0x2e2b6ef]
+#04: ???[/out/js +0x2e4b0d2]
+#05: ???[/out/js +0x2e29b21]
+#06: ???[/out/js +0x2e30835]
+#07: ???[/out/js +0x2e311ea]
+#08: ???[/out/js +0x3130fab]
+#09: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x3131430]
+#10: ???[/out/js +0x2cf7f5f]
+#11: ???[/out/js +0x2cf67f1]
+#12: ???[/out/js +0x2c7239f]
+#13: ???[/out/js +0x2c62d2f]
+#14: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#15: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#16: _start[/out/js +0x2b63f55]
+#17: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x63cf52dcd6bf bp 0x7ffc2ff42dd0 sp 0x7ffc2ff42bc0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x63cf52dcd6bf in unsigned char* js::SegmentsStringChars::data<unsigned char>() const /src/gecko-dev/js/src/builtin/intl/Segmenter.h:141:5
+    #1 0x63cf52dcd6bf in auto* CreateBreakIterator<GraphemeClusterSegmenterBreakIteratorLatin1, js::SegmentsObject>(JS::Handle<js::SegmentsObject*>) /src/gecko-dev/js/src/builtin/intl/Segmenter.cpp:753:29
+    #2 0x63cf52dcd6bf in bool EnsureBreakIterator<js::SegmentsObject>(JSContext*, JS::Handle<js::SegmentsObject*>, int) /src/gecko-dev/js/src/builtin/intl/Segmenter.cpp:792:15
+    #3 0x63cf52dcd6bf in js::ArrayObject* FindSegmentBoundaries<js::SegmentsObject>(JSContext*, JS::Handle<js::SegmentsObject*>, int) /src/gecko-dev/js/src/builtin/intl/Segmenter.cpp:857:8
+    #4 0x63cf52dcd6bf in js::intl_FindSegmentBoundaries(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/intl/Segmenter.cpp:955:18
+    #5 0x63cf52009432 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:532:13
+    #6 0x63cf51fbb6ee in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:628:12
+    #7 0x63cf51fdb0d1 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:700:10
+    #8 0x63cf51fdb0d1 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3329:16
+    #9 0x63cf51fb9b20 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:502:13
+    #10 0x63cf51fc0834 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:893:13
+    #11 0x63cf51fc11e9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:926:10
+    #12 0x63cf522c0faa in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:496:10
+    #13 0x63cf522c142f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:520:10
+    #14 0x63cf51e87f5e in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1307:10
+    #15 0x63cf51e867f0 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #16 0x63cf51e0239e in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11724:10
+    #17 0x63cf51e0239e in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11976:12
+    #18 0x63cf51df2d2e in main /src/gecko-dev/js/src/shell/js.cpp:12391:12
+    #19 0x7be2b017b1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x7be2b017b28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x63cf51cf3f54 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b63f54) (BuildId: d9633d1661d6627a36e6397b501d45c0)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x000078b2af5e25a0  rcx = 0x000063cf50014d60  rdx = 0x0000000000000000  
+rdi = 0x000063cf56139210  rsi = 0x00007ffc2ff42b78  rbp = 0x00007ffc2ff42dd0  rsp = 0x00007ffc2ff42bc0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007822af5e6411  r13 = 0x0000000000000000  r14 = 0x0000001400000630  r15 = 0x0000100005fe0580  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/builtin/intl/Segmenter.h:141:5 in unsigned char* js::SegmentsStringChars::data<unsigned char>() const
+==13==ABORTING

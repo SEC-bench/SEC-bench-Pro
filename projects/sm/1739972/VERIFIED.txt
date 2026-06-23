@@ -1,0 +1,15 @@
+VERIFIED at 2026-05-29T03:30:00Z — Tier A import on bug 1739972 (sec-high csectype-uaf, 2021-Nov)
+  - CONFIMRED: RUNTIME_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: obj->maybeCCWRealm() == this, at /src/gecko-dev/js/src/vm/Realm.cpp:445`
+  - verbatim match against the bug report's expected stack frame #0 (Realm::setNewObjectMetadata)
+  - root cause path: enableShellAllocationMetadataBuilder + scripted constructor on a cross-compartment wrapper → Baseline IC falls back to NewPlainObject runtime helper, which used JSContext realm instead of shape realm → CCW realm-consistency assert fires once metadata-builder cross-compartment alloc kicks in
+  - fixed image (apply patches/0001-fix-from-git-76e93f9f269b.patch — switch realm in NewPlainObject fallback) blocks PoC 10/10
+
+Extra compat for the Nov-2021 source vs Oct-2021 (1736307, 1736310):
+  Mozilla refactored virtualenv handling between 6208b30c6af1 (Oct 22) and a8ecf98c0ecd (Nov 9):
+  the file moved from python/mozbuild/mozbuild/virtualenv.py to python/mach/mach/virtualenv.py,
+  and `_site_packages_dir()` gained a hack for the `local/` prefix in Debian distutils paths but
+  still returned `lib/python3.11/dist-packages` instead of `lib/python3.11/site-packages` (venv
+  layout). The patches/fix_virtualenv_debian.py helper handles both file paths (Oct + Nov layouts)
+  and both methods (short-circuit _disable_pip_outdated_warning, translate dist-packages →
+  site-packages in _site_packages_dir). Idempotent.

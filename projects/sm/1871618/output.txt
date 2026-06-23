@@ -1,0 +1,221 @@
+["", ""]
+1012629529
+2092117286
+-1619479914
+-1619479914
+NaN
+4
+NaN
+15
+-1405221894
+7.375
+1337264982
+-238483993
+702094269
+-1871180600
+null
+-1335674571
+-1047674562
+-1737701162
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+7.375
+113573078
+-466695536
+636220566
+1310911638
+-1162363932
+-1361432473
+-988507799
+-1919535560
+138540391
+1584343825
+2073248472
+-1871180600
+1148307570
+657573398
+-62274104
+12
+7.375
+1107453780
+1065370312
+
+1179874278
+675332182
+7.375
+-1047674562
+1619693374
+1158528285
+-1047674562
+355553048
+-1319688518
+-28542058
+1697564054
+1367469878
+257644578
+
+-1583180088
+-530826730
+-2022306434
+324102568
+1059718456
+-364562986
+91666767
+=================================================================
+==11==ERROR: AddressSanitizer: heap-use-after-free on address 0x7d3c298b7734 at pc 0x56348999ee15 bp 0x7ffd870eb420 sp 0x7ffd870eb418
+READ of size 1 at 0x7d3c298b7734 thread T0
+    #0 0x56348999ee14 in js::jit::ICScript::active() const /src/gecko-dev/js/src/jit/JitScript.h:191:32
+    #1 0x56348999ee14 in js::jit::ICScript::purgeStubs(JS::Zone*, js::jit::ICStubSpace&) /src/gecko-dev/js/src/jit/JitScript.cpp:524:7
+    #2 0x56348999e32a in js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&)::$_0::operator()(js::jit::ICScript*) const /src/gecko-dev/js/src/jit/JitScript.cpp:503:39
+    #3 0x56348999e32a in void js::jit::InliningRoot::forEachInlinedScript<js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&)::$_0>(js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&)::$_0 const&) const /src/gecko-dev/js/src/jit/TrialInlining.h:101:7
+    #4 0x56348999e32a in void js::jit::JitScript::forEachICScript<js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&)::$_0>(js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&)::$_0 const&) /src/gecko-dev/js/src/jit/JitScript.cpp:367:21
+    #5 0x56348999e32a in js::jit::JitScript::purgeStubs(JSScript*, js::jit::ICStubSpace&) /src/gecko-dev/js/src/jit/JitScript.cpp:502:3
+    #6 0x563488c2fdd7 in JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1::operator()(js::jit::JitScript*) const /src/gecko-dev/js/src/gc/Zone.cpp:458:20
+    #7 0x563488c2fdd7 in void js::jit::JitZone::forEachJitScript<(js::jit::JitScriptFilter)1, JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1>(JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1&&) /src/gecko-dev/js/src/jit/JitZone.h:259:9
+    #8 0x563488c2fdd7 in JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&) /src/gecko-dev/js/src/gc/Zone.cpp:418:14
+    #9 0x5634889df9ef in js::gc::GCRuntime::discardJITCodeForGC() /src/gecko-dev/js/src/gc/GC.cpp:2527:13
+    #10 0x5634889e4817 in js::gc::GCRuntime::endPreparePhase(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:2764:5
+    #11 0x5634889f054c in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3663:7
+    #12 0x5634889f7939 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4248:3
+    #13 0x5634889fac35 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4439:9
+    #14 0x56348899becf in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp:4885:5
+    #15 0x563488a0267d in bool js::gc::CellAllocator::PreAllocChecks<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:256:11
+    #16 0x5634875f5f25 in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)2, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:114:8
+    #17 0x563487ef465b in JSThinInlineString* js::gc::CellAllocator::NewString<JSThinInlineString, (js::AllowGC)1, unsigned long&, unsigned char**&>(JSContext*, js::gc::Heap, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/gc/Allocator-inl.h:66:15
+    #18 0x563487ef465b in JSThinInlineString* js::gc::CellAllocator::NewCell<JSThinInlineString, (js::AllowGC)1, js::gc::Heap&, unsigned long&, unsigned char**&>(JSContext*, js::gc::Heap&, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/gc/Allocator-inl.h:50:12
+    #19 0x563487ef465b in JSThinInlineString* JSContext::newCell<JSThinInlineString, (js::AllowGC)1, js::gc::Heap&, unsigned long&, unsigned char**&>(js::gc::Heap&, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/vm/JSContext-inl.h:405:10
+    #20 0x563487ef465b in JSInlineString* js::AllocateInlineString<(js::AllowGC)1, unsigned char>(JSContext*, unsigned long, unsigned char**, js::gc::Heap) /src/gecko-dev/js/src/vm/StringType-inl.h:34:16
+    #21 0x563487ef465b in JSString* js::ConcatStrings<(js::AllowGC)1>(JSContext*, js::MaybeRooted<JSString*, (js::AllowGC)1>::HandleType, js::MaybeRooted<JSString*, (js::AllowGC)1>::HandleType, js::gc::Heap) /src/gecko-dev/js/src/vm/StringType.cpp:996:15
+    #22 0x305b7c8022fa  (<unknown module>)
+
+0x7d3c298b7734 is located 180 bytes inside of 1144-byte region [0x7d3c298b7680,0x7d3c298b7af8)
+freed by thread T0 here:
+    #0 0x563487319b76 in free /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x5634890a5269 in js_free(void*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:418:3
+    #2 0x5634890a5269 in void js_delete<js::jit::ICScript>(js::jit::ICScript const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:566:5
+    #3 0x5634890a5269 in JS::DeletePolicy<js::jit::ICScript>::operator()(js::jit::ICScript const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:638:35
+    #4 0x5634890a5269 in mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>::reset(js::jit::ICScript*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/UniquePtr.h:301:7
+    #5 0x5634890a5269 in mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>::~UniquePtr() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/UniquePtr.h:249:18
+    #6 0x5634890a5269 in mozilla::detail::VectorImpl<mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>, 0ul, js::TempAllocPolicy, false>::destroy(mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>*, mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:161:11
+    #7 0x5634890a5269 in mozilla::Vector<mozilla::UniquePtr<js::jit::ICScript, JS::DeletePolicy<js::jit::ICScript>>, 0ul, js::TempAllocPolicy>::shrinkBy(unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:1138:3
+    #8 0x56348999e045 in js::jit::JitScript::purgeInactiveICScripts() /src/gecko-dev/js/src/jit/JitScript.cpp:476:19
+    #9 0x563488c2fdc4 in JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1::operator()(js::jit::JitScript*) const /src/gecko-dev/js/src/gc/Zone.cpp:457:20
+    #10 0x563488c2fdc4 in void js::jit::JitZone::forEachJitScript<(js::jit::JitScriptFilter)1, JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1>(JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&)::$_1&&) /src/gecko-dev/js/src/jit/JitZone.h:259:9
+    #11 0x563488c2fdc4 in JS::Zone::forceDiscardJitCode(JS::GCContext*, JS::Zone::DiscardOptions const&) /src/gecko-dev/js/src/gc/Zone.cpp:418:14
+    #12 0x5634889df9ef in js::gc::GCRuntime::discardJITCodeForGC() /src/gecko-dev/js/src/gc/GC.cpp:2527:13
+    #13 0x5634889e4817 in js::gc::GCRuntime::endPreparePhase(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:2764:5
+    #14 0x5634889f054c in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3663:7
+    #15 0x5634889f7939 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4248:3
+    #16 0x5634889fac35 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4439:9
+    #17 0x56348899becf in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp:4885:5
+    #18 0x563488a0267d in bool js::gc::CellAllocator::PreAllocChecks<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:256:11
+    #19 0x5634875f5f25 in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)2, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:114:8
+    #20 0x563487ef465b in JSThinInlineString* js::gc::CellAllocator::NewString<JSThinInlineString, (js::AllowGC)1, unsigned long&, unsigned char**&>(JSContext*, js::gc::Heap, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/gc/Allocator-inl.h:66:15
+    #21 0x563487ef465b in JSThinInlineString* js::gc::CellAllocator::NewCell<JSThinInlineString, (js::AllowGC)1, js::gc::Heap&, unsigned long&, unsigned char**&>(JSContext*, js::gc::Heap&, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/gc/Allocator-inl.h:50:12
+    #22 0x563487ef465b in JSThinInlineString* JSContext::newCell<JSThinInlineString, (js::AllowGC)1, js::gc::Heap&, unsigned long&, unsigned char**&>(js::gc::Heap&, unsigned long&, unsigned char**&) /src/gecko-dev/js/src/vm/JSContext-inl.h:405:10
+    #23 0x563487ef465b in JSInlineString* js::AllocateInlineString<(js::AllowGC)1, unsigned char>(JSContext*, unsigned long, unsigned char**, js::gc::Heap) /src/gecko-dev/js/src/vm/StringType-inl.h:34:16
+    #24 0x563487ef465b in JSString* js::ConcatStrings<(js::AllowGC)1>(JSContext*, js::MaybeRooted<JSString*, (js::AllowGC)1>::HandleType, js::MaybeRooted<JSString*, (js::AllowGC)1>::HandleType, js::gc::Heap) /src/gecko-dev/js/src/vm/StringType.cpp:996:15
+    #25 0x305b7c8022fa  (<unknown module>)
+    #26 0x305b7c88ffa2  (<unknown module>)
+    #27 0x305b7c88e281  (<unknown module>)
+    #28 0x305b7c7f9d80  (<unknown module>)
+    #29 0x563489968582 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #30 0x563489968582 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #31 0x56348758cf64 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #32 0x56348758e775 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #33 0x5634875905b5 in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:672:8
+    #34 0x563487968f79 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:109:10
+    #35 0x563487aadf00 in MaybeCallMethod(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2279:10
+    #36 0x563487aac82a in JS::OrdinaryToPrimitive(JSContext*, JS::Handle<JSObject*>, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2386:10
+    #37 0x563487aae87e in js::ToPrimitiveSlow(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.cpp:2440:10
+    #38 0x5634882980ff in js::ToPrimitive(JSContext*, JSType, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSObject.h:772:10
+    #39 0x5634882980ff in js::ToNumberSlow(JSContext*, JS::Handle<JS::Value>, double*) /src/gecko-dev/js/src/jsnum.cpp:2017:10
+    #40 0x563487577a67 in JS::ToNumber(JSContext*, JS::Handle<JS::Value>, double*) /src/gecko-dev/obj-debug-asan/dist/include/js/Conversions.h:139:10
+    #41 0x563487577a67 in js::RoundFloat32(JSContext*, JS::Handle<JS::Value>, float*) /src/gecko-dev/js/src/jsmath.cpp:275:18
+    #42 0x563487577a67 in js::RoundFloat32(JSContext*, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jsmath.cpp:282:8
+    #43 0x305b7c8e7982  (<unknown module>)
+    #44 0x305b7c8e524d  (<unknown module>)
+    #45 0x305b7c891231  (<unknown module>)
+
+previously allocated by thread T0 here:
+    #0 0x563487319e14 in malloc /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3
+    #1 0x5634874281ba in js_arena_malloc(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:370:10
+    #2 0x5634874281ba in unsigned char* js_pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:586:26
+    #3 0x5634874281ba in unsigned char* js::MallocProvider<JSContext>::maybe_pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:57:12
+    #4 0x5634874281ba in unsigned char* js::MallocProvider<JSContext>::pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:109:12
+    #5 0x56348902ffb6 in unsigned char* js::MallocProvider<JSContext>::pod_malloc<unsigned char>(unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:127:12
+    #6 0x56348902ffb6 in js::jit::TrialInliner::createInlinedICScript(JSFunction*, js::BytecodeLocation) /src/gecko-dev/js/src/jit/TrialInlining.cpp:683:21
+    #7 0x56348903135b in js::jit::TrialInliner::maybeInlineCall(js::jit::ICEntry&, js::jit::ICFallbackStub*, js::BytecodeLocation) /src/gecko-dev/js/src/jit/TrialInlining.cpp:752:27
+    #8 0x563489029587 in js::jit::TrialInliner::tryInlining() /src/gecko-dev/js/src/jit/TrialInlining.cpp:884:14
+    #9 0x563489028995 in js::jit::DoTrialInlining(JSContext*, js::jit::BaselineFrame*) /src/gecko-dev/js/src/jit/TrialInlining.cpp:103:18
+    #10 0x305b7c806dd2  (<unknown module>)
+    #11 0x305b7c8e4f09  (<unknown module>)
+    #12 0x305b7c891231  (<unknown module>)
+    #13 0x305b7c8e3bb5  (<unknown module>)
+    #14 0x305b7c7f9d80  (<unknown module>)
+    #15 0x563489968582 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #16 0x563489968582 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #17 0x56348758cf64 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #18 0x56348758e775 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #19 0x563488e00eea in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1659:10
+    #20 0x305b7c8044be  (<unknown module>)
+    #21 0x305b7c8196e3  (<unknown module>)
+    #22 0x305b7c927260  (<unknown module>)
+    #23 0x305b7c7f9d80  (<unknown module>)
+    #24 0x563489968582 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #25 0x563489968582 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #26 0x56348758cf64 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #27 0x56348758e775 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:605:13
+    #28 0x563488e00eea in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1659:10
+    #29 0x305b7c8044be  (<unknown module>)
+    #30 0x305b7c8196e3  (<unknown module>)
+    #31 0x305b7c81fffc  (<unknown module>)
+    #32 0x305b7c7f9d80  (<unknown module>)
+    #33 0x563489968582 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:115:5
+    #34 0x563489968582 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:261:10
+    #35 0x56348758cf64 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:441:32
+    #36 0x56348759383e in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:838:13
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/jit/JitScript.h:191:32 in js::jit::ICScript::active() const
+Shadow bytes around the buggy address:
+  0x7d3c298b7480: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7500: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7d3c298b7600: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7d3c298b7680: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+=>0x7d3c298b7700: fd fd fd fd fd fd[fd]fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7780: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7800: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7880: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7900: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7d3c298b7980: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==11==ABORTING

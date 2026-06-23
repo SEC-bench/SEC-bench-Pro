@@ -1,0 +1,58 @@
+Fake ArrayBufferExtension addr: 0x95100000000
+Preparing heap
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Spraying ArrayBufferExtensions for target heap layout
+ - done
+Finalizing layout spray
+Victim ArrayBufferExtension handle: 0x16d43ec0
+Allocating sacrificial ArrayBufferExtensions
+ - done
+TypedArray ArrayBuffer addr: 0x6840864
+Won JSArrayBuffer::Setup race
+Allocating more sacrificial ArrayBufferExtensions
+ - done
+Triggering ArrayBufferSweeper
+Spraying fake ArrayBufferExtension pointer
+Triggering use-after-free...
+ - failed :/
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 61f8dd1ff6a0
+
+==== C stack trace ===============================
+
+out/x64.release/d8(+0x1917547)[0x61f8d88f4547]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7038a2753330]
+out/x64.release/d8(+0x70ab30)[0x61f8d76e7b30]
+out/x64.release/d8(+0x709778)[0x61f8d76e6778]
+out/x64.release/d8(+0x709499)[0x61f8d76e6499]
+out/x64.release/d8(+0x191835d)[0x61f8d88f535d]
+out/x64.release/d8(+0x19186a3)[0x61f8d88f56a3]
+out/x64.release/d8(+0x709d82)[0x61f8d76e6d82]
+out/x64.release/d8(+0x797dea)[0x61f8d7774dea]
+out/x64.release/d8(+0x76c689)[0x61f8d7749689]
+out/x64.release/d8(+0x76bb44)[0x61f8d7748b44]
+out/x64.release/d8(+0x77fc23)[0x61f8d775cc23]
+out/x64.release/d8(+0x77f79f)[0x61f8d775c79f]
+out/x64.release/d8(+0xfb7a7b)[0x61f8d7f94a7b]
+[end of stack trace]
+Segmentation fault (core dumped)

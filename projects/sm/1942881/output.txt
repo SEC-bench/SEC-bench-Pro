@@ -1,0 +1,48 @@
+[12] Assertion failure: !cx->suppressGC, at /src/gecko-dev/js/src/vm/Interpreter.cpp:463
+#01: ???[/out/js +0x2ea0d27]
+#02: ???[/out/js +0x2ea2367]
+#03: ???[/out/js +0x2ea3edc]
+#04: JS_CallFunctionValue(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>)[/out/js +0x312eafa]
+#05: ???[/out/js +0x2d1478a]
+#06: JSContext::handleInterrupt()[/out/js +0x36728a4]
+#07: ???[/out/js +0x366598f]
+#08: ???[/out/js +0x2e7f6ed]
+#09: ???[/out/js +0x2e710c9]
+#10: ???[/out/js +0x2e714ee]
+#11: ???[/out/js +0x49ad559]
+#12: ???[/out/js +0x5496ede]
+#13: ???[/out/js +0x54934e7]
+#14: ???[/out/js +0x48a97ad]
+#15: ???[/out/js +0x48a8b49]
+#16: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: ILL on unknown address 0x64c31783dd51 (pc 0x64c31783dd51 bp 0x7ffe56eeda90 sp 0x7ffe56eed9a0 T0)
+    #0 0x64c31783dd51 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:463:3
+    #1 0x64c31783f366 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:660:13
+    #2 0x64c317840edb in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:727:8
+    #3 0x64c317acbaf9 in JS_CallFunctionValue(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CallAndConstruct.cpp:55:10
+    #4 0x64c3176b1789 in ShellInterruptCallback(JSContext*) /src/gecko-dev/js/src/shell/js.cpp:1142:16
+    #5 0x64c31800f8a3 in InvokeInterruptCallbacks(JSContext*) /src/gecko-dev/js/src/vm/Runtime.cpp:393:10
+    #6 0x64c31800f8a3 in HandleInterrupt(JSContext*, bool) /src/gecko-dev/js/src/vm/Runtime.cpp:430:12
+    #7 0x64c31800f8a3 in JSContext::handleInterrupt() /src/gecko-dev/js/src/vm/Runtime.cpp:502:12
+    #8 0x64c31800298e in js::RegExpShared::execute(JSContext*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSLinearString*>, unsigned long, js::VectorMatchPairs*) /src/gecko-dev/js/src/vm/RegExpObject.cpp:804:14
+    #9 0x64c31781c6ec in ExecuteRegExpImpl(JSContext*, js::RegExpStatics*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSLinearString*>, unsigned long, js::VectorMatchPairs*) /src/gecko-dev/js/src/builtin/RegExp.cpp:330:7
+    #10 0x64c31781c6ec in ExecuteRegExp(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSString*>, int, js::VectorMatchPairs*) /src/gecko-dev/js/src/builtin/RegExp.cpp:1432:7
+    #11 0x64c31780e0c8 in RegExpMatcherImpl(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSString*>, int, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/builtin/RegExp.cpp:1454:7
+    #12 0x64c31780e4ed in js::RegExpMatcherRaw(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSString*>, int, js::MatchPairs*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/builtin/RegExp.cpp:1506:10
+    #13 0x64c31934a558 in js::jit::RRegExpMatcher::recover(JSContext*, js::jit::SnapshotIterator&) const /src/gecko-dev/js/src/jit/Recover.cpp:1834:8
+    #14 0x64c319e33edd in js::jit::SnapshotIterator::computeInstructionResults(JSContext*, js::jit::RInstructionResults*) const /src/gecko-dev/js/src/jit/JitFrames.cpp:2270:29
+    #15 0x64c319e304e6 in js::jit::SnapshotIterator::initInstructionResults(js::jit::MaybeReadFallback&) /src/gecko-dev/js/src/jit/JitFrames.cpp:2223:12
+    #16 0x64c3192467ac in js::jit::BailoutIonToBaseline(JSContext*, js::jit::JitActivation*, js::jit::JSJitFrameIter const&, js::jit::BaselineBailoutInfo**, js::jit::ExceptionBailoutInfo const*, js::jit::BailoutReason) /src/gecko-dev/js/src/jit/BaselineBailouts.cpp:1646:17
+    #17 0x64c319245b48 in js::jit::Bailout(js::jit::BailoutStack*, js::jit::BaselineBailoutInfo**) /src/gecko-dev/js/src/jit/Bailouts.cpp:146:7
+    #18 0x6facdcbf93e1  (<unknown module>)
+
+==12==Register values:
+rax = 0x00006fad5dad5000  rbx = 0x00000fffcadddb3c  rcx = 0x0000000000000000  rdx = 0x000073ad5f5ce000  
+rdi = 0x00006fad5dad5000  rsi = 0x0000000000000001  rbp = 0x00007ffe56eeda90  rsp = 0x00007ffe56eed9a0  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007fffffffff01  r11 = 0x0000000000000201  
+r12 = 0x00000e33abdbc02b  r13 = 0x00000c9863830988  r14 = 0x0000719d5ede0240  r15 = 0x0000719d5ede0080  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ILL /src/gecko-dev/js/src/vm/Interpreter.cpp:463:3 in js::RunScript(JSContext*, js::RunState&)
+==12==ABORTING

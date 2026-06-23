@@ -1,0 +1,33 @@
+From cf03d55db2a0b7c5ff62e08ff5ad52312f6da0b4 Mon Sep 17 00:00:00 2001
+From: Thibaud Michaud <thibaudm@chromium.org>
+Date: Wed, 10 Apr 2024 19:36:55 +0200
+Subject: [PATCH] [wasm][exnref] Fix default value for null exnref
+
+R=manoskouk@chromium.org
+
+Bug: 332081797
+Change-Id: Ied777935946c880a78e2011040a4d9ab19a4ddd2
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5444544
+Reviewed-by: Manos Koukoutos <manoskouk@chromium.org>
+Commit-Queue: Thibaud Michaud <thibaudm@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#93310}
+---
+ src/wasm/constant-expression-interface.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/wasm/constant-expression-interface.cc b/src/wasm/constant-expression-interface.cc
+index 75e6d198df6..c07070d0fba 100644
+--- a/src/wasm/constant-expression-interface.cc
++++ b/src/wasm/constant-expression-interface.cc
+@@ -202,7 +202,7 @@ WasmValue DefaultValueForType(ValueType type, Isolate* isolate) {
+     case kRefNull:
+       return WasmValue(
+           type == kWasmExternRef || type == kWasmNullExternRef ||
+-                  type == kWasmExnRef
++                  type == kWasmExnRef || type == kWasmNullExnRef
+               ? Handle<Object>::cast(isolate->factory()->null_value())
+               : Handle<Object>::cast(isolate->factory()->wasm_null()),
+           type);
+-- 
+2.43.0
+

@@ -1,0 +1,20 @@
+
+
+#
+# Fatal error in ../../src/wasm/canonical-types.cc, line 131
+# Debug check failed: !type.has_index().
+#
+#
+#
+#FailureMessage Object: 0x7ffc539f2180
+==== C stack trace ===============================
+
+    /src/v8/out/x64.debug/d8(+0x364b793) [0x55fe4afe4793]
+    /src/v8/out/x64.debug/d8(+0x364abdd) [0x55fe4afe3bdd]
+    /src/v8/out/x64.debug/d8(+0x362f6be) [0x55fe4afc86be]
+    /src/v8/out/x64.debug/d8(+0x362f115) [0x55fe4afc8115]
+    /src/v8/out/x64.debug/d8(+0x1c18acf) [0x55fe495b1acf]
+    /src/v8/out/x64.debug/d8(+0x1b2a2c2) [0x55fe494c32c2]
+    /src/v8/out/x64.debug/d8(+0x1b29750) [0x55fe494c2750]
+    /src/v8/out/x64.debug/d8(+0x2de7bee) [0x55fe4a780bee]
+Trace/breakpoint trap (core dumped)

@@ -1,0 +1,57 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:411598604",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/heap/large-spaces.cc",
+    "src/heap/page-pool.cc"
+  ],
+  "target_subdir": [
+    "src/heap"
+  ],
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--single-threaded --sandbox-fuzzing --allow-natives-syntax --expose-gc",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A use-after-free vulnerability exists in V8's heap teardown process that can be triggered via sandbox memory corruption. The attacker uses Sandbox.MemoryView to write 0x1415 to sandbox offset 0x40000, setting the LARGE_PAGE flag (bit 10) in the MemoryChunk flags of a normal OLD_SPACE page. This causes the page to be tracked by LargeObjectSpace. During Heap::TearDown(), LargeObjectSpace::TearDown() (large-spaces.cc:73) frees the page's C++ metadata via delete cast to LargePageMetadata*, while the same page is simultaneously present in the page pool with its active_system_pages_ reset to null. When PagePool::ReleaseOnTearDown() subsequently calls DeleteMemoryChunk() on this pooled page, MutablePageMetadata::IsLargePage() reads the already-freed active_system_pages_ field, resulting in a heap-use-after-free. The root cause is the ambiguous IsLargePage() check (active_system_pages_.get() == nullptr), which returns true for both actual large pages and pooled pages, combined with the TearDown ordering that frees large-space metadata before releasing the page pool.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit 41614e86a3e9f3b94f7bb36d83cd9f0fb1c52a17 for fixed-image builds.",
+      "context": "explicit-fix",
+      "evidence_lineno": 248,
+      "evidence_text": "Bug: 411598604; Reviewed-on: CL 6513778",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6513778",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6513778",
+      "source_cl": 6513778,
+      "cl": 6513778,
+      "source_commit": "41614e86a3e9f3b94f7bb36d83cd9f0fb1c52a17",
+      "commit": "41614e86a3e9f3b94f7bb36d83cd9f0fb1c52a17",
+      "source_ref": "refs/changes/78/6513778/5",
+      "source_patchset": 5
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "description": "Upstream fix patch exported from commit 21fcc74333ed48097025343dcdb70227e04f933c for fixed-image builds.",
+      "context": "followup-fix",
+      "evidence_lineno": 314,
+      "evidence_text": "Bug: 411598604, 415968772; Reviewed-on: CL 6516383",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6516383",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6516383",
+      "source_cl": 6516383,
+      "cl": 6516383,
+      "source_commit": "21fcc74333ed48097025343dcdb70227e04f933c",
+      "commit": "21fcc74333ed48097025343dcdb70227e04f933c",
+      "source_ref": "refs/changes/83/6516383/4",
+      "source_patchset": 4
+    }
+  ]
+}

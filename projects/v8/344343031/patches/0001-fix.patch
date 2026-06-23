@@ -1,0 +1,305 @@
+From 4065564213f5c18c15c6bfa72d735e9050004be8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Samuel=20Gro=C3=9F?= <saelo@chromium.org>
+Date: Fri, 18 Oct 2024 14:23:31 +0200
+Subject: [PATCH] [sandbox] Validate parameter count in
+ InterpreterEntryTrampoline
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When invoking a JSFunction with Ignition bytecode, there are currently
+two separate parameter counts: (1) the parameter count in the
+JSDispatchTable entry of the function (used by the caller) and (2) the
+parameter count in the BytecodeArray (used by the callee). As the
+BytecodeArray is not (yet) referenced through the dispatch table, an
+attacker can cause the two values to mismatch (for example by swapping
+one BytecodeArray with another one), which would lead to stack
+corruption. This CL now fixes that by ensuring that the two values are
+identical in the InterpreterEntryTrampoline.
+
+Bug: 40931165, 42204201
+Change-Id: I2de063b88b8c338c74ce1ddc28795a0fe929b3e5
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5906113
+Reviewed-by: Igor Sheludko <ishell@chromium.org>
+Commit-Queue: Samuel Groß <saelo@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#96712}
+---
+ src/builtins/arm64/builtins-arm64.cc          | 25 ++++++++-
+ src/builtins/x64/builtins-x64.cc              | 30 ++++++++--
+ .../sandbox/regress/regress-342297062-1.js    | 17 ++----
+ .../sandbox/regress/regress-342297062-2.js    | 30 +++-------
+ .../sandbox/regress/regress-342297062-3.js    | 56 +++++++++++++++++++
+ 5 files changed, 117 insertions(+), 41 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress/regress-342297062-3.js
+
+diff --git a/src/builtins/arm64/builtins-arm64.cc b/src/builtins/arm64/builtins-arm64.cc
+index ab45233dd1d..4828ef0658a 100644
+--- a/src/builtins/arm64/builtins-arm64.cc
++++ b/src/builtins/arm64/builtins-arm64.cc
+@@ -1256,11 +1256,16 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
+ 
+     FrameScope frame_scope(masm, StackFrame::INTERNAL);
+     // Save incoming new target or generator
+-    __ Push(padreg, new_target);
++    Register maybe_dispatch_handle = V8_ENABLE_LEAPTIERING_BOOL
++                                         ? kJavaScriptCallDispatchHandleRegister
++                                         : padreg;
++    // No need to SmiTag as dispatch handles always look like Smis.
++    static_assert(kJSDispatchHandleShift > 0);
++    __ Push(maybe_dispatch_handle, new_target);
+     __ SmiTag(frame_size);
+     __ PushArgument(frame_size);
+     __ CallRuntime(Runtime::kStackGuardWithGap);
+-    __ Pop(new_target, padreg);
++    __ Pop(new_target, maybe_dispatch_handle);
+   }
+   __ LoadRoot(kInterpreterAccumulatorRegister, RootIndex::kUndefinedValue);
+   __ Ret();
+@@ -1319,6 +1324,22 @@ void Builtins::Generate_InterpreterEntryTrampoline(
+                                           kInterpreterBytecodeArrayRegister,
+                                           x11, &is_baseline, &compile_lazy);
+ 
++#ifdef V8_ENABLE_LEAPTIERING
++  // Validate the parameter count. This protects against an attacker swapping
++  // the bytecode (or the dispatch handle) such that the parameter count of the
++  // dispatch entry doesn't match the one of the BytecodeArray.
++  // TODO(saelo): instead of this validation step, it would probably be nicer
++  // if we could store the BytecodeArray directly in the dispatch entry and
++  // load it from there. Then we can easily guarantee that the parameter count
++  // of the entry matches the parameter count of the bytecode.
++  Register dispatch_handle = kJavaScriptCallDispatchHandleRegister;
++  __ LoadParameterCountFromJSDispatchTable(x6, dispatch_handle, x7);
++  __ Ldrh(x7, FieldMemOperand(kInterpreterBytecodeArrayRegister,
++                              BytecodeArray::kParameterSizeOffset));
++  __ Cmp(x6, x7);
++  __ SbxCheck(eq, AbortReason::kJSSignatureMismatch);
++#endif  // V8_ENABLE_LEAPTIERING
++
+   Label push_stack_frame;
+   Register feedback_vector = x2;
+   __ LoadFeedbackVector(feedback_vector, closure, x7, &push_stack_frame);
+diff --git a/src/builtins/x64/builtins-x64.cc b/src/builtins/x64/builtins-x64.cc
+index 708e128828b..5f45eae3ba9 100644
+--- a/src/builtins/x64/builtins-x64.cc
++++ b/src/builtins/x64/builtins-x64.cc
+@@ -1059,6 +1059,21 @@ void Builtins::Generate_InterpreterEntryTrampoline(
+       masm, shared_function_info, kInterpreterBytecodeArrayRegister,
+       kScratchRegister, &is_baseline, &compile_lazy);
+ 
++#ifdef V8_ENABLE_LEAPTIERING
++  // Validate the parameter count. This protects against an attacker swapping
++  // the bytecode (or the dispatch handle) such that the parameter count of the
++  // dispatch entry doesn't match the one of the BytecodeArray.
++  // TODO(saelo): instead of this validation step, it would probably be nicer
++  // if we could store the BytecodeArray directly in the dispatch entry and
++  // load it from there. Then we can easily guarantee that the parameter count
++  // of the entry matches the parameter count of the bytecode.
++  Register dispatch_handle = kJavaScriptCallDispatchHandleRegister;
++  __ LoadParameterCountFromJSDispatchTable(r8, dispatch_handle);
++  __ cmpw(r8, FieldOperand(kInterpreterBytecodeArrayRegister,
++                           BytecodeArray::kParameterSizeOffset));
++  __ SbxCheck(equal, AbortReason::kJSSignatureMismatch);
++#endif  // V8_ENABLE_LEAPTIERING
++
+   Label push_stack_frame;
+   Register feedback_vector = rbx;
+   __ LoadFeedbackVector(feedback_vector, closure, &push_stack_frame,
+@@ -1797,8 +1812,8 @@ void Builtins::Generate_InterpreterEnterAtBytecode(MacroAssembler* masm) {
+ // static
+ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
+   Register feedback_cell = r8;
+-  Register feedback_vector = r11;
+-  Register return_address = r15;
++  Register feedback_vector = r9;
++  Register return_address = r11;
+ 
+ #ifdef DEBUG
+   for (auto reg : BaselineOutOfLinePrologueDescriptor::registers()) {
+@@ -1847,8 +1862,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
+       __ Push(callee_js_function);  // Callee's JS function.
+       __ Push(descriptor.GetRegisterParameter(
+           BaselineOutOfLinePrologueDescriptor::
+-              kJavaScriptCallArgCount));  // Actual argument
+-                                          // count.
++              kJavaScriptCallArgCount));  // Actual argument count.
+ 
+       // We'll use the bytecode for both code age/OSR resetting, and pushing
+       // onto the frame, so load it into a register.
+@@ -1912,9 +1926,17 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
+       FrameScope inner_frame_scope(masm, StackFrame::INTERNAL);
+       // Save incoming new target or generator
+       __ Push(new_target);
++#ifdef V8_ENABLE_LEAPTIERING
++      // No need to SmiTag as dispatch handles always look like Smis.
++      static_assert(kJSDispatchHandleShift > 0);
++      __ Push(kJavaScriptCallDispatchHandleRegister);
++#endif
+       __ SmiTag(frame_size);
+       __ Push(frame_size);
+       __ CallRuntime(Runtime::kStackGuardWithGap, 1);
++#ifdef V8_ENABLE_LEAPTIERING
++      __ Pop(kJavaScriptCallDispatchHandleRegister);
++#endif
+       __ Pop(new_target);
+     }
+ 
+diff --git a/test/mjsunit/sandbox/regress/regress-342297062-1.js b/test/mjsunit/sandbox/regress/regress-342297062-1.js
+index c38ff0b7065..8b9e055b515 100644
+--- a/test/mjsunit/sandbox/regress/regress-342297062-1.js
++++ b/test/mjsunit/sandbox/regress/regress-342297062-1.js
+@@ -2,7 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-// Flags: --allow-natives-syntax --sandbox-testing
++// Flags: --sandbox-testing
+ 
+ const kJSFunctionType = Sandbox.getInstanceTypeIdFor('JS_FUNCTION_TYPE');
+ const kJSFunctionDispatchHandleOffset = Sandbox.getFieldOffset(kJSFunctionType, 'dispatch_handle');
+@@ -15,26 +15,19 @@ for (let i = 1; i <= 10000; i++) {
+ }
+ let body = 'return 42;';
+ let f1 = new Function(...params, body);
+-%PrepareFunctionForOptimization(f1);
+-f1();
+-%OptimizeFunctionOnNextCall(f1);
+ f1();
+ 
+ let f2 = new Function('a', 'b', 'c', 'return 43;');
+-%PrepareFunctionForOptimization(f2);
+-f2();
+-%OptimizeFunctionOnNextCall(f2);
+ f2();
+ 
+ // Transplant the dispatch handle from one function to another.
+-// This should simply result in the execution of different (but valid) code.
+-assertEquals(f1(), 42);
+-assertEquals(f2(), 43);
+ let f1_addr = Sandbox.getAddressOf(f1);
+ let f2_addr = Sandbox.getAddressOf(f2);
+ let dispatch_handle1 = memory.getUint32(f1_addr + kJSFunctionDispatchHandleOffset, true);
+ let dispatch_handle2 = memory.getUint32(f2_addr + kJSFunctionDispatchHandleOffset, true);
+ memory.setUint32(f2_addr + kJSFunctionDispatchHandleOffset, dispatch_handle1, true);
+ memory.setUint32(f1_addr + kJSFunctionDispatchHandleOffset, dispatch_handle2, true);
+-assertEquals(f1(), 43);
+-assertEquals(f2(), 42);
++
++f1();
++f2();
++// Should either crash safely or succeed.
+diff --git a/test/mjsunit/sandbox/regress/regress-342297062-2.js b/test/mjsunit/sandbox/regress/regress-342297062-2.js
+index 99ab3e767de..c38ff0b7065 100644
+--- a/test/mjsunit/sandbox/regress/regress-342297062-2.js
++++ b/test/mjsunit/sandbox/regress/regress-342297062-2.js
+@@ -2,7 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-// Flags: --allow-natives-syntax --sandbox-testing --no-maglev-inlining --no-turbo-inlining
++// Flags: --allow-natives-syntax --sandbox-testing
+ 
+ const kJSFunctionType = Sandbox.getInstanceTypeIdFor('JS_FUNCTION_TYPE');
+ const kJSFunctionDispatchHandleOffset = Sandbox.getFieldOffset(kJSFunctionType, 'dispatch_handle');
+@@ -26,31 +26,15 @@ f2();
+ %OptimizeFunctionOnNextCall(f2);
+ f2();
+ 
+-// Inlining needs to be disabled here so the JIT compiler emits calls to the
+-// (known) functions instead of inlining them.
+-function caller1() {
+-  f1();
+-}
+-function caller2() {
+-  f2();
+-}
+-%PrepareFunctionForOptimization(caller1);
+-%PrepareFunctionForOptimization(caller2);
+-caller1();
+-caller2();
+-%OptimizeFunctionOnNextCall(caller1);
+-%OptimizeFunctionOnNextCall(caller2);
+-caller1();
+-caller2();
+-
+-// Swap the dispatch handles of the two functions.
++// Transplant the dispatch handle from one function to another.
++// This should simply result in the execution of different (but valid) code.
++assertEquals(f1(), 42);
++assertEquals(f2(), 43);
+ let f1_addr = Sandbox.getAddressOf(f1);
+ let f2_addr = Sandbox.getAddressOf(f2);
+ let dispatch_handle1 = memory.getUint32(f1_addr + kJSFunctionDispatchHandleOffset, true);
+ let dispatch_handle2 = memory.getUint32(f2_addr + kJSFunctionDispatchHandleOffset, true);
+ memory.setUint32(f2_addr + kJSFunctionDispatchHandleOffset, dispatch_handle1, true);
+ memory.setUint32(f1_addr + kJSFunctionDispatchHandleOffset, dispatch_handle2, true);
+-
+-caller1();
+-caller2();
+-// Should either crash safely or succeed.
++assertEquals(f1(), 43);
++assertEquals(f2(), 42);
+diff --git a/test/mjsunit/sandbox/regress/regress-342297062-3.js b/test/mjsunit/sandbox/regress/regress-342297062-3.js
+new file mode 100644
+index 00000000000..99ab3e767de
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress/regress-342297062-3.js
+@@ -0,0 +1,56 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --allow-natives-syntax --sandbox-testing --no-maglev-inlining --no-turbo-inlining
++
++const kJSFunctionType = Sandbox.getInstanceTypeIdFor('JS_FUNCTION_TYPE');
++const kJSFunctionDispatchHandleOffset = Sandbox.getFieldOffset(kJSFunctionType, 'dispatch_handle');
++
++let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++
++let params = [];
++for (let i = 1; i <= 10000; i++) {
++  params.push(`a${i}`);
++}
++let body = 'return 42;';
++let f1 = new Function(...params, body);
++%PrepareFunctionForOptimization(f1);
++f1();
++%OptimizeFunctionOnNextCall(f1);
++f1();
++
++let f2 = new Function('a', 'b', 'c', 'return 43;');
++%PrepareFunctionForOptimization(f2);
++f2();
++%OptimizeFunctionOnNextCall(f2);
++f2();
++
++// Inlining needs to be disabled here so the JIT compiler emits calls to the
++// (known) functions instead of inlining them.
++function caller1() {
++  f1();
++}
++function caller2() {
++  f2();
++}
++%PrepareFunctionForOptimization(caller1);
++%PrepareFunctionForOptimization(caller2);
++caller1();
++caller2();
++%OptimizeFunctionOnNextCall(caller1);
++%OptimizeFunctionOnNextCall(caller2);
++caller1();
++caller2();
++
++// Swap the dispatch handles of the two functions.
++let f1_addr = Sandbox.getAddressOf(f1);
++let f2_addr = Sandbox.getAddressOf(f2);
++let dispatch_handle1 = memory.getUint32(f1_addr + kJSFunctionDispatchHandleOffset, true);
++let dispatch_handle2 = memory.getUint32(f2_addr + kJSFunctionDispatchHandleOffset, true);
++memory.setUint32(f2_addr + kJSFunctionDispatchHandleOffset, dispatch_handle1, true);
++memory.setUint32(f1_addr + kJSFunctionDispatchHandleOffset, dispatch_handle2, true);
++
++caller1();
++caller2();
++// Should either crash safely or succeed.
+-- 
+2.43.0
+

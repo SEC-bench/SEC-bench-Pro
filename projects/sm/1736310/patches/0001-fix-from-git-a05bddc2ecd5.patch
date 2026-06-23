@@ -1,0 +1,163 @@
+From a05bddc2ecd54d06295c13a11c5cd152407efa2a Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Mon, 18 Oct 2021 16:32:14 +0000
+Subject: [PATCH] Bug 1736310 - Replace WeakCache::needsSweep method with
+ empty() r=sfink
+
+We use the 'needsSweep' method name for two separate things. We use it in
+WeakCache to check whether a cache needs to be swept at all, i.e. whether it is
+not empty. We also use it in the GCPolicy trait as a method to sweep something.
+GCHashMap/Set/GCVector implement it for the former reason, and so if we attempt
+to use one for something that will be swept with GCPolicy it won't work.
+
+I was going to rename the WeakCache method later anyway (because it's clearer
+just to provide an empty() method) but I hadn't realised this collision was
+going to happen. The patch in bug 1736021 causes a GCVector to be swept via
+GCPolicy which calls the existing needsSweep() method which doesn't sweep at
+all. The fix is to provide a version that does.
+
+This will itself go away soon and be replaced with traceWeak(), but we'll fix
+this problem first.
+
+Differential Revision: https://phabricator.services.mozilla.com/D128740
+---
+ js/public/GCHashTable.h                 |  8 ++------
+ js/public/GCVector.h                    |  5 ++++-
+ js/public/SweepingAPI.h                 |  6 ++++--
+ js/src/gc/Sweeping.cpp                  |  2 +-
+ js/src/jit-test/tests/gc/bug-1736310.js | 16 ++++++++++++++++
+ js/src/vm/ArrayBufferObject.h           |  2 +-
+ 6 files changed, 28 insertions(+), 11 deletions(-)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1736310.js
+
+diff --git a/js/public/GCHashTable.h b/js/public/GCHashTable.h
+index c1e6ccc97ae4..29b5394f8148 100644
+--- a/js/public/GCHashTable.h
++++ b/js/public/GCHashTable.h
+@@ -78,8 +78,6 @@ class GCHashMap : public js::HashMap<Key, Value, HashPolicy, AllocPolicy> {
+     }
+   }
+ 
+-  bool needsSweep() const { return !this->empty(); }
+-
+   void sweep() {
+     typename Base::Enum e(*this);
+     sweepEntries(e);
+@@ -277,8 +275,6 @@ class GCHashSet : public js::HashSet<T, HashPolicy, AllocPolicy> {
+     }
+   }
+ 
+-  bool needsSweep() const { return !this->empty(); }
+-
+   void sweep() {
+     typename Base::Enum e(*this);
+     sweepEntries(e);
+@@ -428,7 +424,7 @@ class WeakCache<GCHashMap<Key, Value, HashPolicy, AllocPolicy, MapSweepPolicy>>
+         needsBarrier(false) {}
+   ~WeakCache() { MOZ_ASSERT(!needsBarrier); }
+ 
+-  bool needsSweep() override { return map.needsSweep(); }
++  bool empty() override { return map.empty(); }
+ 
+   size_t sweep(js::gc::StoreBuffer* sbToLock) override {
+     size_t steps = map.count();
+@@ -647,7 +643,7 @@ class WeakCache<GCHashSet<T, HashPolicy, AllocPolicy>>
+     return steps;
+   }
+ 
+-  bool needsSweep() override { return set.needsSweep(); }
++  bool empty() override { return set.empty(); }
+ 
+   bool setNeedsIncrementalBarrier(bool needs) override {
+     MOZ_ASSERT(needsBarrier != needs);
+diff --git a/js/public/GCVector.h b/js/public/GCVector.h
+index c93f153e3ba3..d6e4a10f2b4d 100644
+--- a/js/public/GCVector.h
++++ b/js/public/GCVector.h
+@@ -182,7 +182,10 @@ class GCVector {
+     return !empty();
+   }
+ 
+-  bool needsSweep() const { return !this->empty(); }
++  bool needsSweep() {
++    sweep();
++    return this->empty();
++  }
+ 
+   void sweep() {
+     T* src = begin();
+diff --git a/js/public/SweepingAPI.h b/js/public/SweepingAPI.h
+index d43cf5cb7e68..041c73b64b2e 100644
+--- a/js/public/SweepingAPI.h
++++ b/js/public/SweepingAPI.h
+@@ -61,7 +61,9 @@ class WeakCacheBase : public mozilla::LinkedListElement<WeakCacheBase> {
+   virtual ~WeakCacheBase() = default;
+ 
+   virtual size_t sweep(js::gc::StoreBuffer* sbToLock) = 0;
+-  virtual bool needsSweep() = 0;
++
++  // Sweeping will be skipped if the cache is empty already.
++  virtual bool empty() = 0;
+ 
+   virtual bool setNeedsIncrementalBarrier(bool needs) {
+     // Derived classes do not support incremental barriers by default.
+@@ -109,7 +111,7 @@ class WeakCache : protected detail::WeakCacheBase,
+     return 0;
+   }
+ 
+-  bool needsSweep() override { return cache.needsSweep(); }
++  bool empty() override { return cache.empty(); }
+ } JS_HAZ_NON_GC_POINTER;
+ 
+ }  // namespace JS
+diff --git a/js/src/gc/Sweeping.cpp b/js/src/gc/Sweeping.cpp
+index 33f63d1d0a8c..36e014141527 100644
+--- a/js/src/gc/Sweeping.cpp
++++ b/js/src/gc/Sweeping.cpp
+@@ -1407,7 +1407,7 @@ static bool PrepareWeakCacheTasks(JSRuntime* rt,
+ 
+   bool ok =
+       IterateWeakCaches(rt, [&](JS::detail::WeakCacheBase* cache, Zone* zone) {
+-        if (!cache->needsSweep()) {
++        if (cache->empty()) {
+           return true;
+         }
+ 
+diff --git a/js/src/jit-test/tests/gc/bug-1736310.js b/js/src/jit-test/tests/gc/bug-1736310.js
+new file mode 100644
+index 000000000000..da0d83188dcb
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1736310.js
+@@ -0,0 +1,16 @@
++gczeal(9, 10);
++function a() {
++    var b = new Int32Array(buffer);
++    function c(d) {
++        b[5] = d;
++    }
++    return c;
++}
++b = new Int32Array(6);
++var buffer = b.buffer;
++a()({
++    valueOf() {
++        detachArrayBuffer(buffer);
++    }
++})
++
+diff --git a/js/src/vm/ArrayBufferObject.h b/js/src/vm/ArrayBufferObject.h
+index 4190d81c6cf0..3db89413a4ac 100644
+--- a/js/src/vm/ArrayBufferObject.h
++++ b/js/src/vm/ArrayBufferObject.h
+@@ -567,7 +567,7 @@ class InnerViewTable {
+   void sweep();
+   void sweepAfterMinorGC();
+ 
+-  bool needsSweep() const { return map.needsSweep(); }
++  bool empty() const { return map.empty(); }
+ 
+   bool needsSweepAfterMinorGC() const {
+     return !nurseryKeys.empty() || !nurseryKeysValid;
+-- 
+2.43.0
+

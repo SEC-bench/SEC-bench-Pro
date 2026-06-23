@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:443182220",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-fuzzing --harmony-struct",
+  "target_source_files": [
+    "src/objects/js-atomics-synchronization.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A heap use-after-free vulnerability exists in V8's Atomics.Mutex async unlock path. When `Atomics.Mutex.lockAsync` is called, a `LockAsyncWaiterQueueNode` (a C++ object managed by a `unique_ptr` in the isolate's `async_waiter_queue_nodes` list) is created and its raw pointer is wrapped in a `Foreign` object stored in a promise handler context at `kAsyncLockedWaiterAsyncContextSlot`. An attacker can forge two PromiseReaction/Context objects (e.g., by copying the Foreign field between contexts) so that they both hold a pointer to the same underlying `LockAsyncWaiterQueueNode`. When the first reaction's async unlock handler fires, `UnlockAsyncLockedMutex` calls `RemoveFromAsyncWaiterQueueList`, which removes and destroys the node's `unique_ptr`, freeing the C++ object. When the second reaction fires, `RemoveFromAsyncWaiterQueueList` is called again with the same stale pointer; it dereferences the freed memory to read `node->requester_` (to access the isolate's list), causing a use-after-free read. The `remove_if` call then performs list operations on the stale pointer, extending the UAF access.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "df48074d0e652501f234ab26ff919fe8b05b84a1 [shared-struct] Guard against Atomics.Mutex.lockAsync abuses",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6929545",
+      "cl": 6929545,
+      "source_commit": "df48074d0e652501f234ab26ff919fe8b05b84a1",
+      "commit": "df48074d0e652501f234ab26ff919fe8b05b84a1",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6929545 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6929545",
+      "source_cl": 6929545,
+      "source_ref": "refs/changes/45/6929545/3",
+      "source_patchset": 3
+    }
+  ]
+}

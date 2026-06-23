@@ -1,0 +1,51 @@
+=================================================================
+==13==ERROR: AddressSanitizer: use-after-poison on address 0x19b30cafed10 at pc 0x5a0460c3426b bp 0x7ffcbae77ba0 sp 0x7ffcbae77b98
+READ of size 8 at 0x19b30cafed10 thread T0
+    #0 0x5a0460c3426a in js::gc::HeaderWord::getAtomic() const /src/gecko-dev/js/src/gc/Cell.h:100:12
+    #1 0x5a0460c3426a in js::gc::HeaderWord::flags() const /src/gecko-dev/js/src/gc/Cell.h:116:36
+    #2 0x5a0460c3426a in js::gc::Cell::flags() const /src/gecko-dev/js/src/gc/Cell.h:154:44
+    #3 0x5a0460c3426a in js::gc::CellWithTenuredGCPointer<js::gc::Cell, js::Shape>::headerPtr() const /src/gecko-dev/js/src/gc/Cell.h:798:5
+    #4 0x5a0460c3426a in JSObject::shape() const /src/gecko-dev/js/src/vm/JSObject.h:93:37
+    #5 0x5a0460c3426a in JSObject::getClass() const /src/gecko-dev/js/src/vm/JSObject.h:114:44
+    #6 0x5a046370bd04 in bool JSObject::is<WasmValueBox>() const /src/gecko-dev/js/src/vm/JSObject.h:492:12
+    #7 0x5a046370bd04 in js::wasm::AnyRef::toJSValue() const /src/gecko-dev/js/src/wasm/WasmAnyRef.cpp:119:13
+    #8 0x5a0463c15740 in bool ToJSValue_externref<js::wasm::NoDebug>(JSContext*, void*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/wasm/WasmValue.cpp:757:41
+    #9 0x5a0463c1443b in bool js::wasm::ToJSValue<js::wasm::NoDebug>(JSContext*, void const*, js::wasm::PackedType<js::wasm::StorageTypeTraits>, JS::MutableHandle<JS::Value>, js::wasm::CoercionLevel) /src/gecko-dev/js/src/wasm/WasmValue.cpp:820:18
+    #10 0x5a046399ff1b in js::wasm::Instance::callImport(JSContext*, unsigned int, unsigned int, unsigned long*) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:264:12
+    #11 0x5a04639a2447 in js::wasm::Instance::callImport_general(js::wasm::Instance*, int, int, unsigned long*) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:349:20
+    #12 0x1ddcc47dfee2  (<unknown module>)
+
+Address 0x19b30cafed10 is a wild pointer inside of access range of size 0x000000000008.
+SUMMARY: AddressSanitizer: use-after-poison /src/gecko-dev/js/src/gc/Cell.h:100:12 in js::gc::HeaderWord::getAtomic() const
+Shadow bytes around the buggy address:
+  0x19b30cafea80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafeb00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafeb80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafec00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafec80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+=>0x19b30cafed00: f7 f7[f7]f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafed80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafee00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafee80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafef00: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x19b30cafef80: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

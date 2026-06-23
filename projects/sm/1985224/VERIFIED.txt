@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-29T13:30:00Z — 2025-Q3 import on bug 1985224 (sec-high csectype-uaf, 2025-Aug)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: !masm.maybeRealm(), at /src/gecko-dev/js/src/jit/BaselineCodeGen.h:153`
+  - exact assertion + file + line match against report
+  - root cause: experimental.self_hosted_cache off-thread compilation skipped JSNullableAutoRealm (which only works on-thread via JSContext); offthread BaselineCompiler emitted code with realm-set, hitting the realm-consistency assert that would normally catch missing pre-barriers (UAF surface).
+  - PoC uses `while (true) { x.c()().next(); }` — vuln crashes within first JIT compile; fixed image runs forever (no crash) — verified with `timeout 8` inside container across 5 runs, no crash signature in any iteration.
+  - flags: `--fuzzing-safe --setpref=experimental.self_hosted_cache=true` (feature pref-gated off by default in Nightly).
+  - fixed image (git 3905f930df89 "Don't compile realm-independent self-hosted baseline code off-thread") blocks PoC.

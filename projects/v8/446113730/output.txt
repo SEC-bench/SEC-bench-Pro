@@ -1,0 +1,17 @@
+[*] ExposedTrustedObject handle: stride = 0x200, newly created by wasm = 0x3f
+[*] using target_ofs = 0x5
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x71f200000000,0x72f200000000)
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 424242424242
+
+==== C stack trace ===============================
+
+out/x64.asan/d8(__interceptor_backtrace+0x46)[0x55a2756afd96]
+out/x64.asan/d8(+0x60aeeb2)[0x55a27a493eb2]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7733f4826330]
+[0x7ea1644eab63]
+[end of stack trace]
+Segmentation fault

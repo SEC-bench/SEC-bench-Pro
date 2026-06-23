@@ -1,0 +1,72 @@
+commit 38358a9bcbf4034b18334f6d7fefc269514825b1
+Author: Ted Campbell <tcampbell@mozilla.com>
+Date:   Sat Nov 7 05:36:31 2020 +0000
+
+    Bug 1675905 - Simplify IonBuilder::createThisScripted. r=jandem,iain a=tjr
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D96309
+
+diff --git a/js/src/jit/IonBuilder.cpp b/js/src/jit/IonBuilder.cpp
+index 7005d0c3d0dd..5b60a632b5f1 100644
+--- a/js/src/jit/IonBuilder.cpp
++++ b/js/src/jit/IonBuilder.cpp
+@@ -5159,31 +5159,18 @@ MDefinition* IonBuilder::createThisScripted(MDefinition* callee,
+   // explicit operation in the bytecode, we cannot use resumeAfter().
+   // Getters may not override |prototype| fetching, so this operation is
+   // indeed idempotent.
+-  // - First try an idempotent property cache.
+-  // - Upon failing idempotent property cache, we can't use a non-idempotent
+-  //   cache, therefore we fallback to CallGetProperty
+   //
+-  // Note: both CallGetProperty and GetPropertyCache can trigger a GC,
+-  //       and thus invalidation.
+-  MInstruction* getProto;
+-  if (!invalidatedIdempotentCache()) {
+-    MConstant* id = constant(StringValue(names().prototype));
+-    MGetPropertyCache* getPropCache =
+-        MGetPropertyCache::New(alloc(), newTarget, id,
+-                               /* monitored = */ false);
+-    getPropCache->setIdempotent();
+-    getProto = getPropCache;
+-  } else {
+-    MCallGetProperty* callGetProp =
+-        MCallGetProperty::New(alloc(), newTarget, names().prototype);
+-    callGetProp->setIdempotent();
+-    getProto = callGetProp;
+-  }
+-  current->add(getProto);
++  // Note: GetPropertyCache can trigger a GC, and thus invalidation.
++  MConstant* id = constant(StringValue(names().prototype));
++  MGetPropertyCache* getPropCache =
++      MGetPropertyCache::New(alloc(), newTarget, id,
++                              /* monitored = */ false);
++  getPropCache->setIdempotent();
++  current->add(getPropCache);
+ 
+   // Create this from prototype
+   MCreateThisWithProto* createThis =
+-      MCreateThisWithProto::New(alloc(), callee, newTarget, getProto);
++      MCreateThisWithProto::New(alloc(), callee, newTarget, getPropCache);
+   current->add(createThis);
+ 
+   return createThis;
+diff --git a/js/src/jit/IonIC.cpp b/js/src/jit/IonIC.cpp
+index 6c5fd79a835b..02e5a26f5eee 100644
+--- a/js/src/jit/IonIC.cpp
++++ b/js/src/jit/IonIC.cpp
+@@ -225,6 +225,15 @@ bool IonGetPropertyIC::update(JSContext* cx, HandleScript outerScript,
+       Invalidate(cx, outerScript);
+     }
+ 
++    // IonBuilder::createScriptedThis does not use InvalidedIdempotentCache
++    // flag so prevent bailout-loop by disabling Ion for the script.
++    MOZ_ASSERT(ic->kind() == CacheKind::GetProp);
++    if (idVal.toString()->asAtom().asPropertyName() == cx->names().prototype) {
++      if (val.isObject() && val.toObject().is<JSFunction>()) {
++        outerScript->disableIon();
++      }
++    }
++
+     // We will redo the potentially effectful lookup in Baseline.
+     return true;
+   }

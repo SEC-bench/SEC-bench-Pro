@@ -1,0 +1,33 @@
+From 2add863ab5962171d2c0f0b594ca4b3325744ffd Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Tue, 10 Mar 2026 13:40:54 +0000
+Subject: [PATCH] Bug 2010940 - Add testcase r=sfink
+
+Differential Revision: https://phabricator.services.mozilla.com/D279645
+---
+ js/src/jit-test/tests/gc/bug-2010940.js | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+ create mode 100644 js/src/jit-test/tests/gc/bug-2010940.js
+
+diff --git a/js/src/jit-test/tests/gc/bug-2010940.js b/js/src/jit-test/tests/gc/bug-2010940.js
+new file mode 100644
+index 0000000000000..e88440cc970ff
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-2010940.js
+@@ -0,0 +1,16 @@
++// |jit-test| skip-if: getBuildConfiguration("tsan")
++
++gczeal(9, 100);
++let g = newGlobal({newCompartment: true});
++with (g) {
++  for (let i = 0; i < 5000; i++) {
++    (() => {
++      let c = [];
++      let d = [];
++      let e = new FinalizationRegistry(Object);
++      e.register(c);
++      e.register(d);
++      new Int8Array(294967295);
++    })();
++  }
++}

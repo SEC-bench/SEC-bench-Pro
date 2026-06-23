@@ -1,0 +1,94 @@
+From ebf22f9a925a45549a6124158ad935d624e7bf8f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Olivier=20Fl=C3=BCckiger?= <olivf@chromium.org>
+Date: Tue, 8 Jul 2025 17:41:37 +0200
+Subject: [PATCH] [builtins] Use correct pointer tag in OSR after we checked
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After checking that the trusted_function_data_offset is actually a code
+object we must use the correct tag to reload it. This prevents its type
+to change between the double fetches.
+
+Bug: 429703123
+Change-Id: Iac860e6daf93d0e20dc21948e9a9cc252d43dc43
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6714868
+Reviewed-by: Samuel Groß <saelo@chromium.org>
+Commit-Queue: Olivier Flückiger <olivf@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#101311}
+---
+ src/builtins/arm64/builtins-arm64.cc     | 2 +-
+ src/builtins/loong64/builtins-loong64.cc | 2 +-
+ src/builtins/ppc/builtins-ppc.cc         | 2 +-
+ src/builtins/riscv/builtins-riscv.cc     | 2 +-
+ src/builtins/x64/builtins-x64.cc         | 2 +-
+ 5 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/builtins/arm64/builtins-arm64.cc b/src/builtins/arm64/builtins-arm64.cc
+index 9c4b39b5fc2..e84a7f23be1 100644
+--- a/src/builtins/arm64/builtins-arm64.cc
++++ b/src/builtins/arm64/builtins-arm64.cc
+@@ -5428,7 +5428,7 @@ void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+   __ LoadTrustedPointerField(
+       code_obj,
+       FieldMemOperand(code_obj, SharedFunctionInfo::kTrustedFunctionDataOffset),
+-      kUnknownIndirectPointerTag);
++      kCodeIndirectPointerTag);
+ 
+   // For OSR entry it is safe to assume we always have baseline code.
+   if (v8_flags.debug_code) {
+diff --git a/src/builtins/loong64/builtins-loong64.cc b/src/builtins/loong64/builtins-loong64.cc
+index 53c1c2c8388..c8239dba884 100644
+--- a/src/builtins/loong64/builtins-loong64.cc
++++ b/src/builtins/loong64/builtins-loong64.cc
+@@ -4901,7 +4901,7 @@ void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+   __ LoadTrustedPointerField(
+       code_obj,
+       FieldMemOperand(code_obj, SharedFunctionInfo::kTrustedFunctionDataOffset),
+-      kUnknownIndirectPointerTag);
++      kCodeIndirectPointerTag);
+ 
+   // For OSR entry it is safe to assume we always have baseline code.
+   if (v8_flags.debug_code) {
+diff --git a/src/builtins/ppc/builtins-ppc.cc b/src/builtins/ppc/builtins-ppc.cc
+index 83961021995..e3c43cf0229 100644
+--- a/src/builtins/ppc/builtins-ppc.cc
++++ b/src/builtins/ppc/builtins-ppc.cc
+@@ -227,7 +227,7 @@ void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+   __ LoadTrustedPointerField(
+       code_obj,
+       FieldMemOperand(code_obj, SharedFunctionInfo::kTrustedFunctionDataOffset),
+-      kUnknownIndirectPointerTag, r0);
++      kCodeIndirectPointerTag, r0);
+ 
+   // For OSR entry it is safe to assume we always have baseline code.
+   if (v8_flags.debug_code) {
+diff --git a/src/builtins/riscv/builtins-riscv.cc b/src/builtins/riscv/builtins-riscv.cc
+index c3a097941ae..6e3dd98d7ae 100644
+--- a/src/builtins/riscv/builtins-riscv.cc
++++ b/src/builtins/riscv/builtins-riscv.cc
+@@ -5036,7 +5036,7 @@ void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+   __ LoadTrustedPointerField(
+       code_obj,
+       FieldMemOperand(code_obj, SharedFunctionInfo::kTrustedFunctionDataOffset),
+-      kUnknownIndirectPointerTag);
++      kCodeIndirectPointerTag);
+ 
+   // For OSR entry it is safe to assume we always have baseline code.
+   if (v8_flags.debug_code) {
+diff --git a/src/builtins/x64/builtins-x64.cc b/src/builtins/x64/builtins-x64.cc
+index 196daf57823..12d5d901785 100644
+--- a/src/builtins/x64/builtins-x64.cc
++++ b/src/builtins/x64/builtins-x64.cc
+@@ -5181,7 +5181,7 @@ void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+       code_obj,
+       FieldOperand(shared_function_info,
+                    SharedFunctionInfo::kTrustedFunctionDataOffset),
+-      kUnknownIndirectPointerTag, kScratchRegister);
++      kCodeIndirectPointerTag, kScratchRegister);
+ 
+   // For OSR entry it is safe to assume we always have baseline code.
+   if (v8_flags.debug_code) {
+-- 
+2.43.0
+

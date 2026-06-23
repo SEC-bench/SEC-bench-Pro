@@ -1,0 +1,17 @@
+VERIFIED at 2026-05-29T03:00:00Z — Tier A import on bug 1736307 (sec-high, 2021-Oct)
+  - CONFIMRED: RUNTIME_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: ins->compareType() == MCompare::Compare_String, at /src/gecko-dev/js/src/jit/MIR.cpp:3849`
+  - report cited MIR.cpp:3847; line drift is comment-only (verified by diffing fix 5ffc1340655f context)
+  - JIT path: ValueNumberer → MCompare::tryFoldTypeOf — exactly the IsTypeOfCompare assert in the original backtrace
+  - fixed image (apply patches/0001-fix-from-git-5ffc1340655f.patch) blocks PoC 10/10 (over-recursion is now handled cleanly; clean exit 0)
+
+Build notes (2021-Oct era specifics, recorded for future similar imports):
+  1. ASAN+debug binary on this revision crashes during initSelfHosting (NULL deref at offset 0x15
+     in NewStringCopyUTF8N during ReportOverRecursed). Workaround: build debug-only (no ASAN).
+     The bug is a MOZ_ASSERT failure, not a memory error, so dropping ASAN doesn't lose signal.
+  2. `--disable-bootstrap` required (mach otherwise tries to fetch toolchain-linux64-clang artifacts).
+  3. `build/moz.configure/flags.configure` returns `["-fexperimental-new-pass-manager"]` for clang ≥ 9
+     — clang-19 rejects it via the mozglue-static Rust build script. Sed to return `[]`.
+  4. `python/mozbuild/mozbuild/virtualenv.py:_disable_pip_outdated_warning` calls
+     `os.listdir(<venv>/local/lib/python3.11/dist-packages)` (Debian distutils returns this path
+     but the venv never creates it). Sed to short-circuit.

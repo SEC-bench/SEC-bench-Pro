@@ -1,0 +1,45 @@
+From 83c1f27889e88fb90d6eb60846f7c57820519529 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 28 May 2024 14:56:58 +0000
+Subject: [PATCH] Bug 1883542: Add test and assertion r=jandem
+
+I ran a one-line patch containing only the assertion through `./mach try auto` and everything passed.
+
+Differential Revision: https://phabricator.services.mozilla.com/D204131
+---
+ js/src/jit-test/tests/cacheir/bug1883542.js | 13 +++++++++++++
+ js/src/jit/CacheIR.cpp                      |  1 +
+ 2 files changed, 14 insertions(+)
+ create mode 100644 js/src/jit-test/tests/cacheir/bug1883542.js
+
+diff --git a/js/src/jit-test/tests/cacheir/bug1883542.js b/js/src/jit-test/tests/cacheir/bug1883542.js
+new file mode 100644
+index 0000000000000..75bedeb216bd5
+--- /dev/null
++++ b/js/src/jit-test/tests/cacheir/bug1883542.js
+@@ -0,0 +1,13 @@
++Object.defineProperty(this, "getter", {get: foo});
++
++var output;
++let i = 20;
++function foo() {
++  eval("");
++  output = this;
++  if (i--) {
++    getter++;
++  }
++}
++foo();
++output.newString();
+diff --git a/js/src/jit/CacheIR.cpp b/js/src/jit/CacheIR.cpp
+index 75109ea5dc74c..5b26ba251eabb 100644
+--- a/js/src/jit/CacheIR.cpp
++++ b/js/src/jit/CacheIR.cpp
+@@ -1146,6 +1146,7 @@ AttachDecision GetPropIRGenerator::tryAttachNative(HandleObject obj,
+     case NativeGetPropKind::ScriptedGetter:
+     case NativeGetPropKind::NativeGetter: {
+       auto* nobj = &obj->as<NativeObject>();
++      MOZ_ASSERT(!IsWindow(nobj));
+ 
+       maybeEmitIdGuard(id);
+ 

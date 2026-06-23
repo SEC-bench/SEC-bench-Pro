@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:442412895",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--omit-quit --fuzzing --jit-fuzzing --sandbox-fuzzing --js-staging",
+  "target_source_files": [
+    "src/json/json-stringifier.cc"
+  ],
+  "target_subdir": [
+    "src/json"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A sandbox bypass vulnerability exists in FastJsonStringifier::SerializeString in V8's JSON stringifier. The root cause is that FastJsonStringifier::SerializeString reads string->length() without any SBXCHECK sandbox bounds validation. An attacker with in-sandbox write access (e.g., via Sandbox.MemoryView) can corrupt an object's map field to make a JSArray appear as an ExternalTwoByteString, causing the JSON stringifier to dispatch to SerializeString<ExternalTwoByteString>. The JSArray's fields are then reinterpreted: its elements pointer (offset 8) is read as the string length (a large arbitrary value), and its Smi length field (offset 12) is used as the EPT index for the external resource. The AppendString loop then iterates over this inflated length and writes beyond the actual external buffer bounds, allowing an attacker to write memory outside the V8 sandbox and achieve a sandbox bypass.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "history-search",
+      "commit": "753d3760c6e477a7615bed2ddb26c3e8388ed1fd",
+      "source_commit": "753d3760c6e477a7615bed2ddb26c3e8388ed1fd",
+      "description": "Upstream fix patch exported from commit 753d3760c6e477a7615bed2ddb26c3e8388ed1fd for final fixed-image validation.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6563503",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6563503",
+      "cl": 6563503,
+      "source_cl": 6563503,
+      "ref": "refs/changes/03/6563503/2",
+      "source_ref": "refs/changes/03/6563503/2",
+      "patchset": 2,
+      "source_patchset": 2,
+      "evidence_text": "753d3760c6e477a7615bed2ddb26c3e8388ed1fd [json] Stringify: Ensure we are not reading OOB the JsonEscapeTable",
+      "evidence_lineno": 0
+    }
+  ]
+}

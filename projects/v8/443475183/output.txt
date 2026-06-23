@@ -1,0 +1,21 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+Sandbox bounds: [0x7eb600000000,0x7fb600000000)
+
+## V8 sandbox violation detected!
+
+Access type was read though which is technically not a sandbox violation. This requires manual investigation.
+Received signal 11 SEGV_MAPERR 5555bb640000
+
+==== C stack trace ===============================
+
+out/x64.asan/d8(__interceptor_backtrace+0x46)[0x5662db79c8a6]
+out/x64.asan/d8(+0x5e9ced2)[0x5662e0324ed2]
+/lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x7974199bd420]
+out/x64.asan/d8(+0x200e475)[0x5662dc496475]
+out/x64.asan/d8(+0x1d0d76f)[0x5662dc19576f]
+out/x64.asan/d8(+0x222a9bc)[0x5662dc6b29bc]
+out/x64.asan/d8(+0x17a431e)[0x5662dbc2c31e]
+out/x64.asan/d8(+0x179f508)[0x5662dbc27508]
+out/x64.asan/d8(+0x5ccbd36)[0x5662e0153d36]
+[end of stack trace]
+Segmentation fault

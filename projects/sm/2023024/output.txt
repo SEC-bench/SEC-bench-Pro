@@ -1,0 +1,41 @@
+[13] Assertion failure: CheckWeakValueResultForFixedSlot failed, at /src/gecko-dev/js/src/jit/VMFunctions.cpp:3396
+#01: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: TRAP on unknown address 0x000000000000 (pc 0x7bd552ded485 bp 0x7ffeec6f4ac0 sp 0x7ffeec6f4a70 T0)
+    #0 0x7bd552ded485  (<unknown module>)
+    #1 0x7bd552d9b8d7  (<unknown module>)
+    #2 0x5c6be95c7786 in EnterJit(JSContext*, js::RunState&, unsigned char*) /src/gecko-dev/js/src/jit/Jit.cpp:107:5
+    #3 0x5c6be95c7786 in js::jit::MaybeEnterJit(JSContext*, js::RunState&) /src/gecko-dev/js/src/jit/Jit.cpp:255:10
+    #4 0x5c6be98ac8a2 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:450:32
+    #5 0x5c6be98adfbd in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:618:13
+    #6 0x5c6be8979632 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1698:10
+    #7 0x7bd552da6c9e  (<unknown module>)
+    #8 0x7bd552dcb833  (<unknown module>)
+    #9 0x7bd552dd278e  (<unknown module>)
+    #10 0x7bd552d9b8d7  (<unknown module>)
+    #11 0x5c6be90496cd in EnterBaseline(JSContext*, EnterJitData&) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:147:5
+    #12 0x5c6be90496cd in js::jit::EnterBaselineInterpreterAtBranch(JSContext*, js::InterpreterFrame*, unsigned char*) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:202:26
+    #13 0x5c6be98cf375 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2032:17
+    #14 0x5c6be98ac8c3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #15 0x5c6be98b25ac in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #16 0x5c6be98b2de6 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #17 0x5c6be9dcdb64 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #18 0x5c6be9dcdeb2 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #19 0x5c6be78c96bf in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1388:10
+    #20 0x5c6be78c839c in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #21 0x5c6be78571cf in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12095:10
+    #22 0x5c6be78571cf in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12348:12
+    #23 0x5c6be784721d in main /src/gecko-dev/js/src/shell/js.cpp:12754:12
+    #24 0x7fd5d5aff1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #25 0x7fd5d5aff28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x5c6be774aaa4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2cf0aa4) (BuildId: d18439264324e08705cddca016888227)
+
+==13==Register values:
+rax = 0x00001c7014f00930  rbx = 0xfffe1c7014f00970  rcx = 0x00001c7014f009c0  rdx = 0x0000000000000018  
+rdi = 0x00007de5d4ffd0b0  rsi = 0xfffe1c7014f009c0  rbp = 0x00007ffeec6f4ac0  rsp = 0x00007ffeec6f4a70  
+ r8 = 0x00001c7014f008f0   r9 = 0x0000000000000000  r10 = 0x00000fffdd8de901  r11 = 0x4000000000000000  
+r12 = 0x00001c7014f008f0  r13 = 0x0000000000000000  r14 = 0x00007c35d4fe9226  r15 = 0x00007ffeec6f57d0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: TRAP (<unknown module>) 
+==13==ABORTING

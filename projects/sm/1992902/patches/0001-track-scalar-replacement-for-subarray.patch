@@ -1,0 +1,156 @@
+From de49b52ff5f912aa3a7ea7c570ee1aafcde53fa6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Bargull?= <andre.bargull@gmail.com>
+Date: Thu, 30 Oct 2025 21:15:52 +0000
+Subject: [PATCH] Bug 1992902: Track scalar replacement for subarray. r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D268254
+---
+ js/src/jit/LIROps.yaml               |  9 ++++++
+ js/src/jit/MIR.h                     | 42 ++++++++++++++++++++++++++++
+ js/src/jit/MIROps.yaml               | 13 +--------
+ js/src/jit/ScalarReplacement.cpp     |  3 ++
+ js/src/jit/WarpCacheIRTranspiler.cpp |  4 +--
+ 5 files changed, 57 insertions(+), 14 deletions(-)
+
+diff --git a/js/src/jit/LIROps.yaml b/js/src/jit/LIROps.yaml
+index afee00be4b02e..25dec23c5a19e 100644
+--- a/js/src/jit/LIROps.yaml
++++ b/js/src/jit/LIROps.yaml
+@@ -2333,6 +2333,15 @@
+   num_temps: 1
+   mir_op: StoreTypedArrayElementHole
+ 
++- name: TypedArraySubarray
++  result_type: WordSized
++  operands:
++    object: WordSized
++    start: WordSized
++    length: WordSized
++  call_instruction: true
++  mir_op: true
++
+ - name: TypedArrayFill
+   operands:
+     object: WordSized
+diff --git a/js/src/jit/MIR.h b/js/src/jit/MIR.h
+index 9acb4c2f79d30..293c7ba0185e5 100644
+--- a/js/src/jit/MIR.h
++++ b/js/src/jit/MIR.h
+@@ -7624,6 +7624,48 @@ class MTypedArrayFill : public MQuaternaryInstruction,
+   ALLOW_CLONE(MTypedArrayFill)
+ };
+ 
++// Inlined TypedArray.prototype.subarray
++class MTypedArraySubarray : public MTernaryInstruction,
++                            public MixPolicy<ObjectPolicy<0>, IntPtrPolicy<1>,
++                                             IntPtrPolicy<2>>::Data {
++  CompilerGCPointer<JSObject*> templateObject_;
++  gc::Heap initialHeap_;
++  bool scalarReplaced_ = false;
++
++  MTypedArraySubarray(MDefinition* object, MDefinition* start,
++                      MDefinition* length, JSObject* templateObject,
++                      gc::Heap initialHeap)
++      : MTernaryInstruction(classOpcode, object, start, length),
++        templateObject_(templateObject),
++        initialHeap_(initialHeap) {
++    setResultType(MIRType::Object);
++  }
++
++ public:
++  INSTRUCTION_HEADER(TypedArraySubarray)
++  TRIVIAL_NEW_WRAPPERS
++  NAMED_OPERANDS((0, object), (1, start), (2, length))
++
++  JSObject* templateObject() const { return templateObject_; }
++  gc::Heap initialHeap() const { return initialHeap_; }
++
++  bool isScalarReplaced() const { return scalarReplaced_; }
++  void setScalarReplaced() { scalarReplaced_ = true; }
++
++  AliasSet getAliasSet() const override {
++    if (scalarReplaced_) {
++      return AliasSet::None();
++    }
++    return AliasSet::Store(AliasSet::ObjectFields);
++  }
++
++  bool possiblyCalls() const override { return true; }
++
++  [[nodiscard]] bool writeRecoverData(
++      CompactBufferWriter& writer) const override;
++  bool canRecoverOnBailout() const override { return scalarReplaced_; }
++};
++
+ // Compute a 3-component "effective address":
+ //   base + index * scale + displacement
+ class MEffectiveAddress3 : public MBinaryInstruction,
+diff --git a/js/src/jit/MIROps.yaml b/js/src/jit/MIROps.yaml
+index 134183f973fb7..6f70bdbca11b3 100644
+--- a/js/src/jit/MIROps.yaml
++++ b/js/src/jit/MIROps.yaml
+@@ -1923,18 +1923,7 @@
+ 
+ # Inlined TypedArray.prototype.subarray
+ - name: TypedArraySubarray
+-  operands:
+-    object: Object
+-    start: IntPtr
+-    length: IntPtr
+-  arguments:
+-    templateObject: JSObject*
+-    initialHeap: gc::Heap
+-  result_type: Object
+-  alias_set: none
+-  can_recover: true
+-  possibly_calls: true
+-  generate_lir: true
++  gen_boilerplate: false
+ 
+ - name: ToIntegerIndex
+   operands:
+diff --git a/js/src/jit/ScalarReplacement.cpp b/js/src/jit/ScalarReplacement.cpp
+index ac5f346874e4a..d1489d354afca 100644
+--- a/js/src/jit/ScalarReplacement.cpp
++++ b/js/src/jit/ScalarReplacement.cpp
+@@ -3393,6 +3393,7 @@ void SubarrayReplacer::visitTypedArraySubarray(MTypedArraySubarray* ins) {
+   if (!isSubarrayOrGuard(ins->object())) {
+     return;
+   }
++  MOZ_ASSERT(!ins->isScalarReplaced());
+ 
+   // Add both |start| operands to get the adjusted start index.
+   auto* newStart =
+@@ -3402,6 +3403,7 @@ void SubarrayReplacer::visitTypedArraySubarray(MTypedArraySubarray* ins) {
+   auto* replacement = MTypedArraySubarray::New(
+       alloc(), subarray()->object(), newStart, ins->length(),
+       ins->templateObject(), ins->initialHeap());
++  replacement->stealResumePoint(ins);
+   ins->block()->insertBefore(ins, replacement);
+ 
+   // Replace the subarray.
+@@ -3530,6 +3532,7 @@ bool SubarrayReplacer::run() {
+ }
+ 
+ void SubarrayReplacer::assertSuccess() const {
++  subarray()->setScalarReplaced();
+   MOZ_ASSERT(subarray_->canRecoverOnBailout());
+   MOZ_ASSERT(!subarray_->hasLiveDefUses());
+ }
+diff --git a/js/src/jit/WarpCacheIRTranspiler.cpp b/js/src/jit/WarpCacheIRTranspiler.cpp
+index 9a792de955300..db00525ff3725 100644
+--- a/js/src/jit/WarpCacheIRTranspiler.cpp
++++ b/js/src/jit/WarpCacheIRTranspiler.cpp
+@@ -2555,10 +2555,10 @@ bool WarpCacheIRTranspiler::emitTypedArraySubarrayResult(
+ 
+   auto* ins = MTypedArraySubarray::New(alloc(), obj, actualStart, length,
+                                        templateObj, heap);
+-  add(ins);
++  addEffectful(ins);
+ 
+   pushResult(ins);
+-  return true;
++  return resumeAfter(ins);
+ }
+ 
+ bool WarpCacheIRTranspiler::emitLinearizeForCharAccess(

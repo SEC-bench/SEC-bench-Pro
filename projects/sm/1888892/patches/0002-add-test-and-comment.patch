@@ -1,0 +1,40 @@
+From a3fcfbe389913d9ae79052a43fe6f72963b14b6a Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Tue, 28 May 2024 14:34:06 +0000
+Subject: [PATCH] Bug 1888892 - Add test and comment. r=jonco
+
+Differential Revision: https://phabricator.services.mozilla.com/D206482
+---
+ js/src/jit-test/tests/cacheir/bug1888892.js | 9 +++++++++
+ js/src/jit/CacheIRCompiler.cpp              | 2 ++
+ 2 files changed, 11 insertions(+)
+ create mode 100644 js/src/jit-test/tests/cacheir/bug1888892.js
+
+diff --git a/js/src/jit-test/tests/cacheir/bug1888892.js b/js/src/jit-test/tests/cacheir/bug1888892.js
+new file mode 100644
+index 0000000000000..5840d2773a6ad
+--- /dev/null
++++ b/js/src/jit-test/tests/cacheir/bug1888892.js
+@@ -0,0 +1,9 @@
++function f() {
++    try { arr.toReversed(); } catch (e) {}
++    var proxy = new Proxy(Object.prototype, {get() {}});
++    Object.setPrototypeOf(Array.prototype, proxy);
++}
++gczeal(10);
++var arr = [];
++Object.defineProperty(arr, 0, {get: f});
++f();
+diff --git a/js/src/jit/CacheIRCompiler.cpp b/js/src/jit/CacheIRCompiler.cpp
+index ceb14f0ecb910..ba3c8ed09ec18 100644
+--- a/js/src/jit/CacheIRCompiler.cpp
++++ b/js/src/jit/CacheIRCompiler.cpp
+@@ -1374,6 +1374,8 @@ bool jit::TraceWeakCacheIRStub(JSTracer* trc, T* stub,
+                                const CacheIRStubInfo* stubInfo) {
+   using Type = StubField::Type;
+ 
++  // Trace all fields before returning because this stub can be traced again
++  // later through TraceBaselineStubFrame.
+   bool isDead = false;
+ 
+   uint32_t field = 0;

@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:430344952",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "",
+  "target_source_files": [
+    "src/parsing/preparser.cc",
+    "src/ast/scopes.cc"
+  ],
+  "target_subdir": [
+    "src/parsing",
+    "src/ast"
+  ],
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "DCHECK",
+  "description": "A discrepancy between the preparser and the full parser in handling unicode-escaped identifiers causes a function literal ID mismatch, leading to an out-of-bounds read in WeakFixedArray::get inside DeclarationScope::AllocateScopeInfos. The root cause is in GetIdentifierHelper (src/parsing/preparser.cc): when an identifier contains escape sequences (e.g., ev\\u0061l which decodes to 'eval'), the preparser checks scanner->literal_contains_escapes() and returns PreParserIdentifier::Default() rather than PreParserIdentifier::Eval(). In contrast, the full parser compares the decoded string value directly against ast_value_factory()->eval_string(), so it correctly identifies ev\\u0061l as a direct eval call. This mismatch causes the preparser to not set sloppy_eval_can_extend_vars_ for the enclosing scope when preparsing the outer function, whereas the full parser does set it during lazy compilation of that same function. When the outer function has complex default parameters (which create a separate parameter scope), this scope flag difference alters the scope structure and preparse data consumption during lazy re-parsing, ultimately causing a function literal to be assigned an ID equal to the length of script->infos() (index 4 in a 4-element array, i.e. out of bounds). The crash is triggered in AllocateScopeInfos (src/ast/scopes.cc) when it iterates infos->get(i) up to max_info_id without verifying that max_info_id < infos->length(). The vulnerability requires: (1) a function with complex default parameters (a function literal in a default parameter expression), (2) a unicode-escaped direct eval call (e.g., ev\\u0061l) inside the function body, and (3) a sloppy block function declaration in the same scope as the eval call.",
+  "vrp": 8000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 305,
+      "evidence_text": "[merge review only for https://crrev.com/c/6722355 -- security fix] No issues related to this specific fix on Canary, therefore approving this fix for merge to 13.8 and 13.9. If backmerge of this fix is dependent on any other CLs, please reach out to the release team for a merge review of the functional / semantics changes.",
+      "url": "https://crrev.com/c/6722355",
+      "cl": 6722355,
+      "commit": "9a884b1b9a53cd23531c5428001c3f85389cb8f8",
+      "description": "Local patch exported from https://crrev.com/c/6722355 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6722355",
+      "source_cl": 6722355,
+      "source_commit": "9a884b1b9a53cd23531c5428001c3f85389cb8f8",
+      "source_ref": "refs/changes/55/6722355/2",
+      "source_patchset": 2
+    }
+  ]
+}

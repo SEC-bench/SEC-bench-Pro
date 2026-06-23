@@ -1,0 +1,50 @@
+commit d25da0d2cf8369b6e7cdb8dc5619ccec03a2b729
+Author: Debadree Chatterjee <debadree333@gmail.com>
+Date:   Mon Dec 2 08:39:55 2024 +0000
+
+    Bug 1934365 - Check for out of memory when creating SuppressedError. r=arai
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D230733
+
+diff --git a/js/src/jit-test/tests/explicit-resource-management/bug1934365.js b/js/src/jit-test/tests/explicit-resource-management/bug1934365.js
+new file mode 100644
+index 000000000000..f6d5f3621d98
+--- /dev/null
++++ b/js/src/jit-test/tests/explicit-resource-management/bug1934365.js
+@@ -0,0 +1,10 @@
++// |jit-test| skip-if: !getBuildConfiguration("explicit-resource-management") || helperThreadCount() === 0; --enable-explicit-resource-management
++
++evalInWorker(`
++  function c() {
++    d = new AsyncDisposableStack
++    d.defer(() => e)
++    d.defer(() => c())
++    d.disposeAsync()
++  } c();
++`)
+diff --git a/js/src/vm/Interpreter.cpp b/js/src/vm/Interpreter.cpp
+index 7cf45d2486fa..233b9c3b5a8c 100644
+--- a/js/src/vm/Interpreter.cpp
++++ b/js/src/vm/Interpreter.cpp
+@@ -1746,12 +1746,21 @@ ErrorObject* js::CreateSuppressedError(JSContext* cx,
+   JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                            JSMSG_ERROR_WAS_SUPPRESSED);
+ 
++  if (cx->isThrowingOutOfMemory()) {
++    return nullptr;
++  }
++
+   JS::Rooted<JS::Value> thrownSuppressed(cx);
+ 
+   if (!cx->getPendingException(&thrownSuppressed)) {
+     return nullptr;
+   }
+ 
++  if (!thrownSuppressed.isObject() ||
++      !thrownSuppressed.toObject().is<ErrorObject>()) {
++    return nullptr;
++  }
++
+   cx->clearPendingException();
+ 
+   JS::Rooted<ErrorObject*> errorObj(

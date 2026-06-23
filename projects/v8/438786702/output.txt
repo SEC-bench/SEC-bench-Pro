@@ -1,0 +1,81 @@
+root@dbc0a0417759:/src/v8# /out/d8 --sandbox-fuzzing --expose-externalize-string /tmp/poc.js
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+=================================================================
+==18==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x70de835eb9fe at pc 0x57cdefee55c2 bp 0x7ffcd925fab0 sp 0x7ffcd925faa8
+READ of size 2 at 0x70de835eb9fe thread T0
+    #0 0x57cdefee55c1 in v8::internal::String::Utf8Length(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>) src/objects/string-inl.h:1230:19
+    #1 0x57cdeff13b2d in Utf8LengthV2 src/api/api.cc:5701:10
+    #2 0x57cdeff13b2d in v8::String::Utf8Value::Utf8Value(v8::Isolate*, v8::Local<v8::Value>) src/api/api.cc:11129:18
+    #3 0x57cdefb7c3f3 in v8::(anonymous namespace)::WriteToFile(char const*, _IO_FILE*, v8::Isolate*, v8::debug::ConsoleCallArguments const&) src/d8/d8-console.cc:32:27
+    #4 0x57cdf00f3366 in v8::internal::(anonymous namespace)::ConsoleCall(v8::internal::Isolate*, v8::internal::BuiltinArguments const&, void (v8::debug::ConsoleDelegate::*)(v8::debug::ConsoleCallArguments const&, v8::debug::ConsoleContext const&)) src/builtins/builtins-console.cc:170:3
+    #5 0x57cdf00ec060 in v8::internal::Builtin_Impl_ConsoleLog(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-console.cc:209:1
+    #6 0x57cdf00eb8af in v8::internal::Builtin_ConsoleLog(int, unsigned long*, v8::internal::Isolate*) src/builtins/builtins-console.cc:209:1
+    #7 0x57cdf5aba5bc in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #8 0x57cdf597bba2 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #9 0x57cdf5976d26 in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #10 0x57cdf5976a6a in Builtins_JSEntry setup-isolate-deserialize.cc
+    #11 0x57cdf058ac0d in Call src/execution/simulator.h:212:12
+    #12 0x57cdf058ac0d in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #13 0x57cdf058ddeb in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #14 0x57cdefea6409 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1937:7
+    #15 0x57cdefba5923 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #16 0x57cdefbdf5dd in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #17 0x57cdefbeb4a8 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #18 0x57cdefbea4c5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #19 0x57cdefbee122 in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #20 0x74be84376082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+0x70de835eb9ff is located 0 bytes after 15-byte region [0x70de835eb9f0,0x70de835eb9ff)
+allocated by thread T0 here:
+    #0 0x57cdefb65a6d in operator new[](unsigned long) (/src/v8/out/x64.asan/d8+0x23f5a6d) (BuildId: 193709d6554204de)
+    #1 0x57cdf068fe75 in v8::internal::ExternalizeStringExtension::Externalize(v8::FunctionCallbackInfo<v8::Value> const&) src/extensions/externalize-string-extension.cc:126:21
+    #2 0x57cdf597de8f in Builtins_CallApiCallbackGeneric setup-isolate-deserialize.cc
+    #3 0x57cdf597bba2 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #4 0x57cdf5976d26 in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #5 0x57cdf5976a6a in Builtins_JSEntry setup-isolate-deserialize.cc
+    #6 0x57cdf058ac0d in Call src/execution/simulator.h:212:12
+    #7 0x57cdf058ac0d in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #8 0x57cdf058ddeb in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #9 0x57cdefea6409 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1937:7
+    #10 0x57cdefba5923 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #11 0x57cdefbdf5dd in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #12 0x57cdefbeb4a8 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #13 0x57cdefbea4c5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #14 0x57cdefbee122 in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #15 0x74be84376082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow src/objects/string-inl.h:1230:19 in v8::internal::String::Utf8Length(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>)
+Shadow bytes around the buggy address:
+  0x70de835eb700: fa fa 00 00 fa fa fd fa fa fa fd fd fa fa 00 fa
+  0x70de835eb780: fa fa 00 00 fa fa fd fd fa fa fd fa fa fa fd fd
+  0x70de835eb800: fa fa fd fd fa fa fd fa fa fa fd fd fa fa fd fa
+  0x70de835eb880: fa fa fd fd fa fa fd fd fa fa fd fd fa fa fd fd
+  0x70de835eb900: fa fa 00 fa fa fa 00 00 fa fa 00 fa fa fa ac 00
+=>0x70de835eb980: fa fa fd fd fa fa fd fd fa fa fd fa fa fa 00[07]
+  0x70de835eba00: fa fa 00 00 fa fa fa fa fa fa fa fa fa fa fa fa
+  0x70de835eba80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x70de835ebb00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x70de835ebb80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x70de835ebc00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==18==ABORTING
+
+## V8 sandbox violation detected!

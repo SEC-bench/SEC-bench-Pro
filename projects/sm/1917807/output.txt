@@ -1,0 +1,45 @@
+[13] Assertion failure: jitCaller->footer()->type() == expected, at /src/gecko-dev/js/src/wasm/WasmFrameIter.cpp:190
+#01: ???[/out/js +0x5b980c1]
+#02: ???[/out/js +0x32733be]
+#03: ???[/out/js +0x32766b5]
+#04: ???[/out/js +0x3275838]
+#05: ???[/out/js +0x36f2777]
+#06: ???[/out/js +0x36f13fd]
+#07: JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&)[/out/js +0x3c86742]
+#08: ???[/out/js +0x3cba121]
+#09: ???[/out/js +0x326c4b2]
+#10: JS_ReportErrorNumberUTF8(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, ...)[/out/js +0x3c49bd3]
+#11: ???[/out/js +0x5bcb882]
+#12: ???[/out/js +0x5b22cfb]
+#13: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x59d2eff590f6 bp 0x7ffc010f98e0 sp 0x7ffc010f9880 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x59d2eff590f6 in AssertJitExitFrame(void const*, js::jit::ExitFrameType) /src/gecko-dev/js/src/wasm/WasmFrameIter.cpp:190:3
+    #1 0x59d2eff590f6 in js::wasm::WasmFrameIter::popFrame() /src/gecko-dev/js/src/wasm/WasmFrameIter.cpp:278:5
+    #2 0x59d2ed6343bd in js::JitFrameIter::operator++() /src/gecko-dev/js/src/vm/FrameIter.cpp:238:5
+    #3 0x59d2ed6376b4 in js::FrameIter::popJitFrame() /src/gecko-dev/js/src/vm/FrameIter.cpp:419:3
+    #4 0x59d2ed636837 in js::FrameIter::operator++() /src/gecko-dev/js/src/vm/FrameIter.cpp:456:9
+    #5 0x59d2edab3776 in js::SavedStacks::insertFrames(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1557:5
+    #6 0x59d2edab23fc in js::SavedStacks::saveCurrentStack(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1338:10
+    #7 0x59d2ee047741 in JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/jsapi.cpp:4944:29
+    #8 0x59d2ee07b120 in js::CaptureStack(JSContext*, JS::MutableHandle<JSObject*>) /src/gecko-dev/js/src/jsexn.cpp:229:10
+    #9 0x59d2ee07b120 in js::ErrorToException(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/jsexn.cpp:346:8
+    #10 0x59d2ed62d4b1 in ReportError(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:173:10
+    #11 0x59d2ed62d4b1 in js::ReportErrorNumberVA(JSContext*, js::IsWarning, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, js::ErrorArgumentsType, __va_list_tag*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:487:8
+    #12 0x59d2ee00abd2 in JS_ReportErrorNumberUTF8VA(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, __va_list_tag*) /src/gecko-dev/js/src/jsapi.cpp:3832:3
+    #13 0x59d2ee00abd2 in JS_ReportErrorNumberUTF8(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, ...) /src/gecko-dev/js/src/jsapi.cpp:3822:3
+    #14 0x59d2eff8c881 in js::wasm::ReportTrapError(JSContext*, unsigned int) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:3889:3
+    #15 0x59d2efee3cfa in WasmHandleTrap() /src/gecko-dev/js/src/wasm/WasmBuiltins.cpp
+    #16 0x2f1f6cd8c0b7  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00002f1f6cdbc6a4  rcx = 0x000059d2eb772460  rdx = 0x0000000000000000  
+rdi = 0x000059d2f1278b90  rsi = 0x00007ffc010f9838  rbp = 0x00007ffc010f98e0  rsp = 0x00007ffc010f9880  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fff8021f4a3  r13 = 0x00007ffc010fb5f0  r14 = 0x00007ffc010fa4c8  r15 = 0x00007ffc010fa519  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/wasm/WasmFrameIter.cpp:190:3 in AssertJitExitFrame(void const*, js::jit::ExitFrameType)
+==13==ABORTING

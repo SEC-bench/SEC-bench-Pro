@@ -1,0 +1,85 @@
+FROM hwiwonlee/sm.base:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Seoul
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+ENV SRC=/src
+ENV SHELL=/bin/bash
+
+ENV SANITIZER="address"
+ENV ARCHITECTURE="x86_64"
+
+ENV OUT=/out
+
+RUN ln -sf /usr/local/bin/python3 /usr/bin/python || true
+ENV PATH="/root/.mozbuild/cbindgen:/root/.cargo/bin:${PATH}"
+
+WORKDIR $SRC/gecko-dev
+
+# Vulnerable revision: parent of fix d307cab06d56b4be62796b083b16feb86a47829c
+# Bug 1814899 / CVE-2023-25751 (sec-high, MFSA 2023-09) —
+# Ion CodeGenerator emits callJit/callWithABI at several sites without a
+# preceding ensureOsiSpace(), and CodeGeneratorShared::ensureOsiSpace()
+# erroneously advances lastOsiPointOffset_ at the end. Two consecutive OSI
+# points can end up closer than PatchWrite_NearCallSize, so when the GC
+# patches the second one it overwrites bytes of the first — Ion-compiled
+# code corruption + broken bailout.
+# Fix author: Iain Ireland, 2023-02-13
+RUN git checkout d307cab06d56b4be62796b083b16feb86a47829c~1
+
+# Patch ExclusiveData.h — clang 19 rejects the 2023-era self-move constructor.
+RUN python3 - <<'PYEOF'
+import re
+f = 'js/src/threading/ExclusiveData.h'
+t = open(f).read()
+pattern = re.compile(
+  r'ExclusiveData\(ExclusiveData&&\s*rhs\)\s*(?:.|\n)*?'
+  r'MOZ_ASSERT\(&rhs != this, "self-move disallowed!"\);\s*\}\s*'
+  r'(?:\n\s*)*'
+  r'ExclusiveData&\s*operator=\(ExclusiveData&&\s*rhs\)\s*\{(?:.|\n)*?'
+  r'return \*this;\s*\}',
+  re.MULTILINE
+)
+replacement = 'ExclusiveData(ExclusiveData&&) = delete;\n  ExclusiveData& operator=(ExclusiveData&&) = delete;'
+t2 = pattern.sub(replacement, t)
+assert t != t2, "ExclusiveData.h move ctor regex did not match"
+open(f, 'w').write(t2)
+PYEOF
+
+# Build 1: ASAN+debug (for crash verification)
+RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-address-sanitizer
+ac_add_options --disable-jemalloc
+ac_add_options --enable-optimize="-O1"
+ac_add_options --enable-debug
+ac_add_options --enable-debug-symbols
+ac_add_options --enable-application=js
+ac_add_options --disable-bootstrap
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-debug-asan
+EOF
+RUN ./mach build
+
+# Build 2: Release (for normal execution)
+RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-optimize
+ac_add_options --disable-debug
+ac_add_options --enable-application=js
+ac_add_options --disable-bootstrap
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-release
+EOF
+RUN ./mach build
+
+RUN mkdir -p /out
+RUN ln -sf $SRC/gecko-dev/obj-debug-asan/dist/bin/js /out/js
+RUN ln -sf $SRC/gecko-dev/obj-release/dist/bin/js /out/js-release
+
+COPY build.sh $SRC/
+COPY secb.sh /usr/local/bin/secb
+
+RUN chmod +x $SRC/build.sh
+RUN chmod +x /usr/local/bin/secb
+RUN mkdir -p /app/artifacts
+RUN mkdir -p /testcase
+
+RUN secb-sanitize-git $SRC/gecko-dev

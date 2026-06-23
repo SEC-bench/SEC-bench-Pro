@@ -1,0 +1,40 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1834711",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/proxy/CrossCompartmentWrapper.cpp",
+        "js/src/proxy/DeadObjectProxy.cpp",
+        "js/src/proxy/DeadObjectProxy.h",
+        "js/src/vm/Compartment.cpp",
+        "js/src/vm/JSObject.cpp",
+        "js/src/vm/JSObject.h"
+    ],
+    "target_subdir": [
+        "js/src/proxy",
+        "js/src/vm"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Debug assertion failure",
+    "error_type": "ASAN_CRASH",
+    "description": "DeadObjectProxy lifecycle mismatch - NewDeadProxyObject did not consistently set ObjectFlag::BackgroundFinalize after nuking cross-compartment wrappers. The vulnerable path spans js/src/proxy/DeadObjectProxy.cpp, DeadObjectProxy.h, CrossCompartmentWrapper.cpp, and the transplant/remap logic in js/src/vm/Compartment.cpp and JSObject.cpp/JSObject.h. A dead proxy created by one overload could be remapped into JSObject::swap with a finalization/background-finalization kind that did not match the object it replaced, triggering the IsBackgroundFinalizedWhenTenured assertion and risking incorrect object finalization behavior. The fix centralizes dead-proxy creation so all overloads set the same finalization flags and handles remapped dead wrappers consistently.",
+    "fix_commits": [
+        "5432788739532336e444d0f4dbe88c6941f54f60"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-set-background-finalized-flag-for-dead-object.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1834711 - Set background finalized flag for dead object",
+            "source_commit": "5432788739532336e444d0f4dbe88c6941f54f60",
+            "commit": "5432788739532336e444d0f4dbe88c6941f54f60",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/5432788739532336e444d0f4dbe88c6941f54f60",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/5432788739532336e444d0f4dbe88c6941f54f60",
+            "phabricator": "D179576"
+        }
+    ],
+    "vrp": null
+}

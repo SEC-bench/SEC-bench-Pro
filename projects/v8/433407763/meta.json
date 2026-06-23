@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:433407763",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--expose-memory-corruption-api --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/wasm/module-instantiate.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type confusion / TOCTOU vulnerability in V8's WebAssembly instance builder allows bypassing the V8 sandbox. In InstanceBuilder::Build(), SanitizeImports() is called before Build_Phase1(), and SanitizeImports() can invoke user-controlled JavaScript accessors on imported objects. An attacker exploits this by defining an accessor that swaps the NativeModule of the WasmModuleObject mid-instantiation. As a result, InstanceBuilder::module_ (captured at construction time from the original NativeModule) diverges from the module used inside WasmTrustedInstanceData::New(), which re-reads NativeModule freshly from the untrusted module object. This mismatch causes Build_Phase1() to allocate dispatch_tables based on the original module's table count while trusted_data_ is initialized with the swapped module's (larger) table count, enabling an out-of-bounds write into dispatch_tables. The attacker can then plant a fake WasmDispatchTable entry pointing to a mismatched WasmTrustedInstanceData, ultimately executing arbitrary WebAssembly code pointer logic that escapes the V8 sandbox.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 349,
+      "evidence_text": "The last release of M138 Stable RC is being cut today. I do not consider this fix sufficiently urgent to ship in that release. Merges for [https://crrev.com/c/6781481](<https://crrev.com/c/6781481>) approved for M139, the RC for Early Stable is being cut tomorrow. Please merge this fix to 13.9 at your earliest convenience / before 8am Pacific Time tomorrow, so this fix can be included in next M139 Beta and M139 Early Stable.",
+      "url": "https://crrev.com/c/6781481",
+      "cl": 6781481,
+      "commit": "bb8724fd6cc27651ce44165d0b97daefb42bee0d",
+      "description": "Local patch exported from https://crrev.com/c/6781481 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6781481",
+      "source_cl": 6781481,
+      "source_commit": "bb8724fd6cc27651ce44165d0b97daefb42bee0d",
+      "source_ref": "refs/changes/81/6781481/3",
+      "source_patchset": 3
+    }
+  ]
+}

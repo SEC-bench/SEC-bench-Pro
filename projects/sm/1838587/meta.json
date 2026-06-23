@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1838587",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/CacheIR.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --baseline-eager",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Bug 1838587 (Assertion failure: slotIndex <= (255), at jit/CacheIRWriter.h:469). sec-high; fix landed in git 7233c12030b8. RCA fields TBD by rca agent (run git show 7233c12030b8 inside vuln image). Auto-staged 2026-05.",
+  "fix_commits": [
+    "7233c12030b8"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-7233c12030b8.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1838587 fix",
+      "source_commit": "7233c12030b8",
+      "commit": "7233c12030b8",
+      "url": "https://github.com/mozilla/gecko-dev/commit/7233c12030b8",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/7233c12030b8"
+    }
+  ],
+  "vrp": null
+}

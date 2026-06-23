@@ -1,0 +1,46 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1895086",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/JSObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "JSObject::swap Transplant \u2014 setIsUsedAsPrototype Triggers GC Outside SuppressGC Region Before Pre-Write Barrier \u2192 Shape getObjectClass UAF. CVE-2024-5688 (sec-high). A use-after-free vulnerability exists in SpiderMonkey's object transplant mechanism in js/src/vm/JSObject.cpp. During JSObject::swap, which is used by the object transplant operation, GC suppression is not applied to the entire method. Specifically, JSObject::setIsUsedAsPrototype can trigger a garbage collection, and this call occurs before the pre-write barrier is executed. When GC is triggered at this point, the sweep phase can finalize objects that still have references via shapes, leading to a wild pointer dereference in js::Shape::getObjectClass during JSObject::finalize. The crash manifests when the background sweeping thread tries to read the object class from a shape that points to already-freed memory (0xfffe4b4b00c000c0 poison pattern). The PoC uses transplantableObject(), newGlobal with sameZoneAs, nukeAllCCWs, and transplant in a loop with gczeal(8, 37) to trigger the precise GC timing needed. While the PoC relies on shell-only test functions, the underlying issue exists in code used by the browser for cross-compartment wrapper transplantation. The fix (changeset 09652347e814) extends the existing GC suppression region in JSObject::swap to cover the entire method, including the setIsUsedAsPrototype call.",
+    "fix_commits": [
+        "ada64fca6f4e",
+        "1367febd6afe"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-suppress-gc-during-jsobject-swap.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1895086 fix part 1",
+            "source_commit": "ada64fca6f4e",
+            "commit": "ada64fca6f4e",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/ada64fca6f4e",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/ada64fca6f4e"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-testcase.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1895086 fix part 2",
+            "source_commit": "1367febd6afe",
+            "commit": "1367febd6afe",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1367febd6afe",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/1367febd6afe"
+        }
+    ],
+    "vrp": null
+}

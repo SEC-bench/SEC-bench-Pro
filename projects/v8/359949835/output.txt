@@ -1,0 +1,384 @@
+abort: Unexpected instance type encountered
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x560910d21a36]
+    1: StubFrame [pc: 0x560910e116a4]
+    2: isCompatible [0x7ed300241b9d] [/testcase/poc.js:698] [bytecode=0x7ebd001014d1 offset=4](this=0x7ed3001816fd <JSGlobalProxy>#0#,0)
+    3: /* anonymous */ [0x7ed300241be1] [/testcase/poc.js:193] [bytecode=0x7ebd00103e7d offset=21](this=0x7ed3001816fd <JSGlobalProxy>#0#)
+    4: findIndex [0x7ed30018d151](this=0x7ed300240199 <JSArray[5]>#1#,0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>#2#)
+    5: randomArgumentForReplacing [0x7ed3003a7f69] [/testcase/poc.js:705] [bytecode=0x7ebd0010141d offset=80](this=0x7ed3003a7e6d <Object map = 0x7ed3001be489>#3#,0,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#)
+    6: exploreObject [0x7ed3003a5de1] [/testcase/poc.js:816] [bytecode=0x7ebd001029bd offset=186](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#)
+    7: exploreValue [0x7ed3003a5edd] [/testcase/poc.js:957] [bytecode=0x7ebd001022dd offset=12](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#)
+    8: explore [0x7ed3003a5f01] [/testcase/poc.js:1001] [bytecode=0x7ebd001021f1 offset=104](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#,0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240199 <JSArray[5]>#1#,63201)
+    9: exploreWithErrorHandling [0x7ed3003a5f25] [/testcase/poc.js:1019] [bytecode=0x7ebd001020f5 offset=21](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#,0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240199 <JSArray[5]>#1#,63201)
+   10: f23 [0x7ed3001a09bd] [/testcase/poc.js:1041] [bytecode=0x7ebd001043c9 offset=66](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed3003a8da1 <JSFunction js-to-wasm:n: (sfi = 0x7ed3003a8d71)>#5#)
+   11: StubFrame [pc: 0x560910d188e1]
+   12: Wasm [wasm://wasm/31a10782], function #2 ('main'), pc=0x7e8101db089f (+0x5f), pos=60 (+5)
+   13: JsToWasmFrame [pc: 0x560910d17b4a]
+   14: 2 [0x7ed3003a8da1] [wasm://wasm/31a10782:~1] [pc=0x560910def57f](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed3003a8d61 <Other heap object (WASM_FUNC_REF_TYPE)>#6#)
+   15: /* anonymous */ [0x7ed3001a07d1] [/testcase/poc.js:1052] [bytecode=0x7ebd00000615 offset=320](this=0x7ed3001816fd <JSGlobalProxy>#0#)
+   16: InternalFrame [pc: 0x560910c7e3dc]
+   17: EntryFrame [pc: 0x560910c7e11f]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x560910d21a36]
+[1]: StubFrame [pc: 0x560910e116a4]
+[2]: isCompatible [0x7ed300241b9d] [/testcase/poc.js:698] [bytecode=0x7ebd001014d1 offset=4](this=0x7ed3001816fd <JSGlobalProxy>#0#,0) {
+  // expression stack (top to bottom)
+  [02] : 0x7ed300000069 <undefined>
+  [01] : 0x7ed300000069 <undefined>
+  [00] : 0x7ed300000069 <undefined>
+--------- s o u r c e   c o d e ---------
+function isCompatible(arg) {\x0a                let sameType = typeof curValue === typeof arg;\x0a                if (sameType && isObject(curValue)) {\x0a                    sameType = arg instanceof curValue.constructor;\x0a                }\x0a                return sameType;\x0a            }
+-----------------------------------------
+}
+
+[3]: /* anonymous */ [0x7ed300241be1] [/testcase/poc.js:193] [bytecode=0x7ebd00103e7d offset=21](this=0x7ed3001816fd <JSGlobalProxy>#0#) {
+  // expression stack (top to bottom)
+  [09] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [08] : 0
+  [07] : 0
+  [06] : 0x7ed300240199 <JSArray[5]>#1#
+  [05] : 0x7ed300241c19 <Arguments map = 0x7ed30018e8f5>#7#
+  [04] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [03] : 0x7ed300241b9d <JSFunction isCompatible (sfi = 0x7ed30019f815)>#8#
+  [02] : 0x7ed30018ad51 <JSFunction apply (sfi = 0x7ed3000316f1)>#9#
+  [01] : 0x7ed300241bcd <FunctionContext[3]>#10#
+  [00] : 0x7ed300241c19 <Arguments map = 0x7ed30018e8f5>#7#
+--------- s o u r c e   c o d e ---------
+function () {\x0a            try {\x0a                return apply(f, this, arguments);\x0a            } catch (e) {\x0a                return false;\x0a            }\x0a        }
+-----------------------------------------
+}
+
+[4]: findIndex [0x7ed30018d151](this=0x7ed300240199 <JSArray[5]>#1#,0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>#2#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[5]: randomArgumentForReplacing [0x7ed3003a7f69] [/testcase/poc.js:705] [bytecode=0x7ebd0010141d offset=80](this=0x7ed3003a7e6d <Object map = 0x7ed3001be489>#3#,0,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#) {
+  // heap-allocated locals
+  var curValue = 0x7ed3003a8d61 <Other heap object (WASM_FUNC_REF_TYPE)>#6#
+  // expression stack (top to bottom)
+  [07] : 0x7ed300240199 <JSArray[5]>#1#
+  [06] : 0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>#2#
+  [05] : 0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>#2#
+  [04] : 0x7ed300240199 <JSArray[5]>#1#
+  [03] : 0x7ed3003a5f49 <JSBoundFunction (BoundTargetFunction 0x7ed300181ff5)>#11#
+  [02] : 0x7ed3003a5499 <FunctionContext[124]>#12#
+  [01] : 0x7ed300000069 <undefined>
+  [00] : 0x7ed300241b9d <JSFunction isCompatible (sfi = 0x7ed30019f815)>#8#
+--------- s o u r c e   c o d e ---------
+function randomArgumentForReplacing(propertyName, obj) {\x0a            let curValue = tryGetProperty(propertyName, obj);\x0a            if (isUndefined(curValue)) {\x0a                return Inputs.randomArgument();\x0a            }\x0a\x0a            function isCompatible(arg) {\x0a                let sameType = typeof curValue === typeof arg;\x0a        ...
+
+-----------------------------------------
+}
+
+[6]: exploreObject [0x7ed3003a5de1] [/testcase/poc.js:816] [bytecode=0x7ebd001029bd offset=186](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#) {
+  // expression stack (top to bottom)
+  [18] : 0x7ed3003a7e6d <Object map = 0x7ed3001be489>#3#
+  [17] : 0
+  [16] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [15] : 0x7ed300000069 <undefined>
+  [14] : 0x7ed300000069 <undefined>
+  [13] : 0x7ed300000069 <undefined>
+  [12] : 0x7ed300000069 <undefined>
+  [11] : 0x7ed3003a7e6d <Object map = 0x7ed3001be489>#3#
+  [10] : 0x7ed3003a7f69 <JSFunction randomArgumentForReplacing (sfi = 0x7ed30019e745)>#13#
+  [09] : 0x7ed300000069 <undefined>
+  [08] : 0x7ed300000069 <undefined>
+  [07] : 0x7ed300241af9 <Object map = 0x7ed3003a9ed1>#14#
+  [06] : 0x7ed300000069 <undefined>
+  [05] : 0x7ed300000069 <undefined>
+  [04] : 0x7ed300000069 <undefined>
+  [03] : 0x7ed300000069 <undefined>
+  [02] : 0x7ed300000069 <undefined>
+  [01] : 0x7ed300000069 <undefined>
+  [00] : 0
+--------- s o u r c e   c o d e ---------
+function exploreObject(o) {\x0a        if (o === null) {\x0a            // Can't do anything with null.\x0a            return NO_ACTION;\x0a        }\x0a\x0a        // TODO: Add special handling for ArrayBuffers: most of the time, wrap these into a Uint8Array to be able to modify them.\x0a        // TODO: Sometimes iterate over iterable obje...
+
+-----------------------------------------
+}
+
+[7]: exploreValue [0x7ed3003a5edd] [/testcase/poc.js:957] [bytecode=0x7ebd001022dd offset=12](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#) {
+  // expression stack (top to bottom)
+  [02] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [01] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [00] : 0x7ed3003a5de1 <JSFunction exploreObject (sfi = 0x7ed30019dd25)>#15#
+--------- s o u r c e   c o d e ---------
+function exploreValue(id, v) {\x0a        if (isObject(v)) {\x0a            return exploreObject(v);\x0a        } else if (isFunction(v)) {\x0a            return exploreFunction(v);\x0a        } else if (isString(v)) {\x0a            return exploreString(v);\x0a        } else if (isNumber(v)) {\x0a            return exploreNumber(v);\x0a        }...
+
+-----------------------------------------
+}
+
+[8]: explore [0x7ed3003a5f01] [/testcase/poc.js:1001] [bytecode=0x7ebd001021f1 offset=104](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#,0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240199 <JSArray[5]>#1#,63201) {
+  // expression stack (top to bottom)
+  [07] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [06] : 0x7ed30019b01d <String[3]: #v59>
+  [05] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [04] : 0x7ed30019ade1 <String[13]: #exploredValue>
+  [03] : 0x7ed3003a5edd <JSFunction exploreValue (sfi = 0x7ed30019de75)>#16#
+  [02] : 0x7ed300000069 <undefined>
+  [01] : 0x7ed300000069 <undefined>
+  [00] : 0x7ed300000069 <undefined>
+--------- s o u r c e   c o d e ---------
+function explore(id, v, currentThis, args, rngSeed) {\x0a        rng.reseed(rngSeed);\x0a\x0a        // The given arguments may be used as inputs for the action.\x0a        if (isUndefined(args) || args.length < 1) throw "Exploration requires at least one additional argument";\x0a\x0a        // We may get here recursively for exampl...
+
+-----------------------------------------
+}
+
+[9]: exploreWithErrorHandling [0x7ed3003a5f25] [/testcase/poc.js:1019] [bytecode=0x7ebd001020f5 offset=21](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed30019b01d <String[3]: #v59>,0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#,0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed300240199 <JSArray[5]>#1#,63201) {
+  // expression stack (top to bottom)
+  [13] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [12] : 0x7ed30019b01d <String[3]: #v59>
+  [11] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [10] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [09] : 0x7ed300240199 <JSArray[5]>#1#
+  [08] : 63201
+  [07] : 63201
+  [06] : 0x7ed300240199 <JSArray[5]>#1#
+  [05] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [04] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [03] : 0x7ed30019b01d <String[3]: #v59>
+  [02] : 0x7ed3003a5f01 <JSFunction explore (sfi = 0x7ed30019dea5)>#17#
+  [01] : 0x7ed3003a5499 <FunctionContext[124]>#12#
+  [00] : 0x7ed300000069 <undefined>
+--------- s o u r c e   c o d e ---------
+function exploreWithErrorHandling(id, v, thisValue, args, rngSeed) {\x0a        try {\x0a            explore(id, v, thisValue, args, rngSeed);\x0a        } catch (e) {\x0a            let line = tryHasProperty('line', e) ? tryGetProperty('line', e) : tryGetProperty('lineNumber', e);\x0a            if (isNumber(line)) {\x0a                reportError(...
+
+-----------------------------------------
+}
+
+[10]: f23 [0x7ed3001a09bd] [/testcase/poc.js:1041] [bytecode=0x7ebd001043c9 offset=66](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed3003a8da1 <JSFunction js-to-wasm:n: (sfi = 0x7ed3003a8d71)>#5#) {
+  // expression stack (top to bottom)
+  [11] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [10] : 0x7ed30019b01d <String[3]: #v59>
+  [09] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [08] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [07] : 0x7ed300240199 <JSArray[5]>#1#
+  [06] : 63201
+  [05] : 63201
+  [04] : 0x7ed300240199 <JSArray[5]>#1#
+  [03] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [02] : 0x7ed300240161 <Arguments map = 0x7ed300191d91>#4#
+  [01] : 0x7ed30019b01d <String[3]: #v59>
+  [00] : 0x7ed3003a5f25 <JSFunction exploreWithErrorHandling (sfi = 0x7ed30019ded5)>#18#
+--------- s o u r c e   c o d e ---------
+function f23(a24) {\x0a    explore("v59", a24.arguments, this, [v10, undefined, 127, kSig_v_a, kExprCallFunction], 63201);\x0a    return a24;\x0a}
+-----------------------------------------
+}
+
+[11]: StubFrame [pc: 0x560910d188e1]
+[12]: Wasm [wasm://wasm/31a10782], function #2 ('main'), pc=0x7e8101db089f (+0x5f), pos=60 (+5)
+
+[13]: JsToWasmFrame [pc: 0x560910d17b4a]
+[14]: 2 [0x7ed3003a8da1] [wasm://wasm/31a10782:~1] [pc=0x560910def57f](this=0x7ed3001816fd <JSGlobalProxy>#0#,0x7ed3003a8d61 <Other heap object (WASM_FUNC_REF_TYPE)>#6#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[15]: /* anonymous */ [0x7ed3001a07d1] [/testcase/poc.js:1052] [bytecode=0x7ebd00000615 offset=320](this=0x7ed3001816fd <JSGlobalProxy>#0#) {
+  // heap-allocated locals
+  var explore = 0x7ed30038c72d <FixedArray[10]>#19#
+  var v3 = 0x7ed3003a5f25 <JSFunction exploreWithErrorHandling (sfi = 0x7ed30019ded5)>#18#
+  var v5 = 0x7ed3003a8215 <WasmModuleBuilder map = 0x7ed3001be92d>#20#
+  var v7 = 0
+  var v10 = 1
+  var v13 = 0
+  var v15 = 1
+  var o27 = 0x7ed3003a866d <WasmFunctionBuilder map = 0x7ed3001beded>#21#
+  var o28 = 0x7ed3003a88e5 <Object map = 0x7ed3001beff5>#22#
+  var v31 = 0x7ed3003a8921 <Object map = 0x7ed3001bf01d>#23#
+  // expression stack (top to bottom)
+  [07] : 0x7ed3001816fd <JSGlobalProxy>#0#
+  [06] : 0x7ed3003a8d61 <Other heap object (WASM_FUNC_REF_TYPE)>#6#
+  [05] : 5
+  [04] : 0x7ed3003a87dd <JSArray[6]>#24#
+  [03] : 0x7ed3003a8921 <Object map = 0x7ed3001bf01d>#23#
+  [02] : 0x7ed3003a8215 <WasmModuleBuilder map = 0x7ed3001be92d>#20#
+  [01] : 0x7ed3003a8da1 <JSFunction js-to-wasm:n: (sfi = 0x7ed3003a8d71)>#5#
+  [00] : 0x7ed300000069 <undefined>
+--------- s o u r c e   c o d e ---------
+d8.file.execute("/home/uuu/wasm-module-builder.js");\x0a// If a sample with this instrumentation crashes, it may need the `fuzzilli` function to reproduce the crash.\x0aif (typeof fuzzilli === 'undefined') fuzzilli = function() {};\x0a\x0aconst explore = (function() {\x0a    //\x0a    // "Import" the common runtime-a...
+
+-----------------------------------------
+}
+
+[16]: InternalFrame [pc: 0x560910c7e3dc]
+[17]: EntryFrame [pc: 0x560910c7e11f]
+-- ObjectCacheKey --
+
+ #0# 0x7ed3001816fd: 0x7ed3001816fd <JSGlobalProxy>
+ #1# 0x7ed300240199: 0x7ed300240199 <JSArray[5]>
+                 0: 0
+                 1: 0x7ed300000069 <undefined>
+                 2: 127
+                 3: 0x7ed3003a1ad5 <Object map = 0x7ed3001b4a25>#25#
+                 4: 16
+ #2# 0x7ed300241be1: 0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>
+ #3# 0x7ed3003a7e6d: 0x7ed3003a7e6d <Object map = 0x7ed3001be489>
+    randomArgument: 0x7ed3003a7f29 <JSFunction randomArgument (sfi = 0x7ed30019e6e5)>#26#
+   randomArguments: 0x7ed3003a7f49 <JSFunction randomArguments (sfi = 0x7ed30019e715)>#27#
+randomArgumentForReplacing: 0x7ed3003a7f69 <JSFunction randomArgumentForReplacing (sfi = 0x7ed30019e745)>#13#
+         randomInt: 0x7ed3003a7f89 <JSFunction randomInt (sfi = 0x7ed30019e775)>#28#
+      randomNumber: 0x7ed3003a7fa9 <JSFunction randomNumber (sfi = 0x7ed30019e7a5)>#29#
+      randomBigint: 0x7ed3003a7fc9 <JSFunction randomBigint (sfi = 0x7ed30019e7d5)>#30#
+  randomIntBetween: 0x7ed3003a7fe9 <JSFunction randomIntBetween (sfi = 0x7ed30019e805)>#31#
+randomBigintBetween: 0x7ed3003a8009 <JSFunction randomBigintBetween (sfi = 0x7ed30019e835)>#32#
+randomNumberCloseTo: 0x7ed3003a8029 <JSFunction randomNumberCloseTo (sfi = 0x7ed30019e865)>#33#
+randomBigintCloseTo: 0x7ed3003a8049 <JSFunction randomBigintCloseTo (sfi = 0x7ed30019e895)>#34#
+ #4# 0x7ed300240161: 0x7ed300240161 <Arguments map = 0x7ed300191d91>
+            length: 1
+ #5# 0x7ed3003a8da1: 0x7ed3003a8da1 <JSFunction js-to-wasm:n: (sfi = 0x7ed3003a8d71)>
+ #6# 0x7ed3003a8d61: 0x7ed3003a8d61 <Other heap object (WASM_FUNC_REF_TYPE)>
+ #7# 0x7ed300241c19: 0x7ed300241c19 <Arguments map = 0x7ed30018e8f5>
+            length: 3
+            callee: 0x7ed300241be1 <JSFunction (sfi = 0x7ed3001a0621)>#2#
+ #8# 0x7ed300241b9d: 0x7ed300241b9d <JSFunction isCompatible (sfi = 0x7ed30019f815)>
+ #9# 0x7ed30018ad51: 0x7ed30018ad51 <JSFunction apply (sfi = 0x7ed3000316f1)>
+ #10# 0x7ed300241bcd: 0x7ed300241bcd <FunctionContext[3]>
+ #11# 0x7ed3003a5f49: 0x7ed3003a5f49 <JSBoundFunction (BoundTargetFunction 0x7ed300181ff5)>
+ #12# 0x7ed3003a5499: 0x7ed3003a5499 <FunctionContext[124]>
+ #13# 0x7ed3003a7f69: 0x7ed3003a7f69 <JSFunction randomArgumentForReplacing (sfi = 0x7ed30019e745)>
+ #14# 0x7ed300241af9: 0x7ed300241af9 <Object map = 0x7ed3003a9ed1>
+               int: 0x7ed300241b25 <Object map = 0x7ed3001b6065>#35#
+ #15# 0x7ed3003a5de1: 0x7ed3003a5de1 <JSFunction exploreObject (sfi = 0x7ed30019dd25)>
+ #16# 0x7ed3003a5edd: 0x7ed3003a5edd <JSFunction exploreValue (sfi = 0x7ed30019de75)>
+ #17# 0x7ed3003a5f01: 0x7ed3003a5f01 <JSFunction explore (sfi = 0x7ed30019dea5)>
+ #18# 0x7ed3003a5f25: 0x7ed3003a5f25 <JSFunction exploreWithErrorHandling (sfi = 0x7ed30019ded5)>
+ #19# 0x7ed30038c72d: 0x7ed30038c72d <FixedArray[10]>
+                 0: 0x7ed300000069 <undefined>
+                 1: 0x7ed300000069 <undefined>
+                 2: 0x7ed300000069 <undefined>
+                 3: 0x7ed300000069 <undefined>
+                 4: 0x7ed300000069 <undefined>
+                 5: 0x7ed300000069 <undefined>
+                 6: 0x7ed300000069 <undefined>
+                 7: 0x7ed300000069 <undefined>
+                 8: 0x7ed300000069 <undefined>
+                 9: 0x7ed300000069 <undefined>
+                  ...
+ #20# 0x7ed3003a8215: 0x7ed3003a8215 <WasmModuleBuilder map = 0x7ed3001be92d>
+             types: 0x7ed3003a8289 <JSArray[2]>#36#
+           imports: 0x7ed3003a8299 <JSArray[2]>#37#
+           exports: 0x7ed3003a82a9 <JSArray[1]>#38#
+        stringrefs: 0x7ed3003a82b9 <JSArray[0]>#39#
+           globals: 0x7ed3003a82c9 <JSArray[0]>#40#
+            tables: 0x7ed3003a82d9 <JSArray[0]>#41#
+              tags: 0x7ed3003a82e9 <JSArray[0]>#42#
+          memories: 0x7ed3003a82f9 <JSArray[0]>#43#
+         functions: 0x7ed3003a8309 <JSArray[1]>#44#
+ compilation_hints: 0x7ed3003a8319 <JSArray[0]>#45#
+  element_segments: 0x7ed3003a8329 <JSArray[0]>#46#
+     data_segments: 0x7ed3003a8339 <JSArray[0]>#47#
+          explicit: 0x7ed3003a8349 <JSArray[0]>#48#
+        rec_groups: 0x7ed3003a8359 <JSArray[0]>#49#
+num_imported_funcs: 2
+num_imported_globals: 0
+num_imported_tables: 0
+ num_imported_tags: 0
+ #21# 0x7ed3003a866d: 0x7ed3003a866d <WasmFunctionBuilder map = 0x7ed3001beded>
+            module: 0x7ed3003a8215 <WasmModuleBuilder map = 0x7ed3001be92d>#20#
+              name: 0x7ed30019af85 <String[4]: #main>
+        type_index: 0
+              body: 0x7ed3003a883d <JSArray[7]>#50#
+            locals: 0x7ed3003a86f1 <JSArray[0]>#51#
+       local_names: 0x7ed3003a8611 <JSArray[1]>#52#
+       body_offset: 56
+             index: 2
+ #22# 0x7ed3003a88e5: 0x7ed3003a88e5 <Object map = 0x7ed3001beff5>
+              func: 0x7ed3001a09bd <JSFunction f23 (sfi = 0x7ed30019d221)>#53#
+                gc: 0x7ed3001b2625 <JSFunction gc (sfi = 0x7ed300198e31)>#54#
+ #23# 0x7ed3003a8921: 0x7ed3003a8921 <Object map = 0x7ed3001bf01d>
+                 q: 0x7ed3003a88e5 <Object map = 0x7ed3001beff5>#22#
+ #24# 0x7ed3003a87dd: 0x7ed3003a87dd <JSArray[6]>
+ #25# 0x7ed3003a1ad5: 0x7ed3003a1ad5 <Object map = 0x7ed3001b4a25>
+            params: 0x7ed3003a1aa9 <JSArray[1]>#55#
+           results: 0x7ed3003a1ac5 <JSArray[0]>#56#
+ #26# 0x7ed3003a7f29: 0x7ed3003a7f29 <JSFunction randomArgument (sfi = 0x7ed30019e6e5)>
+ #27# 0x7ed3003a7f49: 0x7ed3003a7f49 <JSFunction randomArguments (sfi = 0x7ed30019e715)>
+ #28# 0x7ed3003a7f89: 0x7ed3003a7f89 <JSFunction randomInt (sfi = 0x7ed30019e775)>
+ #29# 0x7ed3003a7fa9: 0x7ed3003a7fa9 <JSFunction randomNumber (sfi = 0x7ed30019e7a5)>
+ #30# 0x7ed3003a7fc9: 0x7ed3003a7fc9 <JSFunction randomBigint (sfi = 0x7ed30019e7d5)>
+ #31# 0x7ed3003a7fe9: 0x7ed3003a7fe9 <JSFunction randomIntBetween (sfi = 0x7ed30019e805)>
+ #32# 0x7ed3003a8009: 0x7ed3003a8009 <JSFunction randomBigintBetween (sfi = 0x7ed30019e835)>
+ #33# 0x7ed3003a8029: 0x7ed3003a8029 <JSFunction randomNumberCloseTo (sfi = 0x7ed30019e865)>
+ #34# 0x7ed3003a8049: 0x7ed3003a8049 <JSFunction randomBigintCloseTo (sfi = 0x7ed30019e895)>
+ #35# 0x7ed300241b25: 0x7ed300241b25 <Object map = 0x7ed3001b6065>
+             value: 0
+ #36# 0x7ed3003a8289: 0x7ed3003a8289 <JSArray[2]>
+                 0: 0x7ed3003a8451 <Object map = 0x7ed3001bea55>#57#
+                 1: 0x7ed3003a8521 <Object map = 0x7ed3001bea55>#58#
+ #37# 0x7ed3003a8299: 0x7ed3003a8299 <JSArray[2]>
+                 0: 0x7ed3003a854d <Object map = 0x7ed3001beba5>#59#
+                 1: 0x7ed3003a85f5 <Object map = 0x7ed3001beba5>#60#
+ #38# 0x7ed3003a82a9: 0x7ed3003a82a9 <JSArray[1]>
+                 0: 0x7ed3003a884d <Object map = 0x7ed3001bef71>#61#
+ #39# 0x7ed3003a82b9: 0x7ed3003a82b9 <JSArray[0]>
+ #40# 0x7ed3003a82c9: 0x7ed3003a82c9 <JSArray[0]>
+ #41# 0x7ed3003a82d9: 0x7ed3003a82d9 <JSArray[0]>
+ #42# 0x7ed3003a82e9: 0x7ed3003a82e9 <JSArray[0]>
+ #43# 0x7ed3003a82f9: 0x7ed3003a82f9 <JSArray[0]>
+ #44# 0x7ed3003a8309: 0x7ed3003a8309 <JSArray[1]>
+                 0: 0x7ed3003a866d <WasmFunctionBuilder map = 0x7ed3001beded>#21#
+ #45# 0x7ed3003a8319: 0x7ed3003a8319 <JSArray[0]>
+ #46# 0x7ed3003a8329: 0x7ed3003a8329 <JSArray[0]>
+ #47# 0x7ed3003a8339: 0x7ed3003a8339 <JSArray[0]>
+ #48# 0x7ed3003a8349: 0x7ed3003a8349 <JSArray[0]>
+ #49# 0x7ed3003a8359: 0x7ed3003a8359 <JSArray[0]>
+ #50# 0x7ed3003a883d: 0x7ed3003a883d <JSArray[7]>
+ #51# 0x7ed3003a86f1: 0x7ed3003a86f1 <JSArray[0]>
+ #52# 0x7ed3003a8611: 0x7ed3003a8611 <JSArray[1]>
+ #53# 0x7ed3001a09bd: 0x7ed3001a09bd <JSFunction f23 (sfi = 0x7ed30019d221)>
+ #54# 0x7ed3001b2625: 0x7ed3001b2625 <JSFunction gc (sfi = 0x7ed300198e31)>
+ #55# 0x7ed3003a1aa9: 0x7ed3003a1aa9 <JSArray[1]>
+ #56# 0x7ed3003a1ac5: 0x7ed3003a1ac5 <JSArray[0]>
+ #57# 0x7ed3003a8451: 0x7ed3003a8451 <Object map = 0x7ed3001bea55>
+            params: 0x7ed3003a1aa9 <JSArray[1]>#55#
+           results: 0x7ed3003a1ac5 <JSArray[0]>#56#
+          is_final: 0x7ed3000000c9 <true>
+         is_shared: 0x7ed3000000ad <false>
+         supertype: 0x7ed3003a84bd <HeapNumber 4294967295.0>
+ #58# 0x7ed3003a8521: 0x7ed3003a8521 <Object map = 0x7ed3001bea55>
+            params: 0x7ed3003a12ed <JSArray[0]>#62#
+           results: 0x7ed3003a12fd <JSArray[0]>#63#
+          is_final: 0x7ed3000000c9 <true>
+         is_shared: 0x7ed3000000ad <false>
+         supertype: 0x7ed3003a8541 <HeapNumber 4294967295.0>
+ #59# 0x7ed3003a854d: 0x7ed3003a854d <Object map = 0x7ed3001beba5>
+            module: 0x7ed300002ce9 <String[1]: #q>
+              name: 0x7ed30019af3d <String[4]: #func>
+              kind: 0
+        type_index: 0
+ #60# 0x7ed3003a85f5: 0x7ed3003a85f5 <Object map = 0x7ed3001beba5>
+            module: 0x7ed300002ce9 <String[1]: #q>
+              name: 0x7ed300198d79 <String[2]: #gc>
+              kind: 0
+        type_index: 1
+ #61# 0x7ed3003a884d: 0x7ed3003a884d <Object map = 0x7ed3001bef71>
+              name: 0x7ed30019af85 <String[4]: #main>
+              kind: 0
+             index: 2
+ #62# 0x7ed3003a12ed: 0x7ed3003a12ed <JSArray[0]>
+ #63# 0x7ed3003a12fd: 0x7ed3003a12fd <JSArray[0]>
+=====================
+
+Received signal 6
+
+==== C stack trace ===============================
+
+ [0x56090cfa4c16]
+ [0x560910f719c3]
+ [0x7fdb781b8330]
+ [0x7fdb78211b2c]
+ [0x7fdb781b827e]
+ [0x7fdb7819b8ff]
+ [0x560910f689a2]
+ [0x56090e59db88]
+ [0x560910d21a36]
+[end of stack trace]
+Aborted

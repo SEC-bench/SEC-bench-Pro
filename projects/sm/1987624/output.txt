@@ -1,0 +1,128 @@
+=================================================================
+==11==ERROR: AddressSanitizer: heap-use-after-free on address 0x7b04ee1e1800 at pc 0x557021e007f7 bp 0x7ffdf9ca0ac0 sp 0x7ffdf9ca0ab8
+READ of size 4 at 0x7b04ee1e1800 thread T0
+    #0 0x557021e007f6 in bool js::wasm::Decoder::read<unsigned int>(unsigned int*) /src/gecko-dev/js/src/wasm/WasmBinary.h:316:5
+    #1 0x557021e007f6 in js::wasm::Decoder::readFixedU32(unsigned int*) /src/gecko-dev/js/src/wasm/WasmBinary.h:468:57
+    #2 0x557021e007f6 in DecodePreamble(js::wasm::Decoder&) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:2443:10
+    #3 0x557021e00a82 in js::wasm::DecodeModuleEnvironment(js::wasm::Decoder&, js::wasm::CodeMetadata*, js::wasm::ModuleMetadata*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:3903:8
+    #4 0x557021e0e2c6 in js::wasm::Validate(JSContext*, js::wasm::BytecodeSource const&, js::wasm::FeatureOptions const&, std::unique_ptr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:4292:8
+    #5 0x557021c9b7eb in WebAssembly_validate(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:4700:20
+    #6 0x55701f1f5732 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:501:13
+    #7 0x55701f1b86f5 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:597:12
+    #8 0x55701f1d3989 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:669:10
+    #9 0x55701f1d3989 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3287:16
+    #10 0x55701f1b711c in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:471:13
+    #11 0x55701f1bce0c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:862:13
+    #12 0x55701f1bd646 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:895:10
+    #13 0x55701f457d34 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #14 0x55701f458082 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #15 0x55701f0a1c6f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1315:10
+    #16 0x55701f0a09ae in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #17 0x55701f02f1fa in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12011:10
+    #18 0x55701f02f1fa in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12264:12
+    #19 0x55701f02064d in main /src/gecko-dev/js/src/shell/js.cpp:12667:12
+    #20 0x7f04f811a1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x7f04f811a28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x55701ef22cf4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c96cf4) (BuildId: 66fa58595397a564cfdfa99fb0caad23)
+
+0x7b04ee1e1800 is located 0 bytes inside of 1048576-byte region [0x7b04ee1e1800,0x7b04ee2e1800)
+freed by thread T0 here:
+    #0 0x55701efc5b66 in free /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x55701f38273d in js_free(void*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:434:3
+    #2 0x55701f38273d in JS::GCContext::free_(js::gc::Cell*, void*, unsigned long, js::MemoryUse) /src/gecko-dev/js/src/gc/GCContext-inl.h:18:5
+    #3 0x55701f38273d in js::ArrayBufferObject::releaseData(JS::GCContext*) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:1878:12
+    #4 0x55701f38120f in js::ArrayBufferObject::detach(JSContext*, JS::Handle<js::ArrayBufferObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:1314:13
+    #5 0x55701f3bf5a2 in js::FixedLengthArrayBufferObject* js::ArrayBufferObject::copyAndDetach<js::FixedLengthArrayBufferObject>(JSContext*, unsigned long, JS::Handle<js::ArrayBufferObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:2602:3
+    #6 0x55701f37958d in js::FixedLengthArrayBufferObject::copyAndDetach(JSContext*, unsigned long, JS::Handle<js::ArrayBufferObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.h:744:12
+    #7 0x55701f37958d in ArrayBufferCopyAndDetach(JSContext*, JS::Handle<js::ArrayBufferObject*>, JS::Handle<JS::Value>, PreserveResizability) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:534:10
+    #8 0x55701f378f3b in js::ArrayBufferObject::transferImpl(JSContext*, JS::CallArgs const&) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:677:21
+    #9 0x55701f3797ee in bool JS::CallNonGenericMethod<&IsArrayBuffer(JS::Handle<JS::Value>), &js::ArrayBufferObject::transferImpl(JSContext*, JS::CallArgs const&)>(JSContext*, JS::CallArgs const&) /src/gecko-dev/obj-debug-asan/dist/include/js/CallNonGenericMethod.h:103:12
+    #10 0x55701f3797ee in js::ArrayBufferObject::transfer(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:694:10
+    #11 0x55701f1f5732 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:501:13
+    #12 0x55701f1b86f5 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:597:12
+    #13 0x55701f1d3989 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:669:10
+    #14 0x55701f1d3989 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3287:16
+    #15 0x55701f1b711c in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:471:13
+    #16 0x55701f1b881d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:629:13
+    #17 0x55701f1ba28e in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:696:8
+    #18 0x55701ff96642 in js::ScriptedProxyHandler::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) const /src/gecko-dev/js/src/proxy/ScriptedProxyHandler.cpp:1151:10
+    #19 0x55701ffa80c3 in js::Proxy::getInternal(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:526:19
+    #20 0x55701ff83b35 in js::Proxy::get(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/proxy/Proxy.cpp:534:10
+    #21 0x55701f0e4493 in js::GetProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/ObjectOperations-inl.h:110:12
+    #22 0x55701f8ee4ba in JS_ForwardGetPropertyTo(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/PropertyAndElement.cpp:598:10
+    #23 0x55701f8eeabe in JS_GetPropertyById(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/PropertyAndElement.cpp:617:10
+    #24 0x55701f8eed26 in JS_GetProperty(JSContext*, JS::Handle<JSObject*>, char const*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/PropertyAndElement.cpp:628:10
+    #25 0x557021b1277c in js::wasm::FeatureOptions::init(JSContext*, JS::Handle<JS::Value>) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:167:8
+    #26 0x557021c9b7ba in WebAssembly_validate(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:4695:16
+    #27 0x55701f1f5732 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:501:13
+    #28 0x55701f1b86f5 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:597:12
+    #29 0x55701f1d3989 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:669:10
+    #30 0x55701f1d3989 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3287:16
+    #31 0x55701f1b711c in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:471:13
+    #32 0x55701f1bce0c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:862:13
+    #33 0x55701f1bd646 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:895:10
+    #34 0x55701f457d34 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #35 0x55701f458082 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+
+previously allocated by thread T0 here:
+    #0 0x55701efc5f29 in calloc /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:74:3
+    #1 0x55701f3a5d7a in js_arena_calloc(unsigned long, unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:403:10
+    #2 0x55701f3a5d7a in unsigned char* js_pod_arena_calloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:617:26
+    #3 0x55701f3a5d7a in unsigned char* js::MallocProvider<JSContext>::maybe_pod_arena_calloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:66:12
+    #4 0x55701f3a5d7a in AllocateArrayBufferContents(JSContext*, unsigned long) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:1240:11
+    #5 0x55701f3cd012 in std::tuple<js::FixedLengthArrayBufferObject*, unsigned char*> js::ArrayBufferObject::createUninitializedBufferAndData<js::FixedLengthArrayBufferObject, (js::ArrayBufferObject::FillContents)0>(JSContext*, unsigned long, js::AutoSetNewObjectMetadata&, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:2395:18
+    #6 0x55701f3b3df0 in std::tuple<js::FixedLengthArrayBufferObject*, unsigned char*> js::ArrayBufferObject::createBufferAndData<js::FixedLengthArrayBufferObject, (js::ArrayBufferObject::FillContents)0>(JSContext*, unsigned long, js::AutoSetNewObjectMetadata&, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:2443:7
+    #7 0x55701f37de8a in js::ArrayBufferObject::createZeroed(JSContext*, unsigned long, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:2807:7
+    #8 0x55701f380492 in js::ArrayBufferObject::class_constructor(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/ArrayBufferObject.cpp:1206:22
+    #9 0x55701f1f5732 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:501:13
+    #10 0x55701f20719e in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:519:8
+    #11 0x55701f1bb105 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:725:14
+    #12 0x55701f1d3905 in js::ConstructFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:772:10
+    #13 0x55701f1d3905 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #14 0x55701f1b711c in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:471:13
+    #15 0x55701f1bce0c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:862:13
+    #16 0x55701f1bd646 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:895:10
+    #17 0x55701f457d34 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #18 0x55701f458082 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #19 0x55701f0a1c6f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1315:10
+    #20 0x55701f0a09ae in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #21 0x55701f02f1fa in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12011:10
+    #22 0x55701f02f1fa in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12264:12
+    #23 0x55701f02064d in main /src/gecko-dev/js/src/shell/js.cpp:12667:12
+    #24 0x7f04f811a1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #25 0x7f04f811a28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x55701ef22cf4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c96cf4) (BuildId: 66fa58595397a564cfdfa99fb0caad23)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/wasm/WasmBinary.h:316:5 in bool js::wasm::Decoder::read<unsigned int>(unsigned int*)
+Shadow bytes around the buggy address:
+  0x7b04ee1e1580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b04ee1e1600: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b04ee1e1680: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b04ee1e1700: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b04ee1e1780: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x7b04ee1e1800:[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7b04ee1e1880: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7b04ee1e1900: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7b04ee1e1980: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7b04ee1e1a00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7b04ee1e1a80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==11==ABORTING

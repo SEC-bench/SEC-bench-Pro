@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1875795",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/MacroAssembler.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --ion-warmup-threshold=10",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Bug 1875795 (Assertion failure: slots == calculateDynamicSlots(), at js/src/vm/JSObject-inl.h:45 with OOM). sec-high; fix landed in git 58d7323c391c. RCA fields TBD by rca agent (run git show 58d7323c391c inside vuln image). Auto-staged 2026-05.",
+  "fix_commits": [
+    "58d7323c391c"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-58d7323c391c.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1875795 fix",
+      "source_commit": "58d7323c391c",
+      "commit": "58d7323c391c",
+      "url": "https://github.com/mozilla/gecko-dev/commit/58d7323c391c",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/58d7323c391c"
+    }
+  ],
+  "vrp": null
+}

@@ -1,0 +1,22 @@
+[1] Assertion failure: slots == calculateDynamicSlots(), at /src/gecko-dev/js/src/vm/JSObject-inl.h:36
+#01: ???[/out/js +0x34a907a]
+#02: ???[/out/js +0x35e1657]
+#03: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==1==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55cb9cd860a6 bp 0x7fffae58f010 sp 0x7fffae58eff0 T0)
+==1==The signal is caused by a WRITE memory access.
+==1==Hint: address points to the zero page.
+    #0 0x55cb9cd860a6 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x55cb9cd860a6 in js::NativeObject::numDynamicSlots() const /src/gecko-dev/js/src/vm/JSObject-inl.h:36:3
+    #2 0x55cb9cebe656 in js::NativeObject::growSlotsPure(JSContext*, js::NativeObject*, unsigned int) /src/gecko-dev/js/src/vm/NativeObject.cpp:435:32
+    #3 0x2608db432646  (<unknown module>)
+
+==1==Register values:
+rax = 0x0000000000000000  rbx = 0x0000349efb3029f0  rcx = 0x0000000000000024  rdx = 0x0000000000000000  
+rdi = 0x000055cba0743f30  rsi = 0x00007fffae58efa8  rbp = 0x00007fffae58f010  rsp = 0x00007fffae58eff0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007b39eb4ec020  r13 = 0x0000349efb3029e8  r14 = 0x0000000000000006  r15 = 0x00000693df66053e  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==1==ABORTING

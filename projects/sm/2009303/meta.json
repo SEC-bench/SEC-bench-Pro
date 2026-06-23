@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:2009303",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/debugger/DebugScript.cpp"
+    ],
+    "target_subdir": [
+        "js/src/debugger"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "DebugScript Heap-Use-After-Free on About-To-Be-Finalized JSScript. CVE-2026-4701 (sec-moderate, MFSA 2026-20). During a GC sweep SpiderMonkey marks JSScripts as 'about to be finalized' before their destructors actually run. Several DebugScript helpers in js/src/debugger/DebugScript.cpp — DebugScript::get, DebugScript::getUnbarriered, DebugScript::hasBreakpointSite, DebugScript::destroyBreakpointSite, DebugScript::decrementStepperCount, DebugScript::decrementGeneratorObserverCount, and DebugAPI::stepModeEnabledSlow — dereferenced `script->zone()->debugScriptMap` and the per-script DebugScript entry without first filtering for the about-to-be-finalized state. When a Debugger that previously set a breakpoint on an eval'd script calls Debugger.clearAllBreakpoints() right after the script has been marked for finalization (the entry in debugScriptMap has already been removed but the script itself has not been destructed yet), these helpers walk into the dead DebugScript entry, producing a heap-use-after-free. The fix (commit 0a30c6b6fc37e95465fbf3c325a97f59ede662dd by Tooru Fujisawa, 2026-01-13, reviewed by jonco; Phabricator D278451) inserts `IsAboutToBeFinalizedUnbarriered(script)` early-out guards into every affected helper and adds matching `MOZ_ASSERT` checks to the unconditional getters. Trigger: enable forced GC zeal (gczeal(23)), create a Debugger on a fresh global with onNewScript that sets a breakpoint, eval an empty script in the global, allocate a Uint8Array to drive a GC, then call dbg.clearAllBreakpoints(). The committed regression test js/src/jit-test/tests/debug/Debugger-clearAllBreakpoints-finalized.js is shipped as poc.js verbatim. Reported via Mozilla Foundation Security Advisory 2026-20; Bugzilla 2009303 remains sec-restricted.",
+    "fix_commits": [
+        "0a30c6b6fc37e95465fbf3c325a97f59ede662dd"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-check-the-corresponding-script-before-trying-to.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 2009303 - Check the corresponding script before trying to",
+            "source_commit": "0a30c6b6fc37e95465fbf3c325a97f59ede662dd",
+            "commit": "0a30c6b6fc37e95465fbf3c325a97f59ede662dd",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/0a30c6b6fc37e95465fbf3c325a97f59ede662dd",
+            "source_url": "https://github.com/mozilla-firefox/firefox/commit/0a30c6b6fc37e95465fbf3c325a97f59ede662dd",
+            "phabricator": "D278451"
+        }
+    ],
+    "vrp": null
+}

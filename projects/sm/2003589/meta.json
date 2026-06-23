@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:2003589",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/builtin/Object.cpp",
+    "js/src/jit/CodeGenerator.cpp",
+    "js/src/jit/VMFunctionList-inl.h",
+    "js/src/vm/Iteration.cpp",
+    "js/src/vm/Iteration.h"
+  ],
+  "target_subdir": [
+    "js/src/builtin",
+    "js/src/jit",
+    "js/src/vm"
+  ],
+  "command_options": "--fuzzing-safe --no-threads --ion-eager",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Object.keys ObjToIterator helper enumerated inherited proxy-trap properties of the Proxy(Object, Object) set on Array prototype. Under --ion-eager, the JIT-compiled key enumeration walked into a recursive proxy handler before the iterator was finalized, tripping the disallowArbitraryCode() assertion in vm/Interpreter.cpp:406. sec-high regression of bug 1995077 (iterator-indices optimization). Fix: only enumerate own properties in ObjToIterator (git 1d09788fc823).",
+  "fix_commits": [
+    "1d09788fc823"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-1d09788fc823.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 2003589 fix",
+      "source_commit": "1d09788fc823",
+      "commit": "1d09788fc823",
+      "url": "https://github.com/mozilla/gecko-dev/commit/1d09788fc823",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/1d09788fc823"
+    }
+  ],
+  "vrp": null
+}

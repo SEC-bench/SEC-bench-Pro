@@ -1,0 +1,39 @@
+[1] Assertion failure: !cx->runtime()->jitRuntime()->disallowArbitraryCode(), at /src/gecko-dev/js/src/vm/Interpreter.cpp:407
+#01: ???[/out/js +0x2fc82b7]
+#02: ???[/out/js +0x2fc968e]
+#03: ???[/out/js +0x2fcb0ff]
+#04: ???[/out/js +0x3132169]
+#05: ???[/out/js +0x3daa159]
+#06: js::BaseProxyHandler::getOwnEnumerablePropertyKeys(JSContext*, JS::Handle<JSObject*>, JS::MutableHandle<JS::StackGCVector<JS::PropertyKey, js::TempAllocPolicy> >) const[/out/js +0x3d7b61c]
+#07: ???[/out/js +0x3da057b]
+#08: ???[/out/js +0x34131a5]
+#09: ???[/out/js +0x33c4595]
+#10: ???[/out/js +0x33c9c1b]
+#11: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==1==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55bcf3f662e3 bp 0x7ffd8498e0d0 sp 0x7ffd8498dfc0 T0)
+==1==The signal is caused by a WRITE memory access.
+==1==Hint: address points to the zero page.
+    #0 0x55bcf3f662e3 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x55bcf3f662e3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:406:3
+    #2 0x55bcf3f6768d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:618:13
+    #3 0x55bcf3f690fe in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:685:8
+    #4 0x55bcf40d0168 in js::Call(JSContext*, JS::Handle<JS::Value>, JSObject*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.h:145:10
+    #5 0x55bcf4d48158 in js::ScriptedProxyHandler::getOwnPropertyDescriptor(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::MutableHandle<mozilla::Maybe<JS::PropertyDescriptor>>) const /src/gecko-dev/js/src/proxy/ScriptedProxyHandler.cpp:544:8
+    #6 0x55bcf4d1961b in js::BaseProxyHandler::getOwnEnumerablePropertyKeys(JSContext*, JS::Handle<JSObject*>, JS::MutableHandle<JS::StackGCVector<JS::PropertyKey, js::TempAllocPolicy>>) const /src/gecko-dev/js/src/proxy/BaseProxyHandler.cpp:267:10
+    #7 0x55bcf4d3e57a in js::Proxy::getOwnEnumerablePropertyKeys(JSContext*, JS::Handle<JSObject*>, JS::MutableHandle<JS::StackGCVector<JS::PropertyKey, js::TempAllocPolicy>>) /src/gecko-dev/js/src/proxy/Proxy.cpp:642:19
+    #8 0x55bcf43b11a4 in bool PropertyEnumerator::enumerateProxyProperties<true>(JSContext*) /src/gecko-dev/js/src/vm/Iteration.cpp:469:8
+    #9 0x55bcf4362594 in PropertyEnumerator::snapshot(JSContext*) /src/gecko-dev/js/src/vm/Iteration.cpp:661:14
+    #10 0x55bcf4367c1a in js::PropertyIteratorObject* GetIteratorImpl<false, true>(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/Iteration.cpp:1232:21
+    #11 0x55bcf4367c1a in js::GetIteratorUnregistered(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/Iteration.cpp:1309:10
+    #12 0x2f335cfde5b5  (<unknown module>)
+
+==1==Register values:
+rax = 0x0000000000000000  rbx = 0x00007deafc9e0080  rcx = 0x0000000000000197  rdx = 0x0000000000000000  
+rdi = 0x000055bcf7e74af0  rsi = 0x00007ffd8498df78  rbp = 0x00007ffd8498e0d0  rsp = 0x00007ffd8498dfc0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000ab79f0f73ec  r13 = 0x00000fffb0931c04  r14 = 0x00007ffd8498e1c0  r15 = 0x00007d8afca331a0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==1==ABORTING

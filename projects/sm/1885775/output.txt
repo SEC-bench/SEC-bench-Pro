@@ -1,0 +1,101 @@
+WeakMap value is less marked than map and key
+(map 0x72a1322310e0 is black, key 0x32503e9e4c70 is black, value 0x32503e9f0ed0 is white)
+Key:
+JS Symbol(32503e9e4c70)
+Value:
+
+{
+  "address": "(JSObject*)0x32503e9f0ed0",
+  "nonCCWGlobal": "<global @ (JSObject*)0x32503e93e030>",
+  "clasp": "<Debugger @ (JSClass*)0x5b4033d38780>",
+  "shape": "<(js::Shape*)0x32503e9628a0, objectFlags=[]>",
+  "shape.base": {
+    "address": "(js::BaseShape*)0x32503e93c1f0",
+    "realm": "(JS::Realm*)0x7391321f1a80",
+    "proto": "(JSObject*)0x32503e93e088"
+  },
+  "elementsHeader": "<(js::ObjectElements*)0x5b402e58ee60, flags=[], init=0, capacity=0, length=0>",
+  "reservedSlots": {
+    "0": "<Object @ (JSObject*)0x32503e941070>",
+    "1": "<Object @ (JSObject*)0x32503e9410d0>",
+    "2": "<Object @ (JSObject*)0x32503e9410b8>",
+    "3": "<Object @ (JSObject*)0x32503e941088>",
+    "4": "<Object @ (JSObject*)0x32503e9410a0>",
+    "5": "<Object @ (JSObject*)0x32503e9410e8>",
+    "6": "6.27796622616446e-310 / <private @ 0x739132481280>",
+    "7": "undefined",
+    "8": "undefined",
+    "9": "undefined",
+    "10": "undefined",
+    "11": "undefined",
+    "12": "undefined",
+    "13": "undefined",
+    "14": "undefined",
+    "15": "undefined",
+    "16": "null",
+    "17": "<DebuggerDebuggeeLink @ (JSObject*)0x32503e9ecfb0>"
+  },
+  "properties": {
+  }
+}
+[13] Assertion failure: WeakMapBase::checkMarkingForZone(zone), at /src/gecko-dev/js/src/gc/Sweeping.cpp:1085
+#01: ???[/out/js +0x459d94e]
+#02: ???[/out/js +0x46224d9]
+#03: ???[/out/js +0x460a919]
+#04: ???[/out/js +0x45ae004]
+#05: ???[/out/js +0x43dd3c8]
+#06: ???[/out/js +0x43e3d8a]
+#07: ???[/out/js +0x43e7118]
+#08: ???[/out/js +0x43bec06]
+#09: ???[/out/js +0x43f0176]
+#10: ???[/out/js +0x2ded066]
+#11: ???[/out/js +0x2decbf6]
+#12: ???[/out/js +0x2deb0fd]
+#13: ???[/out/js +0x33718a5]
+#14: ???[/out/js +0x3235244]
+#15: ???[/out/js +0x3c3f2d1]
+#16: ???[/out/js +0x323ec48]
+#17: JS_ReportErrorASCII(JSContext*, char const*, ...)[/out/js +0x3c00ff6]
+#18: ???[/out/js +0x3a891fa]
+#19: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5b4031eaf983 bp 0x7ffca5652710 sp 0x7ffca5652690 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5b4031eaf983 in MaybeCheckWeakMapMarking(js::gc::GCRuntime*) /src/gecko-dev/js/src/gc/Sweeping.cpp:1085:7
+    #1 0x5b4031eaf983 in js::gc::GCRuntime::endMarkingSweepGroup(JS::GCContext*, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1171:3
+    #2 0x5b4031f344d8 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2179:23
+    #3 0x5b4031f1c918 in sweepaction::SweepActionForEach<js::gc::SweepGroupsIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2214:19
+    #4 0x5b4031ec0003 in js::gc::GCRuntime::performSweepActions(js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2362:53
+    #5 0x5b4031cef3c7 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3808:11
+    #6 0x5b4031cf5d89 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4322:3
+    #7 0x5b4031cf9117 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4513:9
+    #8 0x5b4031cd0c05 in js::gc::GCRuntime::gcSlice(JS::GCReason, js::SliceBudget const&) /src/gecko-dev/js/src/gc/GC.cpp:4613:3
+    #9 0x5b4031cd0c05 in js::gc::GCRuntime::gcIfRequestedImpl(bool) /src/gecko-dev/js/src/gc/GC.cpp:4806:5
+    #10 0x5b4031d02175 in js::gc::GCRuntime::gcIfRequested() /src/gecko-dev/js/src/gc/GCRuntime.h:326:33
+    #11 0x5b4031d02175 in void* js::gc::CellAllocator::TryNewTenuredCell<(js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Allocator.cpp:154:25
+    #12 0x5b40306ff065 in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:134:10
+    #13 0x5b40306febf5 in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:94:16
+    #14 0x5b40306fd0fc in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #15 0x5b40306fd0fc in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:359:10
+    #16 0x5b40306fd0fc in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:495:28
+    #17 0x5b4030c838a4 in NewObject(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject.cpp:769:23
+    #18 0x5b4030b47243 in js::NativeObject* js::NewObjectWithGivenTaggedProto<(js::NewObjectKind)0>(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject-inl.h:371:10
+    #19 0x5b4030b47243 in js::NewObjectWithGivenProto(JSContext*, JSClass const*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/JSObject-inl.h:397:10
+    #20 0x5b4030b47243 in js::ErrorObject::create(JSContext*, JSExnType, JS::Handle<JSObject*>, JS::Handle<JSString*>, unsigned int, unsigned int, JS::ColumnNumberOneOrigin, mozilla::UniquePtr<JSErrorReport, JS::DeletePolicy<JSErrorReport>>, JS::Handle<JSString*>, JS::Handle<mozilla::Maybe<JS::Value>>, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/ErrorObject.cpp:549:21
+    #21 0x5b40315512d0 in js::ErrorToException(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/jsexn.cpp:356:7
+    #22 0x5b4030b50c47 in ReportError(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:173:10
+    #23 0x5b4030b50c47 in js::ReportErrorVA(JSContext*, js::IsWarning, char const*, js::ErrorArgumentsType, __va_list_tag*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:581:8
+    #24 0x5b4031512ff5 in JS_ReportErrorASCII(JSContext*, char const*, ...) /src/gecko-dev/js/src/jsapi.cpp:3743:3
+    #25 0x5b403139b1f9 in StartGC(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:2894:5
+    #26 0x71f0b0b339f2  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x000074c1321e0c68  rcx = 0x00005b402e8c37e0  rdx = 0x0000000000000000  
+rdi = 0x00005b4034512b10  rsi = 0x00007ffca5652648  rbp = 0x00007ffca5652710  rsp = 0x00007ffca5652690  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x000000000000000c  r13 = 0x0000000000000000  r14 = 0x0000000000000000  r15 = 0x00007401321fe100  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Sweeping.cpp:1085:7 in MaybeCheckWeakMapMarking(js::gc::GCRuntime*)
+==13==ABORTING

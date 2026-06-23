@@ -1,0 +1,156 @@
+# OpenCode baseline config for GLM 5 on Amazon Bedrock.
+# Requires AWS Bedrock credentials and AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION.
+# Model IDs were checked against the provider docs when this file was created.
+model = "zai.glm-5"
+api = "bedrock"
+instances = [
+    "1675905",
+    "1736307",
+    "1736310",
+    "1739972",
+    "1791520",
+    "1791975",
+    "1796901",
+    "1804626",
+    "1810711",
+    "1814899",
+    "1820543",
+    "1821959",
+    "1827073",
+    "1834711",
+    "1838587",
+    "1841119",
+    "1842617",
+    "1851569",
+    "1852218",
+    "1854068",
+    "1862473",
+    "1863391",
+    "1871089",
+    "1871618",
+    "1875795",
+    "1878261",
+    "1879237",
+    "1880719",
+    "1882751",
+    "1883542",
+    "1884427",
+    "1884518",
+    "1884552",
+    "1884887",
+    "1885775",
+    "1885828",
+    "1885829",
+    "1886683",
+    "1886849",
+    "1888614",
+    "1888892",
+    "1889317",
+    "1895086",
+    "1895123",
+    "1901411",
+    "1902983",
+    "1903041",
+    "1903219",
+    "1904644",
+    "1908631",
+    "1911909",
+    "1912715",
+    "1914009",
+    "1914475",
+    "1917807",
+    "1919246",
+    "1926235",
+    "1929623",
+    "1933023",
+    "1934365",
+    "1934423",
+    "1942648",
+    "1942881",
+    "1945318",
+    "1946004",
+    "1952215",
+    "1954042",
+    "1965751",
+    "1966612",
+    "1966614",
+    "1968423",
+    "1970095",
+    "1970811",
+    "1979359",
+    "1985224",
+    "1985765",
+    "1987290",
+    "1987481",
+    "1987624",
+    "1988967",
+    "1989978",
+    "1992130",
+    "1992902",
+    "1994994",
+    "1998050",
+    "2000469",
+    "2003588",
+    "2003589",
+    "2009303",
+    "2010940",
+    "2010943",
+    "2011069",
+    "2012018",
+    "2013165",
+    "2013543",
+    "2013549",
+    "2013560",
+    "2013562",
+    "2013741",
+    "2019813",
+    "2023007",
+    "2023024",
+    "2024918",
+    "2029065",
+]
+outdir = "output/sm/opencode/baseline/glm-5-bedrock/defaults"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_sm.j2"
+agents_md = "../prompts/baseline/AGENTS_sm.j2"
+images_dir = "../projects/sm"
+# skill_directory = ".agents/skills"  # Optional: path to skill files
+
+tracking = "none"
+opencode_artifacts = "compact"
+output_format = "json"
+
+# The harness supplies autonomous OpenCode permissions by default:
+# local code tools are allowed, webfetch/websearch/question are denied,
+# and doom_loop/external_directory/task are allowed for container evals.
+
+# Optional OpenCode agent/provider options. Keep unset unless the selected
+# provider/model documents support for that exact option.
+reasoning_effort = "high"
+
+# Optional Bedrock provider pinning. OpenCode also reads AWS_REGION,
+# AWS_REGION_NAME, AWS_DEFAULT_REGION, AWS_PROFILE, and bearer/access keys.
+# [opencode_config.provider.amazon-bedrock.options]
+# region = "us-east-1"
+# profile = "my-aws-profile"
+
+[permission]
+bash = "allow"
+edit = "allow"
+grep = "allow"
+glob = "allow"
+lsp = "allow"
+skill = "allow"
+todowrite = "allow"
+webfetch = "deny"
+websearch = "deny"
+question = "deny"
+doom_loop = "allow"
+external_directory = "allow"
+task = "allow"
+
+[permission.read]
+"*" = "allow"
+"*.env" = "deny"
+"*.env.*" = "deny"
+"*.env.example" = "allow"

@@ -1,0 +1,2403 @@
+From 58f407806ad0ea83d8174dd701ba4b84c3cca14f Mon Sep 17 00:00:00 2001
+From: Stephen Roettger <sroettger@google.com>
+Date: Tue, 10 Dec 2024 18:02:39 +0100
+Subject: [PATCH] [sandbox][wasm] add signature checks to the code pointer
+ table
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This CL replaces existing sandbox signature hash checks with checks in
+the WasmCodePointerTable. Every CPT entry stores the signature hash and
+every load will validate the signature.
+
+The signature hash is stored in the CallDescriptor and passed through
+the inputs to the codegen for kArchCallWasmFunction Arch instruction.
+CallWasmCodePointer then has new instructions (on 64 bit) to compare
+the signature hash.
+
+Fixed: 350292240
+Change-Id: I0746fa2b60917398b49bf685bfd51a1aa903de29
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6072813
+Commit-Queue: Stephen Röttger <sroettger@google.com>
+Reviewed-by: Jakob Kummerow <jkummerow@chromium.org>
+Reviewed-by: Nico Hartmann <nicohartmann@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#97718}
+---
+ src/builtins/arm64/builtins-arm64.cc          |  7 +-
+ src/builtins/builtins-wasm-gen.cc             | 14 ---
+ src/builtins/builtins-wasm-gen.h              |  2 -
+ src/builtins/wasm.tq                          | 14 +--
+ src/builtins/x64/builtins-x64.cc              |  7 +-
+ src/codegen/arm/macro-assembler-arm.cc        |  1 +
+ src/codegen/arm64/macro-assembler-arm64.cc    | 45 ++++++++-
+ src/codegen/arm64/macro-assembler-arm64.h     |  5 +-
+ src/codegen/bailout-reason.h                  |  1 +
+ src/codegen/external-reference.cc             | 15 ---
+ src/codegen/external-reference.h              |  1 -
+ src/codegen/ia32/macro-assembler-ia32.cc      |  7 +-
+ src/codegen/x64/macro-assembler-x64.cc        | 34 ++++++-
+ src/codegen/x64/macro-assembler-x64.h         |  5 +-
+ src/common/code-memory-access.cc              |  9 --
+ src/common/code-memory-access.h               |  2 -
+ .../backend/arm64/code-generator-arm64.cc     |  8 +-
+ src/compiler/backend/instruction-selector.cc  | 16 ++++
+ src/compiler/backend/instruction.h            | 17 ++++
+ .../backend/x64/code-generator-x64.cc         | 10 +-
+ src/compiler/linkage.cc                       |  3 +-
+ src/compiler/linkage.h                        | 15 ++-
+ src/compiler/pipeline.cc                      |  4 +
+ src/compiler/wasm-compiler-definitions.cc     |  6 +-
+ src/compiler/wasm-compiler.cc                 |  2 +
+ src/heap/factory.cc                           | 15 +--
+ src/heap/factory.h                            |  8 +-
+ src/wasm/DEPS                                 |  4 +
+ .../baseline/arm/liftoff-assembler-arm-inl.h  |  3 +-
+ .../arm64/liftoff-assembler-arm64-inl.h       |  9 +-
+ .../ia32/liftoff-assembler-ia32-inl.h         |  3 +-
+ src/wasm/baseline/liftoff-assembler.h         |  3 +-
+ src/wasm/baseline/liftoff-compiler.cc         | 27 ++----
+ .../baseline/x64/liftoff-assembler-x64-inl.h  |  9 +-
+ src/wasm/c-api.cc                             |  7 +-
+ src/wasm/function-compiler.cc                 |  1 +
+ src/wasm/function-compiler.h                  |  1 +
+ src/wasm/module-compiler.cc                   |  3 +-
+ src/wasm/signature-hashing.h                  | 10 ++
+ src/wasm/turboshaft-graph-interface.cc        | 61 ++----------
+ src/wasm/turboshaft-graph-interface.h         |  3 +-
+ src/wasm/wasm-code-manager.cc                 | 74 ++++++++++-----
+ src/wasm/wasm-code-manager.h                  | 12 ++-
+ src/wasm/wasm-code-pointer-table-inl.h        | 62 +++++++++---
+ src/wasm/wasm-code-pointer-table.cc           |  4 +-
+ src/wasm/wasm-code-pointer-table.h            | 31 ++++--
+ src/wasm/wasm-import-wrapper-cache.cc         | 12 +++
+ src/wasm/wasm-import-wrapper-cache.h          |  8 +-
+ src/wasm/wasm-js.cc                           | 10 +-
+ src/wasm/wasm-objects.cc                      | 94 ++++++++++---------
+ src/wasm/wasm-objects.h                       | 11 ++-
+ src/wasm/wasm-objects.tq                      |  6 --
+ src/wasm/wrappers.cc                          | 22 ++---
+ test/cctest/compiler/test-code-generator.cc   |  5 +-
+ test/cctest/compiler/test-multiple-return.cc  | 20 ++--
+ test/cctest/wasm/test-c-wasm-entry.cc         |  2 +-
+ test/cctest/wasm/wasm-run-utils.cc            | 14 +--
+ test/cctest/wasm/wasm-run-utils.h             | 15 ++-
+ test/fuzzer/multi-return.cc                   |  5 +-
+ 59 files changed, 479 insertions(+), 345 deletions(-)
+
+diff --git a/src/builtins/arm64/builtins-arm64.cc b/src/builtins/arm64/builtins-arm64.cc
+index 3e78a898fd0..97674742a29 100644
+--- a/src/builtins/arm64/builtins-arm64.cc
++++ b/src/builtins/arm64/builtins-arm64.cc
+@@ -4413,7 +4413,12 @@ void JSToWasmWrapperHelper(MacroAssembler* masm, wasm::Promise mode) {
+         call_target,
+         MemOperand(wrapper_buffer,
+                    JSToWasmWrapperFrameConstants::kWrapperBufferCallTarget));
+-    __ CallWasmCodePointer(call_target);
++    // We do the call without a signature check here, since the wrapper loaded
++    // the signature from the same trusted object as the call target to set up
++    // the stack layout. We could add a signature hash and pass it through to
++    // verify it here, but an attacker that could corrupt the signature could
++    // also corrupt that signature hash (which is outside of the sandbox).
++    __ CallWasmCodePointerNoSignatureCheck(call_target);
+   }
+   regs.ResetExcept();
+   // The wrapper_buffer has to be in x2 as the correct parameter register.
+diff --git a/src/builtins/builtins-wasm-gen.cc b/src/builtins/builtins-wasm-gen.cc
+index 0064167e04f..b9c6c44d1ed 100644
+--- a/src/builtins/builtins-wasm-gen.cc
++++ b/src/builtins/builtins-wasm-gen.cc
+@@ -113,20 +113,6 @@ TNode<Float64T> WasmBuiltinsAssembler::StringToFloat64(TNode<String> input) {
+ #endif
+ }
+ 
+-TNode<Smi> WasmBuiltinsAssembler::SignatureCheckFail(
+-    TNode<WasmInternalFunction> internal_function,
+-    TNode<UintPtrT> expected_hash) {
+-  TNode<ExternalReference> function =
+-      ExternalConstant(ExternalReference::wasm_signature_check_fail());
+-  // The C-side return type is "void", but "None()" isn't supported here.
+-  // Since we ignore the result anyway, it doesn't matter to pretend there's
+-  // a pointer in the return register.
+-  CallCFunction(function, MachineType::Pointer(),
+-                std::make_pair(MachineType::AnyTagged(), internal_function),
+-                std::make_pair(MachineType::UintPtr(), expected_hash));
+-  return SmiConstant(0);
+-}
+-
+ TF_BUILTIN(WasmFloat32ToNumber, WasmBuiltinsAssembler) {
+   auto val = UncheckedParameter<Float32T>(Descriptor::kValue);
+   Return(ChangeFloat32ToTagged(val));
+diff --git a/src/builtins/builtins-wasm-gen.h b/src/builtins/builtins-wasm-gen.h
+index 46073ef4e30..93529e79bb0 100644
+--- a/src/builtins/builtins-wasm-gen.h
++++ b/src/builtins/builtins-wasm-gen.h
+@@ -37,8 +37,6 @@ class WasmBuiltinsAssembler : public CodeStubAssembler {
+       TNode<WasmTrustedInstanceData>);
+ 
+   TNode<Float64T> StringToFloat64(TNode<String>);
+-
+-  TNode<Smi> SignatureCheckFail(TNode<WasmInternalFunction>, TNode<UintPtrT>);
+ };
+ 
+ }  // namespace internal
+diff --git a/src/builtins/wasm.tq b/src/builtins/wasm.tq
+index fa1b8d5973c..d281e47d49f 100644
+--- a/src/builtins/wasm.tq
++++ b/src/builtins/wasm.tq
+@@ -135,10 +135,6 @@ extern macro WasmBuiltinsAssembler::LoadContextFromWasmOrJsFrame():
+ 
+ extern macro WasmBuiltinsAssembler::StringToFloat64(String): float64;
+ 
+-// This doesn't return, but the return type {never} confuses the CSA graph.
+-extern macro WasmBuiltinsAssembler::SignatureCheckFail(
+-    WasmInternalFunction, uintptr): Smi;
+-
+ extern macro SwitchToTheCentralStackIfNeeded(): RawPtr;
+ extern macro SwitchFromTheCentralStack(RawPtr): void;
+ 
+@@ -734,20 +730,12 @@ struct TargetAndImplicitArg {
+ }
+ 
+ builtin CallRefIC(
+-    vector: FixedArray, vectorIndex: int32, signatureHash: uintptr,
++    vector: FixedArray, vectorIndex: int32,
+     funcref: WasmFuncRef): TargetAndImplicitArg {
+   dcheck(Is<WasmFuncRef>(funcref));
+   UpdateCallRefOrIndirectIC(vector, Convert<intptr>(vectorIndex), funcref);
+ 
+   const internal = funcref.internal;
+-  @if(V8_ENABLE_SANDBOX) {
+-    if (signatureHash != internal.signature_hash) deferred {
+-        SignatureCheckFail(internal, signatureHash);
+-      }
+-  }
+-  @ifnot(V8_ENABLE_SANDBOX) {
+-    dcheck(signatureHash == 0);  // Avoids "unused variable" warning.
+-  }
+   return TargetAndImplicitArg{
+     target: internal.call_target,
+     implicit_arg: internal.implicit_arg
+diff --git a/src/builtins/x64/builtins-x64.cc b/src/builtins/x64/builtins-x64.cc
+index 346e44ba5a0..52464315044 100644
+--- a/src/builtins/x64/builtins-x64.cc
++++ b/src/builtins/x64/builtins-x64.cc
+@@ -3844,7 +3844,12 @@ void JSToWasmWrapperHelper(MacroAssembler* masm, wasm::Promise mode) {
+             0);
+   }
+ 
+-  __ CallWasmCodePointer(call_target);
++  // We do the call without a signature check here, since the wrapper loaded the
++  // signature from the same trusted object as the call target to set up the
++  // stack layout. We could add a signature hash and pass it through to verify
++  // it here, but an attacker that could corrupt the signature could also
++  // corrupt that signature hash (which is outside of the sandbox).
++  __ CallWasmCodePointerNoSignatureCheck(call_target);
+ 
+   __ movq(
+       thread_in_wasm_flag_addr,
+diff --git a/src/codegen/arm/macro-assembler-arm.cc b/src/codegen/arm/macro-assembler-arm.cc
+index c4ef00863aa..84d655948d6 100644
+--- a/src/codegen/arm/macro-assembler-arm.cc
++++ b/src/codegen/arm/macro-assembler-arm.cc
+@@ -462,6 +462,7 @@ void MacroAssembler::JumpJSFunction(Register function_object,
+ #ifdef V8_ENABLE_WEBASSEMBLY
+ 
+ void MacroAssembler::ResolveWasmCodePointer(Register target) {
++  static_assert(!V8_ENABLE_SANDBOX_BOOL);
+   ExternalReference global_jump_table =
+       ExternalReference::wasm_code_pointer_table();
+   UseScratchRegisterScope temps(this);
+diff --git a/src/codegen/arm64/macro-assembler-arm64.cc b/src/codegen/arm64/macro-assembler-arm64.cc
+index 1b56955f687..187a51262a7 100644
+--- a/src/codegen/arm64/macro-assembler-arm64.cc
++++ b/src/codegen/arm64/macro-assembler-arm64.cc
+@@ -2597,20 +2597,41 @@ void MacroAssembler::JumpJSFunction(Register function_object,
+ 
+ #ifdef V8_ENABLE_WEBASSEMBLY
+ 
+-void MacroAssembler::ResolveWasmCodePointer(Register target) {
++void MacroAssembler::ResolveWasmCodePointer(Register target,
++                                            uint64_t signature_hash) {
+   ExternalReference global_jump_table =
+       ExternalReference::wasm_code_pointer_table();
+   UseScratchRegisterScope temps(this);
+   Register scratch = temps.AcquireX();
+   Mov(scratch, global_jump_table);
+-  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == kSystemPointerSize);
+-  lsl(target.W(), target.W(), kSystemPointerSizeLog2);
+-  Ldr(target, MemOperand(scratch, target));
++#ifdef V8_ENABLE_SANDBOX
++  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
++  Add(target, scratch, Operand(target, LSL, 4));
++  Ldr(scratch,
++      MemOperand(target, wasm::WasmCodePointerTable::kOffsetOfSignatureHash));
++  bool has_second_tmp = temps.CanAcquire();
++  Register signature_hash_register = has_second_tmp ? temps.AcquireX() : target;
++  if (!has_second_tmp) {
++    Push(signature_hash_register, padreg);
++  }
++  Mov(signature_hash_register, signature_hash);
++  Cmp(scratch, signature_hash_register);
++  SbxCheck(Condition::kEqual, AbortReason::kWasmSignatureMismatch);
++  if (!has_second_tmp) {
++    Pop(padreg, signature_hash_register);
++  }
++#else
++  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);
++  Add(target, scratch, Operand(target, LSL, 3));
++#endif
++
++  Ldr(target, MemOperand(target));
+ }
+ 
+ void MacroAssembler::CallWasmCodePointer(Register target,
++                                         uint64_t signature_hash,
+                                          CallJumpMode call_jump_mode) {
+-  ResolveWasmCodePointer(target);
++  ResolveWasmCodePointer(target, signature_hash);
+   if (call_jump_mode == CallJumpMode::kTailCall) {
+     Jump(target);
+   } else {
+@@ -2618,6 +2639,20 @@ void MacroAssembler::CallWasmCodePointer(Register target,
+   }
+ }
+ 
++void MacroAssembler::CallWasmCodePointerNoSignatureCheck(Register target) {
++  ExternalReference global_jump_table =
++      ExternalReference::wasm_code_pointer_table();
++  UseScratchRegisterScope temps(this);
++  Register scratch = temps.AcquireX();
++  Mov(scratch, global_jump_table);
++  constexpr unsigned int kEntrySizeLog2 =
++      std::bit_width(sizeof(wasm::WasmCodePointerTableEntry)) - 1;
++  Add(target, scratch, Operand(target, LSL, kEntrySizeLog2));
++  Ldr(target, MemOperand(target));
++
++  Call(target);
++}
++
+ void MacroAssembler::LoadWasmCodePointer(Register dst, MemOperand src) {
+   Ldr(dst.W(), src);
+ }
+diff --git a/src/codegen/arm64/macro-assembler-arm64.h b/src/codegen/arm64/macro-assembler-arm64.h
+index 628c2d76496..a56a57f7a02 100644
+--- a/src/codegen/arm64/macro-assembler-arm64.h
++++ b/src/codegen/arm64/macro-assembler-arm64.h
+@@ -1105,9 +1105,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
+                            uint16_t argument_count);
+ #endif
+ #ifdef V8_ENABLE_WEBASSEMBLY
+-  void ResolveWasmCodePointer(Register target);
+-  void CallWasmCodePointer(Register target,
++  void ResolveWasmCodePointer(Register target, uint64_t signature_hash);
++  void CallWasmCodePointer(Register target, uint64_t signature_hash,
+                            CallJumpMode call_jump_mode = CallJumpMode::kCall);
++  void CallWasmCodePointerNoSignatureCheck(Register target);
+   void LoadWasmCodePointer(Register dst, MemOperand src);
+ #endif
+ 
+diff --git a/src/codegen/bailout-reason.h b/src/codegen/bailout-reason.h
+index e48ea87be87..5f1edc3c18d 100644
+--- a/src/codegen/bailout-reason.h
++++ b/src/codegen/bailout-reason.h
+@@ -111,6 +111,7 @@ namespace internal {
+   V(kMetadataAreaStartDoesNotMatch,                                            \
+     "The metadata doesn't belong to the chunk")                                \
+   V(kJSSignatureMismatch, "Signature mismatch during JS function call")        \
++  V(kWasmSignatureMismatch, "Signature mismatch during Wasm indirect call")    \
+   V(kFastCallFallbackInvalid, "Fast call fallback returned incorrect type")
+ 
+ #define BAILOUT_MESSAGES_LIST(V)                                             \
+diff --git a/src/codegen/external-reference.cc b/src/codegen/external-reference.cc
+index 177da82e891..130300774f7 100644
+--- a/src/codegen/external-reference.cc
++++ b/src/codegen/external-reference.cc
+@@ -670,21 +670,6 @@ FUNCTION_REFERENCE_WITH_TYPE(wasm_string_to_f64, wasm::flat_string_to_f64,
+ int32_t (&futex_emulation_wake)(void*, uint32_t) = FutexEmulation::Wake;
+ FUNCTION_REFERENCE(wasm_atomic_notify, futex_emulation_wake)
+ 
+-void WasmSignatureCheckFail(Address raw_internal_function,
+-                            uintptr_t expected_hash) {
+-  // WasmInternalFunction::signature_hash doesn't exist in non-sandbox builds.
+-  // TODO(saelo): Consider using Abort instead, as we do for JavaScript
+-  // signature mismatches (See AbortReason::kJSSignatureMismatch).
+-#if V8_ENABLE_SANDBOX
+-  Tagged<WasmInternalFunction> internal_function =
+-      Cast<WasmInternalFunction>(Tagged<Object>(raw_internal_function));
+-  PrintF("Wasm sandbox violation! Expected signature hash %lx, got %lx\n",
+-         expected_hash, internal_function->signature_hash());
+-  SBXCHECK_EQ(expected_hash, internal_function->signature_hash());
+-#endif
+-}
+-FUNCTION_REFERENCE(wasm_signature_check_fail, WasmSignatureCheckFail)
+-
+ #define V(Name) RAW_FUNCTION_REFERENCE(wasm_##Name, wasm::Name)
+ WASM_JS_EXTERNAL_REFERENCE_LIST(V)
+ #undef V
+diff --git a/src/codegen/external-reference.h b/src/codegen/external-reference.h
+index 6ac012c9114..6602811b95d 100644
+--- a/src/codegen/external-reference.h
++++ b/src/codegen/external-reference.h
+@@ -349,7 +349,6 @@ enum class IsolateFieldId : uint8_t;
+   IF_WASM(V, wasm_array_fill, "wasm::array_fill")                              \
+   IF_WASM(V, wasm_string_to_f64, "wasm_string_to_f64")                         \
+   IF_WASM(V, wasm_atomic_notify, "wasm_atomic_notify")                         \
+-  IF_WASM(V, wasm_signature_check_fail, "wasm_signature_check_fail")           \
+   IF_WASM(V, wasm_WebAssemblyCompile, "wasm::WebAssemblyCompile")              \
+   IF_WASM(V, wasm_WebAssemblyException, "wasm::WebAssemblyException")          \
+   IF_WASM(V, wasm_WebAssemblyExceptionGetArg,                                  \
+diff --git a/src/codegen/ia32/macro-assembler-ia32.cc b/src/codegen/ia32/macro-assembler-ia32.cc
+index 3fabbf6a893..ffcd3d961c6 100644
+--- a/src/codegen/ia32/macro-assembler-ia32.cc
++++ b/src/codegen/ia32/macro-assembler-ia32.cc
+@@ -2182,14 +2182,15 @@ void MacroAssembler::JumpJSFunction(Register function_object,
+ #ifdef V8_ENABLE_WEBASSEMBLY
+ 
+ void MacroAssembler::ResolveWasmCodePointer(Register target) {
++  static_assert(!V8_ENABLE_SANDBOX_BOOL);
+   Register scratch = target == eax ? ebx : eax;
+   // TODO(sroettger): the load from table[target] is possible with a single
+   // instruction.
+-  push(scratch);
++  Push(scratch);
+   Move(scratch, Immediate(ExternalReference::wasm_code_pointer_table()));
+   static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 4);
+-  mov(target, Operand(scratch, target, ScaleFactor::times_4, 0));
+-  pop(scratch);
++  Move(target, Operand(scratch, target, ScaleFactor::times_4, 0));
++  Pop(scratch);
+ }
+ 
+ void MacroAssembler::CallWasmCodePointer(Register target,
+diff --git a/src/codegen/x64/macro-assembler-x64.cc b/src/codegen/x64/macro-assembler-x64.cc
+index 37cac248d5c..8cd067da46f 100644
+--- a/src/codegen/x64/macro-assembler-x64.cc
++++ b/src/codegen/x64/macro-assembler-x64.cc
+@@ -3323,17 +3323,34 @@ void MacroAssembler::JumpJSFunction(Register function_object,
+ 
+ #ifdef V8_ENABLE_WEBASSEMBLY
+ 
+-void MacroAssembler::ResolveWasmCodePointer(Register target) {
++void MacroAssembler::ResolveWasmCodePointer(Register target,
++                                            uint64_t signature_hash) {
+   ExternalReference global_jump_table =
+       ExternalReference::wasm_code_pointer_table();
+   Move(kScratchRegister, global_jump_table);
++
++#ifdef V8_ENABLE_SANDBOX
++  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
++  shlq(target, Immediate(4));
++  cmpl(Operand(kScratchRegister, target, ScaleFactor::times_1,
++               wasm::WasmCodePointerTable::kOffsetOfSignatureHash),
++       Immediate(static_cast<int32_t>(signature_hash)));
++  SbxCheck(Condition::equal, AbortReason::kWasmSignatureMismatch);
++  cmpl(Operand(kScratchRegister, target, ScaleFactor::times_1,
++               wasm::WasmCodePointerTable::kOffsetOfSignatureHash + 4),
++       Immediate(static_cast<int32_t>(signature_hash >> 32)));
++  SbxCheck(Condition::equal, AbortReason::kWasmSignatureMismatch);
++  movq(target, Operand(kScratchRegister, target, ScaleFactor::times_1, 0));
++#else
+   static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);
+   movq(target, Operand(kScratchRegister, target, ScaleFactor::times_8, 0));
++#endif
+ }
+ 
+ void MacroAssembler::CallWasmCodePointer(Register target,
++                                         uint64_t signature_hash,
+                                          CallJumpMode call_jump_mode) {
+-  ResolveWasmCodePointer(target);
++  ResolveWasmCodePointer(target, signature_hash);
+   if (call_jump_mode == CallJumpMode::kTailCall) {
+     jmp(target);
+   } else {
+@@ -3341,6 +3358,19 @@ void MacroAssembler::CallWasmCodePointer(Register target,
+   }
+ }
+ 
++void MacroAssembler::CallWasmCodePointerNoSignatureCheck(Register target) {
++  ExternalReference global_jump_table =
++      ExternalReference::wasm_code_pointer_table();
++  Move(kScratchRegister, global_jump_table);
++
++  constexpr unsigned int kEntrySizeLog2 =
++      std::bit_width(sizeof(wasm::WasmCodePointerTableEntry)) - 1;
++  shlq(target, Immediate(kEntrySizeLog2));
++
++  movq(target, Operand(kScratchRegister, target, ScaleFactor::times_1, 0));
++  call(target);
++}
++
+ void MacroAssembler::LoadWasmCodePointer(Register dst, Operand src) {
+   movl(dst, src);
+ }
+diff --git a/src/codegen/x64/macro-assembler-x64.h b/src/codegen/x64/macro-assembler-x64.h
+index 1a8a32bd88b..a567404fc20 100644
+--- a/src/codegen/x64/macro-assembler-x64.h
++++ b/src/codegen/x64/macro-assembler-x64.h
+@@ -541,9 +541,10 @@ class V8_EXPORT_PRIVATE MacroAssembler
+                            uint16_t argument_count);
+ #endif
+ #ifdef V8_ENABLE_WEBASSEMBLY
+-  void ResolveWasmCodePointer(Register target);
+-  void CallWasmCodePointer(Register target,
++  void ResolveWasmCodePointer(Register target, uint64_t signature_hash);
++  void CallWasmCodePointer(Register target, uint64_t signature_hash,
+                            CallJumpMode call_jump_mode = CallJumpMode::kCall);
++  void CallWasmCodePointerNoSignatureCheck(Register target);
+   void LoadWasmCodePointer(Register dst, Operand src);
+ #endif
+ 
+diff --git a/src/common/code-memory-access.cc b/src/common/code-memory-access.cc
+index 1822dc29025..29094ec308a 100644
+--- a/src/common/code-memory-access.cc
++++ b/src/common/code-memory-access.cc
+@@ -708,15 +708,6 @@ WritableJumpTablePair WritableJumpTablePair::ForTesting(
+                                ForTestingTag{});
+ }
+ 
+-void WritableJumpTablePair::SetCodePointerTableEntry(uint32_t index,
+-                                                     Address target) {
+-  std::optional<RwxMemoryWriteScope> write_scope =
+-      writable_jump_table_.WriteScopeForApiEnforcement();
+-
+-  wasm::GetProcessWideWasmCodePointerTable()->SetEntrypointWithRwxWriteScope(
+-      index, target, write_scope_);
+-}
+-
+ #endif
+ 
+ template <size_t offset>
+diff --git a/src/common/code-memory-access.h b/src/common/code-memory-access.h
+index 44e651127d8..c4e18ae49d0 100644
+--- a/src/common/code-memory-access.h
++++ b/src/common/code-memory-access.h
+@@ -552,8 +552,6 @@ class V8_EXPORT_PRIVATE WritableJumpTablePair {
+   WritableJitAllocation& jump_table() { return writable_jump_table_; }
+   WritableJitAllocation& far_jump_table() { return writable_far_jump_table_; }
+ 
+-  void SetCodePointerTableEntry(uint32_t index, Address target);
+-
+   ~WritableJumpTablePair();
+   WritableJumpTablePair(const WritableJumpTablePair&) = delete;
+   WritableJumpTablePair& operator=(const WritableJumpTablePair&) = delete;
+diff --git a/src/compiler/backend/arm64/code-generator-arm64.cc b/src/compiler/backend/arm64/code-generator-arm64.cc
+index 8d9f4ad84ff..163d477e894 100644
+--- a/src/compiler/backend/arm64/code-generator-arm64.cc
++++ b/src/compiler/backend/arm64/code-generator-arm64.cc
+@@ -824,7 +824,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
+         Address wasm_code = static_cast<Address>(constant.ToInt64());
+         __ Call(wasm_code, constant.rmode());
+       } else if (arch_opcode == kArchCallWasmFunctionIndirect) {
+-        __ CallWasmCodePointer(i.InputRegister(0));
++        __ CallWasmCodePointer(
++            i.InputRegister(0),
++            i.InputInt64(instr->WasmSignatureHashInputIndex()));
+       } else {
+         __ Call(i.InputRegister(0));
+       }
+@@ -845,7 +847,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
+         temps.Exclude(x17);
+         __ Mov(x17, target);
+         if (arch_opcode == kArchTailCallWasmIndirect) {
+-          __ CallWasmCodePointer(x17, CallJumpMode::kTailCall);
++          __ CallWasmCodePointer(
++              x17, i.InputInt64(instr->WasmSignatureHashInputIndex()),
++              CallJumpMode::kTailCall);
+         } else {
+           __ Jump(x17);
+         }
+diff --git a/src/compiler/backend/instruction-selector.cc b/src/compiler/backend/instruction-selector.cc
+index 004235cf0ee..f8a766b628c 100644
+--- a/src/compiler/backend/instruction-selector.cc
++++ b/src/compiler/backend/instruction-selector.cc
+@@ -2630,6 +2630,15 @@ void InstructionSelectorT<Adapter>::VisitCall(node_t node, block_t handler) {
+   EmitPrepareArguments(&buffer.pushed_nodes, call_descriptor, node);
+   UpdateMaxPushedArgumentCount(buffer.pushed_nodes.size());
+ 
++  InstructionOperandVector temps(zone());
++
++#if V8_ENABLE_WEBASSEMBLY
++  if (call_descriptor->IsIndirectWasmFunctionCall()) {
++    buffer.instruction_args.push_back(
++        g.UseImmediate64(call_descriptor->signature_hash()));
++  }
++#endif
++
+   if (call_descriptor->RequiresEntrypointTagForCall()) {
+     DCHECK(!call_descriptor->IsJSFunctionCall());
+     buffer.instruction_args.push_back(
+@@ -2775,6 +2784,13 @@ void InstructionSelectorT<Adapter>::VisitTailCall(node_t node) {
+ 
+   Emit(kArchPrepareTailCall, g.NoOutput());
+ 
++#if V8_ENABLE_WEBASSEMBLY
++  if (callee->IsIndirectWasmFunctionCall()) {
++    buffer.instruction_args.push_back(
++        g.UseImmediate64(callee->signature_hash()));
++  }
++#endif
++
+   if (callee->RequiresEntrypointTagForCall()) {
+     buffer.instruction_args.push_back(g.TempImmediate(callee->shifted_tag()));
+   }
+diff --git a/src/compiler/backend/instruction.h b/src/compiler/backend/instruction.h
+index 84534f88091..c42a4e5a6dc 100644
+--- a/src/compiler/backend/instruction.h
++++ b/src/compiler/backend/instruction.h
+@@ -1058,6 +1058,23 @@ class V8_EXPORT_PRIVATE Instruction final {
+     return MiscField::decode(opcode()) & flag;
+   }
+ 
++#ifdef V8_ENABLE_WEBASSEMBLY
++  size_t WasmSignatureHashInputIndex() const {
++    // Keep in sync with instruction-selector.cc where the inputs are assembled.
++    switch (arch_opcode()) {
++      case kArchCallWasmFunctionIndirect:
++        return InputCount() -
++               (HasCallDescriptorFlag(CallDescriptor::kHasExceptionHandler)
++                    ? 2
++                    : 1);
++      case kArchTailCallWasmIndirect:
++        return InputCount() - 3;
++      default:
++        UNREACHABLE();
++    }
++  }
++#endif
++
+   // For call instructions, computes the index of the CodeEntrypointTag input.
+   size_t CodeEnrypointTagInputIndex() const {
+     // Keep in sync with instruction-selector.cc where the inputs are assembled.
+diff --git a/src/compiler/backend/x64/code-generator-x64.cc b/src/compiler/backend/x64/code-generator-x64.cc
+index 6228772e867..a9120362f83 100644
+--- a/src/compiler/backend/x64/code-generator-x64.cc
++++ b/src/compiler/backend/x64/code-generator-x64.cc
+@@ -1527,7 +1527,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
+         }
+       } else {
+         DCHECK(!HasImmediateInput(instr, 0));
+-        __ CallWasmCodePointer(i.InputRegister(0));
++
++        __ CallWasmCodePointer(
++            i.InputRegister(0),
++            i.InputInt64(instr->WasmSignatureHashInputIndex()));
+       }
+       RecordCallPosition(instr);
+       AssemblePlaceHolderForLazyDeopt(instr);
+@@ -1548,7 +1551,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
+         }
+       } else {
+         DCHECK(!HasImmediateInput(instr, 0));
+-        __ CallWasmCodePointer(i.InputRegister(0), CallJumpMode::kTailCall);
++        __ CallWasmCodePointer(
++            i.InputRegister(0),
++            i.InputInt64(instr->WasmSignatureHashInputIndex()),
++            CallJumpMode::kTailCall);
+       }
+       unwinding_info_writer_.MarkBlockWillExit();
+       frame_access_state()->ClearSPDelta();
+diff --git a/src/compiler/linkage.cc b/src/compiler/linkage.cc
+index 8705ace802d..eb56355650e 100644
+--- a/src/compiler/linkage.cc
++++ b/src/compiler/linkage.cc
+@@ -337,7 +337,8 @@ CallDescriptor* ReplaceTypeInCallDescriptorWith(
+       call_descriptor->debug_name(),              // debug name
+       call_descriptor->GetStackArgumentOrder(),   // stack order
+       call_descriptor->AllocatableRegisters(),    // allocatable registers
+-      return_slots);                              // return slot count
++      return_slots,                               // return slot count
++      call_descriptor->signature_hash());         // signature hash
+ }
+ }  // namespace
+ 
+diff --git a/src/compiler/linkage.h b/src/compiler/linkage.h
+index 7c218d0ff85..448ca9bd4c5 100644
+--- a/src/compiler/linkage.h
++++ b/src/compiler/linkage.h
+@@ -112,7 +112,7 @@ class V8_EXPORT_PRIVATE CallDescriptor final
+                  const char* debug_name = "",
+                  StackArgumentOrder stack_order = StackArgumentOrder::kDefault,
+                  const RegList allocatable_registers = {},
+-                 size_t return_slot_count = 0)
++                 size_t return_slot_count = 0, uint64_t signature_hash = -1)
+       : kind_(kind),
+         tag_(tag),
+         target_type_(target_type),
+@@ -126,7 +126,14 @@ class V8_EXPORT_PRIVATE CallDescriptor final
+         allocatable_registers_(allocatable_registers),
+         flags_(flags),
+         stack_order_(stack_order),
+-        debug_name_(debug_name) {}
++        debug_name_(debug_name),
++        signature_hash_(signature_hash) {
++#ifdef V8_ENABLE_WEBASSEMBLY
++    if (kind == Kind::kCallWasmFunctionIndirect) {
++      CHECK_NE(signature_hash, -1);
++    }
++#endif
++  }
+ 
+   CallDescriptor(const CallDescriptor&) = delete;
+   CallDescriptor& operator=(const CallDescriptor&) = delete;
+@@ -137,6 +144,8 @@ class V8_EXPORT_PRIVATE CallDescriptor final
+   // Returns the entrypoint tag for this call.
+   CodeEntrypointTag tag() const { return tag_; }
+ 
++  uint64_t signature_hash() const { return signature_hash_; }
++
+   // Returns the entrypoint tag for this call, shifted to the right by
+   // kCodeEntrypointTagShift so that it fits into a 32-bit immediate.
+   uint32_t shifted_tag() const {
+@@ -348,6 +357,8 @@ class V8_EXPORT_PRIVATE CallDescriptor final
+   const StackArgumentOrder stack_order_;
+   const char* const debug_name_;
+ 
++  uint64_t signature_hash_;
++
+   mutable std::optional<size_t> gp_param_count_;
+   mutable std::optional<size_t> fp_param_count_;
+ };
+diff --git a/src/compiler/pipeline.cc b/src/compiler/pipeline.cc
+index 25ec7d8f8b6..78df1ae0c3b 100644
+--- a/src/compiler/pipeline.cc
++++ b/src/compiler/pipeline.cc
+@@ -3301,6 +3301,9 @@ wasm::WasmCompilationResult WrapperCompilationResult(
+   result.result_tier = wasm::ExecutionTier::kTurbofan;
+   if (kind == CodeKind::WASM_TO_JS_FUNCTION) {
+     result.kind = wasm::WasmCompilationResult::kWasmToJsWrapper;
++    result.signature_hash = call_descriptor->signature_hash();
++  } else if (kind == CodeKind::WASM_TO_CAPI_FUNCTION) {
++    result.signature_hash = call_descriptor->signature_hash();
+   }
+   return result;
+ }
+@@ -3709,6 +3712,7 @@ void Pipeline::GenerateCodeForWasmFunction(
+   result->protected_instructions_data =
+       code_generator->GetProtectedInstructionsData();
+   result->result_tier = wasm::ExecutionTier::kTurbofan;
++  result->signature_hash = call_descriptor->signature_hash();
+ 
+   if (data.info()->trace_turbo_json()) {
+     TurboJsonFile json_of(data.info(), std::ios_base::app);
+diff --git a/src/compiler/wasm-compiler-definitions.cc b/src/compiler/wasm-compiler-definitions.cc
+index 69922e92456..600ee7b4b36 100644
+--- a/src/compiler/wasm-compiler-definitions.cc
++++ b/src/compiler/wasm-compiler-definitions.cc
+@@ -71,6 +71,9 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* fsig,
+   LinkageLocation target_loc = LinkageLocation::ForAnyRegister(target_type);
+ 
+   CallDescriptor::Kind descriptor_kind;
++
++  uint64_t signature_hash = wasm::SignatureHasher::Hash(fsig);
++
+   switch (call_kind) {
+     case kWasmFunction:
+       descriptor_kind = CallDescriptor::kCallWasmFunction;
+@@ -103,7 +106,8 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* fsig,
+       "wasm-call",                        // debug name
+       StackArgumentOrder::kDefault,       // order of the arguments in the stack
+       RegList{},                          // allocatable registers
+-      return_slots);                      // return slot count
++      return_slots,                       // return slot count
++      signature_hash);
+ }
+ 
+ template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
+diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
+index fce47ae7448..2f811818c98 100644
+--- a/src/compiler/wasm-compiler.cc
++++ b/src/compiler/wasm-compiler.cc
+@@ -3112,6 +3112,8 @@ Node* WasmGraphBuilder::BuildIndirectCall(uint32_t table_index,
+ 
+ Node* WasmGraphBuilder::BuildLoadCallTargetFromExportedFunctionData(
+     Node* function_data) {
++  // TODO(sroettger): this code should do a signature check, but it's only used
++  // for CAPI.
+   Node* internal = gasm_->LoadProtectedPointerFromObject(
+       function_data, wasm::ObjectAccess::ToTagged(
+                          WasmExportedFunctionData::kProtectedInternalOffset));
+diff --git a/src/heap/factory.cc b/src/heap/factory.cc
+index bb9e697eceb..389dab24a3b 100644
+--- a/src/heap/factory.cc
++++ b/src/heap/factory.cc
+@@ -1764,8 +1764,7 @@ Handle<WasmFastApiCallData> Factory::NewWasmFastApiCallData(
+ }
+ 
+ Handle<WasmInternalFunction> Factory::NewWasmInternalFunction(
+-    DirectHandle<TrustedObject> implicit_arg, int function_index,
+-    uintptr_t signature_hash) {
++    DirectHandle<TrustedObject> implicit_arg, int function_index) {
+   Tagged<WasmInternalFunction> internal =
+       Cast<WasmInternalFunction>(AllocateRawWithImmortalMap(
+           WasmInternalFunction::kSize, AllocationType::kTrusted,
+@@ -1777,9 +1776,6 @@ Handle<WasmInternalFunction> Factory::NewWasmInternalFunction(
+     DCHECK(IsWasmTrustedInstanceData(*implicit_arg) ||
+            IsWasmImportData(*implicit_arg));
+     internal->set_implicit_arg(*implicit_arg);
+-#if V8_ENABLE_SANDBOX
+-    internal->set_signature_hash(signature_hash);
+-#endif  // V8_SANDBOX
+     // Default values, will be overwritten by the caller.
+     internal->set_function_index(function_index);
+     internal->set_external(*undefined_value());
+@@ -1805,7 +1801,7 @@ Handle<WasmFuncRef> Factory::NewWasmFuncRef(
+ Handle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
+     wasm::CanonicalTypeIndex sig_index, DirectHandle<JSReceiver> callable,
+     DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
+-    wasm::Suspend suspend, wasm::Promise promise, uintptr_t signature_hash) {
++    wasm::Suspend suspend, wasm::Promise promise) {
+   // TODO(clemensb): Should this be passed instead of looked up here?
+   const wasm::CanonicalSig* sig =
+       wasm::GetTypeCanonicalizer()->LookupFunctionSignature(sig_index);
+@@ -1820,7 +1816,7 @@ Handle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
+           std::make_shared<WasmJSFunctionData::OffheapData>());
+ 
+   DirectHandle<WasmInternalFunction> internal =
+-      NewWasmInternalFunction(import_data, -1, signature_hash);
++      NewWasmInternalFunction(import_data, -1);
+   DirectHandle<WasmFuncRef> func_ref = NewWasmFuncRef(internal, rtt);
+   import_data->SetFuncRefAsCallOrigin(*internal);
+   Tagged<Map> map = *wasm_js_function_data_map();
+@@ -1924,13 +1920,12 @@ Handle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
+ Handle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
+     Address call_target, DirectHandle<Foreign> embedder_data,
+     DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
+-    wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig,
+-    uintptr_t signature_hash) {
++    wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig) {
+   DirectHandle<WasmImportData> import_data =
+       NewWasmImportData(undefined_value(), wasm::kNoSuspend,
+                         DirectHandle<WasmTrustedInstanceData>(), sig);
+   DirectHandle<WasmInternalFunction> internal =
+-      NewWasmInternalFunction(import_data, -1, signature_hash);
++      NewWasmInternalFunction(import_data, -1);
+   DirectHandle<WasmFuncRef> func_ref = NewWasmFuncRef(internal, rtt);
+   // We have no generic wrappers for C-API functions, so we don't need to
+   // set any call origin on {import_data}.
+diff --git a/src/heap/factory.h b/src/heap/factory.h
+index 073aa9b6bae..9b9becce7ff 100644
+--- a/src/heap/factory.h
++++ b/src/heap/factory.h
+@@ -734,16 +734,14 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
+       DirectHandle<WasmTrustedInstanceData> opt_instance,
+       wasm::ModuleTypeIndex type_index);
+   Handle<WasmInternalFunction> NewWasmInternalFunction(
+-      DirectHandle<TrustedObject> ref, int function_index,
+-      uintptr_t signature_hash);
++      DirectHandle<TrustedObject> ref, int function_index);
+   Handle<WasmFuncRef> NewWasmFuncRef(
+       DirectHandle<WasmInternalFunction> internal_function,
+       DirectHandle<Map> rtt);
+   Handle<WasmCapiFunctionData> NewWasmCapiFunctionData(
+       Address call_target, DirectHandle<Foreign> embedder_data,
+       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
+-      wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig,
+-      uintptr_t signature_hash);
++      wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig);
+   Handle<WasmExportedFunctionData> NewWasmExportedFunctionData(
+       DirectHandle<Code> export_wrapper,
+       DirectHandle<WasmTrustedInstanceData> instance_data,
+@@ -765,7 +763,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
+   Handle<WasmJSFunctionData> NewWasmJSFunctionData(
+       wasm::CanonicalTypeIndex sig_index, DirectHandle<JSReceiver> callable,
+       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
+-      wasm::Suspend suspend, wasm::Promise promise, uintptr_t signature_hash);
++      wasm::Suspend suspend, wasm::Promise promise);
+   Handle<WasmResumeData> NewWasmResumeData(
+       DirectHandle<WasmSuspenderObject> suspender, wasm::OnResume on_resume);
+   Handle<WasmSuspenderObject> NewWasmSuspenderObject();
+diff --git a/src/wasm/DEPS b/src/wasm/DEPS
+index a4fae94d91a..71dad674963 100644
+--- a/src/wasm/DEPS
++++ b/src/wasm/DEPS
+@@ -50,6 +50,10 @@ specific_include_rules = {
+     # The LiftoffAssembler needs to know CallDescriptors.
+     "+src/compiler/linkage.h",
+   ],
++  "liftoff-assembler-(x64|arm64)-inl\.h": [
++    # The LiftoffAssembler needs to know CallDescriptors.
++    "+src/compiler/linkage.h",
++  ],
+   "liftoff-compiler\.cc": [
+     "-src/compiler",
+     "+src/compiler/access-builder.h",
+diff --git a/src/wasm/baseline/arm/liftoff-assembler-arm-inl.h b/src/wasm/baseline/arm/liftoff-assembler-arm-inl.h
+index db6902b267b..90934bee42a 100644
+--- a/src/wasm/baseline/arm/liftoff-assembler-arm-inl.h
++++ b/src/wasm/baseline/arm/liftoff-assembler-arm-inl.h
+@@ -4874,7 +4874,8 @@ void LiftoffAssembler::CallIndirect(const ValueKindSig* sig,
+   CallWasmCodePointer(target);
+ }
+ 
+-void LiftoffAssembler::TailCallIndirect(Register target) {
++void LiftoffAssembler::TailCallIndirect(
++    compiler::CallDescriptor* call_descriptor, Register target) {
+   DCHECK(target != no_reg);
+   CallWasmCodePointer(target, CallJumpMode::kTailCall);
+ }
+diff --git a/src/wasm/baseline/arm64/liftoff-assembler-arm64-inl.h b/src/wasm/baseline/arm64/liftoff-assembler-arm64-inl.h
+index 4516a36247c..e36f592ee27 100644
+--- a/src/wasm/baseline/arm64/liftoff-assembler-arm64-inl.h
++++ b/src/wasm/baseline/arm64/liftoff-assembler-arm64-inl.h
+@@ -7,6 +7,7 @@
+ 
+ #include "src/codegen/arm64/macro-assembler-arm64-inl.h"
+ #include "src/codegen/interface-descriptors-inl.h"
++#include "src/compiler/linkage.h"
+ #include "src/heap/mutable-page-metadata.h"
+ #include "src/wasm/baseline/liftoff-assembler.h"
+ #include "src/wasm/baseline/parallel-move-inl.h"
+@@ -4271,10 +4272,11 @@ void LiftoffAssembler::CallIndirect(const ValueKindSig* sig,
+   // For Arm64, we have more cache registers than wasm parameters. That means
+   // that target will always be in a register.
+   DCHECK(target.is_valid());
+-  CallWasmCodePointer(target);
++  CallWasmCodePointer(target, call_descriptor->signature_hash());
+ }
+ 
+-void LiftoffAssembler::TailCallIndirect(Register target) {
++void LiftoffAssembler::TailCallIndirect(
++    compiler::CallDescriptor* call_descriptor, Register target) {
+   DCHECK(target.is_valid());
+   // When control flow integrity is enabled, the target is a "bti c"
+   // instruction, which enforces that the jump instruction is either a "blr", or
+@@ -4282,7 +4284,8 @@ void LiftoffAssembler::TailCallIndirect(Register target) {
+   UseScratchRegisterScope temps(this);
+   temps.Exclude(x17);
+   Mov(x17, target);
+-  CallWasmCodePointer(x17, CallJumpMode::kTailCall);
++  CallWasmCodePointer(x17, call_descriptor->signature_hash(),
++                      CallJumpMode::kTailCall);
+ }
+ 
+ void LiftoffAssembler::CallBuiltin(Builtin builtin) {
+diff --git a/src/wasm/baseline/ia32/liftoff-assembler-ia32-inl.h b/src/wasm/baseline/ia32/liftoff-assembler-ia32-inl.h
+index 3a20301126b..f2c201b4c93 100644
+--- a/src/wasm/baseline/ia32/liftoff-assembler-ia32-inl.h
++++ b/src/wasm/baseline/ia32/liftoff-assembler-ia32-inl.h
+@@ -5107,7 +5107,8 @@ void LiftoffAssembler::CallIndirect(const ValueKindSig* sig,
+   CallWasmCodePointer(target);
+ }
+ 
+-void LiftoffAssembler::TailCallIndirect(Register target) {
++void LiftoffAssembler::TailCallIndirect(
++    compiler::CallDescriptor* call_descriptor, Register target) {
+   // Since we have more cache registers than parameter registers, the
+   // {LiftoffCompiler} should always be able to place {target} in a register.
+   DCHECK(target.is_valid());
+diff --git a/src/wasm/baseline/liftoff-assembler.h b/src/wasm/baseline/liftoff-assembler.h
+index 05adc3caf23..d6420dda031 100644
+--- a/src/wasm/baseline/liftoff-assembler.h
++++ b/src/wasm/baseline/liftoff-assembler.h
+@@ -1545,7 +1545,8 @@ class LiftoffAssembler : public MacroAssembler {
+   inline void CallIndirect(const ValueKindSig* sig,
+                            compiler::CallDescriptor* call_descriptor,
+                            Register target);
+-  inline void TailCallIndirect(Register target);
++  inline void TailCallIndirect(compiler::CallDescriptor* call_descriptor,
++                               Register target);
+   inline void CallBuiltin(Builtin builtin);
+ 
+   // Reserve space in the current frame, store address to space in {addr}.
+diff --git a/src/wasm/baseline/liftoff-compiler.cc b/src/wasm/baseline/liftoff-compiler.cc
+index 8b380f5e7ab..7ce672d12d1 100644
+--- a/src/wasm/baseline/liftoff-compiler.cc
++++ b/src/wasm/baseline/liftoff-compiler.cc
+@@ -31,7 +31,6 @@
+ #include "src/wasm/function-compiler.h"
+ #include "src/wasm/memory-tracing.h"
+ #include "src/wasm/object-access.h"
+-#include "src/wasm/signature-hashing.h"
+ #include "src/wasm/simd-shuffle.h"
+ #include "src/wasm/wasm-debug.h"
+ #include "src/wasm/wasm-engine.h"
+@@ -8445,7 +8444,7 @@ class LiftoffCompiler {
+             static_cast<int>(call_descriptor->ParameterSlotCount()),
+             static_cast<int>(
+                 call_descriptor->GetStackParameterDelta(descriptor_)));
+-        __ TailCallIndirect(target);
++        __ TailCallIndirect(call_descriptor, target);
+       } else {
+         source_position_table_builder_.AddPosition(
+             __ pc_offset(), SourcePosition(decoder->position()), true);
+@@ -8815,7 +8814,7 @@ class LiftoffCompiler {
+             static_cast<int>(call_descriptor->ParameterSlotCount()),
+             static_cast<int>(
+                 call_descriptor->GetStackParameterDelta(descriptor_)));
+-        __ TailCallIndirect(target);
++        __ TailCallIndirect(call_descriptor, target);
+       } else {
+         source_position_table_builder_.AddPosition(
+             __ pc_offset(), SourcePosition(decoder->position()), true);
+@@ -8905,15 +8904,6 @@ class LiftoffCompiler {
+       MaybeEmitNullCheck(decoder, func_ref.gp(), pinned, func_ref_type);
+       VarState func_ref_var(kRef, func_ref, 0);
+ 
+-#if V8_ENABLE_SANDBOX
+-      LiftoffRegister sig_hash_reg =
+-          pinned.set(__ GetUnusedRegister(kGpReg, pinned));
+-      __ LoadConstant(sig_hash_reg, WasmValue{SignatureHasher::Hash(type_sig)});
+-      VarState sig_hash_var{kIntPtrKind, sig_hash_reg, 0};
+-#else
+-      VarState sig_hash_var{kIntPtrKind, 0, 0};  // Unused by callee.
+-#endif
+-
+       __ Fill(vector, WasmLiftoffFrameConstants::kFeedbackVectorOffset, kRef);
+       VarState vector_var{kRef, vector, 0};
+       // A constant `uint32_t` is sufficient for the vector slot index.
+@@ -8928,13 +8918,11 @@ class LiftoffCompiler {
+       VarState index_var(kI32, vector_slot, 0);
+ 
+       // CallRefIC(vector: FixedArray, vectorIndex: int32,
+-      //           signatureHash: uintptr,
+       //           funcref: WasmFuncRef) -> <target, implicit_arg>
+-      CallBuiltin(Builtin::kCallRefIC,
+-                  MakeSig::Returns(kIntPtrKind, kIntPtrKind)
+-                      .Params(kRef, kI32, kIntPtrKind, kRef),
+-                  {vector_var, index_var, sig_hash_var, func_ref_var},
+-                  decoder->position());
++      CallBuiltin(
++          Builtin::kCallRefIC,
++          MakeSig::Returns(kIntPtrKind, kIntPtrKind).Params(kRef, kI32, kRef),
++          {vector_var, index_var, func_ref_var}, decoder->position());
+       target_reg = LiftoffRegister(kReturnRegister0).gp();
+       implicit_arg_reg = kReturnRegister1;
+     } else {  // v8_flags.wasm_inlining
+@@ -8979,7 +8967,7 @@ class LiftoffCompiler {
+           static_cast<int>(call_descriptor->ParameterSlotCount()),
+           static_cast<int>(
+               call_descriptor->GetStackParameterDelta(descriptor_)));
+-      __ TailCallIndirect(target_reg);
++      __ TailCallIndirect(call_descriptor, target_reg);
+     } else {
+       source_position_table_builder_.AddPosition(
+           __ pc_offset(), SourcePosition(decoder->position()), true);
+@@ -9477,6 +9465,7 @@ WasmCompilationResult ExecuteLiftoffCompilation(
+   result.for_debugging = compiler_options.for_debugging;
+   result.frame_has_feedback_slot = v8_flags.wasm_inlining;
+   result.liftoff_frame_descriptions = compiler->ReleaseFrameDescriptions();
++  result.signature_hash = lowered_call_desc->signature_hash();
+   if (auto* debug_sidetable = compiler_options.debug_sidetable) {
+     *debug_sidetable = debug_sidetable_builder->GenerateDebugSideTable();
+   }
+diff --git a/src/wasm/baseline/x64/liftoff-assembler-x64-inl.h b/src/wasm/baseline/x64/liftoff-assembler-x64-inl.h
+index c537756cbe2..1c8ab8b12d5 100644
+--- a/src/wasm/baseline/x64/liftoff-assembler-x64-inl.h
++++ b/src/wasm/baseline/x64/liftoff-assembler-x64-inl.h
+@@ -13,6 +13,7 @@
+ #include "src/codegen/machine-type.h"
+ #include "src/codegen/x64/assembler-x64.h"
+ #include "src/codegen/x64/register-x64.h"
++#include "src/compiler/linkage.h"
+ #include "src/flags/flags.h"
+ #include "src/heap/mutable-page-metadata.h"
+ #include "src/wasm/baseline/liftoff-assembler.h"
+@@ -4875,15 +4876,17 @@ void LiftoffAssembler::CallIndirect(const ValueKindSig* sig,
+     popq(kScratchRegister);
+     target = kScratchRegister;
+   }
+-  CallWasmCodePointer(target);
++  CallWasmCodePointer(target, call_descriptor->signature_hash());
+ }
+ 
+-void LiftoffAssembler::TailCallIndirect(Register target) {
++void LiftoffAssembler::TailCallIndirect(
++    compiler::CallDescriptor* call_descriptor, Register target) {
+   if (target == no_reg) {
+     popq(kScratchRegister);
+     target = kScratchRegister;
+   }
+-  CallWasmCodePointer(target, CallJumpMode::kTailCall);
++  CallWasmCodePointer(target, call_descriptor->signature_hash(),
++                      CallJumpMode::kTailCall);
+ }
+ 
+ void LiftoffAssembler::CallBuiltin(Builtin builtin) {
+diff --git a/src/wasm/c-api.cc b/src/wasm/c-api.cc
+index 644324b84d2..9738d809863 100644
+--- a/src/wasm/c-api.cc
++++ b/src/wasm/c-api.cc
+@@ -1535,18 +1535,13 @@ auto make_func(Store* store_abs, std::shared_ptr<FuncData> data) -> own<Func> {
+   CheckAndHandleInterrupts(isolate);
+   i::DirectHandle<i::Managed<FuncData>> embedder_data =
+       i::Managed<FuncData>::From(isolate, sizeof(FuncData), data);
+-#if V8_ENABLE_SANDBOX
+-  uint64_t signature_hash = SignatureHelper::Hash(data->type.get());
+-#else
+-  uintptr_t signature_hash = 0;
+-#endif  // V8_ENABLE_SANDBOX
+   i::wasm::CanonicalTypeIndex sig_index =
+       SignatureHelper::Canonicalize(data->type.get());
+   const i::wasm::CanonicalSig* sig =
+       i::wasm::GetTypeCanonicalizer()->LookupFunctionSignature(sig_index);
+   i::Handle<i::WasmCapiFunction> function = i::WasmCapiFunction::New(
+       isolate, reinterpret_cast<i::Address>(&FuncData::v8_callback),
+-      embedder_data, sig_index, sig, signature_hash);
++      embedder_data, sig_index, sig);
+   i::Cast<i::WasmImportData>(
+       function->shared()->wasm_capi_function_data()->internal()->implicit_arg())
+       ->set_callable(*function);
+diff --git a/src/wasm/function-compiler.cc b/src/wasm/function-compiler.cc
+index 72b2a8c93f0..bc34044193c 100644
+--- a/src/wasm/function-compiler.cc
++++ b/src/wasm/function-compiler.cc
+@@ -76,6 +76,7 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
+   }
+ 
+   WasmCompilationResult result;
++  result.signature_hash = SignatureHasher::Hash(func->sig);
+   int declared_index = declared_function_index(env->module, func_index_);
+ 
+   switch (tier_) {
+diff --git a/src/wasm/function-compiler.h b/src/wasm/function-compiler.h
+index 6bbc1a4455c..89c08bf1d31 100644
+--- a/src/wasm/function-compiler.h
++++ b/src/wasm/function-compiler.h
+@@ -89,6 +89,7 @@ struct WasmCompilationResult {
+   int func_index = kAnonymousFuncIndex;
+   ExecutionTier result_tier = ExecutionTier::kNone;
+   Kind kind = kFunction;
++  uint64_t signature_hash;
+   ForDebugging for_debugging = kNotForDebugging;
+   bool frame_has_feedback_slot = false;
+ };
+diff --git a/src/wasm/module-compiler.cc b/src/wasm/module-compiler.cc
+index 6eb61f1c006..be3b9af94f4 100644
+--- a/src/wasm/module-compiler.cc
++++ b/src/wasm/module-compiler.cc
+@@ -1390,7 +1390,8 @@ class FeedbackMaker {
+     // into the main jump table, so we only need to check against that.
+ 
+     WasmCodePointerTable::Handle handle = target_truncated_smi.value();
+-    Address entry = GetProcessWideWasmCodePointerTable()->GetEntrypoint(handle);
++    Address entry = GetProcessWideWasmCodePointerTable()
++                        ->GetEntrypointWithoutSignatureCheck(handle);
+     wasm::WasmCode* code =
+         wasm::GetWasmCodeManager()->LookupCode(nullptr, entry);
+     if (!code || code->native_module() != instance_data_->native_module() ||
+diff --git a/src/wasm/signature-hashing.h b/src/wasm/signature-hashing.h
+index bd001b53d94..25f9cdaa037 100644
+--- a/src/wasm/signature-hashing.h
++++ b/src/wasm/signature-hashing.h
+@@ -230,6 +230,16 @@ class SignatureHasher {
+   Counts rets_{};
+ };
+ 
++#else  // V8_ENABLE_SANDBOX
++
++class SignatureHasher {
++ public:
++  template <typename SigType>
++  static uint64_t Hash(const SigType* sig) {
++    return 0;
++  }
++};
++
+ #endif  // V8_ENABLE_SANDBOX
+ 
+ }  // namespace v8::internal::wasm
+diff --git a/src/wasm/turboshaft-graph-interface.cc b/src/wasm/turboshaft-graph-interface.cc
+index 3e0ab3d8781..4b8a56d341f 100644
+--- a/src/wasm/turboshaft-graph-interface.cc
++++ b/src/wasm/turboshaft-graph-interface.cc
+@@ -26,7 +26,6 @@
+ #include "src/wasm/inlining-tree.h"
+ #include "src/wasm/jump-table-assembler.h"
+ #include "src/wasm/memory-tracing.h"
+-#include "src/wasm/signature-hashing.h"
+ #include "src/wasm/wasm-engine.h"
+ #include "src/wasm/wasm-linkage.h"
+ #include "src/wasm/wasm-objects-inl.h"
+@@ -231,26 +230,12 @@ WasmGraphBuilderBase::BuildImportedFunctionTargetAndImplicitArg(
+ 
+ std::pair<V<Word32>, V<ExposedTrustedObject>>
+ WasmGraphBuilderBase::BuildFunctionTargetAndImplicitArg(
+-    V<WasmInternalFunction> internal_function, uint64_t expected_sig_hash) {
++    V<WasmInternalFunction> internal_function) {
+   V<ExposedTrustedObject> implicit_arg =
+       V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
+           internal_function, LoadOp::Kind::TaggedBase().Immutable(),
+           WasmInternalFunction::kProtectedImplicitArgOffset));
+ 
+-#if V8_ENABLE_SANDBOX
+-  V<Word64> actual_sig_hash =
+-      __ Load(internal_function, LoadOp::Kind::TaggedBase(),
+-              MemoryRepresentation::Uint64(),
+-              WasmInternalFunction::kSignatureHashOffset);
+-  IF_NOT (LIKELY(__ Word64Equal(actual_sig_hash, expected_sig_hash))) {
+-    auto sig = FixedSizeSignature<MachineType>::Params(MachineType::AnyTagged(),
+-                                                       MachineType::Uint64());
+-    CallC(&sig, ExternalReference::wasm_signature_check_fail(),
+-          {internal_function, __ Word64Constant(expected_sig_hash)});
+-    __ Unreachable();
+-  }
+-#endif
+-
+   V<Word32> target = __ Load(internal_function, LoadOp::Kind::TaggedBase(),
+                              MemoryRepresentation::Uint32(),
+                              WasmInternalFunction::kCallTargetOffset);
+@@ -3008,12 +2993,6 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+     // which might be non-existent (OpIndex::Invalid()) in unreachable code.
+     if (__ generating_unreachable_operations()) return;
+ 
+-#if V8_ENABLE_SANDBOX
+-    uint64_t signature_hash = SignatureHasher::Hash(sig);
+-#else
+-    uint64_t signature_hash = 0;
+-#endif  // V8_ENABLE_SANDBOX
+-
+     if (should_inline(decoder, feedback_slot_,
+                       std::numeric_limits<int>::max())) {
+       DCHECK(!shared_);
+@@ -3117,8 +3096,8 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+         TSBlock* no_inline_block = case_blocks.back();
+         __ Bind(no_inline_block);
+         auto [target, implicit_arg] =
+-            BuildFunctionReferenceTargetAndImplicitArg(
+-                func_ref.op, func_ref.type, signature_hash);
++            BuildFunctionReferenceTargetAndImplicitArg(func_ref.op,
++                                                       func_ref.type);
+         SmallZoneVector<Value, 4> ref_returns(return_count, decoder->zone_);
+         BuildWasmCall(decoder, sig, target, implicit_arg, args,
+                       ref_returns.data(), compiler::kWasmIndirectFunction);
+@@ -3135,7 +3114,7 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+       }
+     } else {
+       auto [target, implicit_arg] = BuildFunctionReferenceTargetAndImplicitArg(
+-          func_ref.op, func_ref.type, signature_hash);
++          func_ref.op, func_ref.type);
+       BuildWasmCall(decoder, sig, target, implicit_arg, args, returns,
+                     compiler::kWasmIndirectFunction);
+     }
+@@ -3145,12 +3124,6 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+                      const FunctionSig* sig, const Value args[]) {
+     feedback_slot_++;
+ 
+-#if V8_ENABLE_SANDBOX
+-    uint64_t signature_hash = SignatureHasher::Hash(sig);
+-#else
+-    uint64_t signature_hash = 0;
+-#endif  // V8_ENABLE_SANDBOX
+-
+     if (should_inline(decoder, feedback_slot_,
+                       std::numeric_limits<int>::max())) {
+       DCHECK(!shared_);
+@@ -3206,8 +3179,8 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+       TSBlock* no_inline_block = case_blocks.back();
+       __ Bind(no_inline_block);
+     }
+-    auto [target, implicit_arg] = BuildFunctionReferenceTargetAndImplicitArg(
+-        func_ref.op, func_ref.type, signature_hash);
++    auto [target, implicit_arg] =
++        BuildFunctionReferenceTargetAndImplicitArg(func_ref.op, func_ref.type);
+     BuildWasmMaybeReturnCall(decoder, sig, target, implicit_arg, args,
+                              compiler::kWasmIndirectFunction);
+   }
+@@ -7382,8 +7355,7 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+   // WasmImportData) from a function reference.
+   std::pair<V<Word32>, V<ExposedTrustedObject>>
+   BuildFunctionReferenceTargetAndImplicitArg(V<WasmFuncRef> func_ref,
+-                                             ValueType type,
+-                                             uint64_t expected_sig_hash) {
++                                             ValueType type) {
+     if (type.is_nullable() &&
+         null_check_strategy_ == compiler::NullCheckStrategy::kExplicit) {
+       func_ref = V<WasmFuncRef>::Cast(
+@@ -7401,8 +7373,7 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+             func_ref, load_kind, kWasmInternalFunctionIndirectPointerTag,
+             WasmFuncRef::kTrustedInternalOffset));
+ 
+-    return BuildFunctionTargetAndImplicitArg(internal_function,
+-                                             expected_sig_hash);
++    return BuildFunctionTargetAndImplicitArg(internal_function);
+   }
+ 
+   OpIndex AnnotateResultIfReference(OpIndex result, wasm::ValueType type) {
+@@ -7731,22 +7702,6 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+     }
+   }
+ 
+-  V<WordPtr> BuildLoadWasmCodeEntrypointViaCodePointer(V<Word32> handle) {
+-#ifdef V8_ENABLE_SANDBOX
+-    V<Word32> index =
+-        __ Word32ShiftRightLogical(handle, kCodePointerHandleShift);
+-    V<WordPtr> offset = __ ChangeUint32ToUintPtr(
+-        __ Word32ShiftLeft(index, kCodePointerTableEntrySizeLog2));
+-    V<WordPtr> table =
+-        __ ExternalConstant(ExternalReference::code_pointer_table_address());
+-    V<WordPtr> entry = __ Load(table, offset, LoadOp::Kind::RawAligned(),
+-                               MemoryRepresentation::UintPtr());
+-    return __ Word64BitwiseXor(entry, __ UintPtrConstant(kWasmEntrypointTag));
+-#else
+-    UNREACHABLE();
+-#endif
+-  }
+-
+   void BuildEncodeException32BitValue(V<FixedArray> values_array,
+                                       uint32_t index, V<Word32> value) {
+     V<Smi> upper_half =
+diff --git a/src/wasm/turboshaft-graph-interface.h b/src/wasm/turboshaft-graph-interface.h
+index bec14ced415..2c89013eeb8 100644
+--- a/src/wasm/turboshaft-graph-interface.h
++++ b/src/wasm/turboshaft-graph-interface.h
+@@ -108,8 +108,7 @@ class V8_EXPORT_PRIVATE WasmGraphBuilderBase {
+       V<WasmTrustedInstanceData> trusted_instance_data);
+ 
+   std::pair<V<Word32>, V<ExposedTrustedObject>>
+-  BuildFunctionTargetAndImplicitArg(V<WasmInternalFunction> internal_function,
+-                                    uint64_t expected_sig_hash);
++  BuildFunctionTargetAndImplicitArg(V<WasmInternalFunction> internal_function);
+ 
+   RegisterRepresentation RepresentationFor(ValueTypeBase type);
+   V<WasmTrustedInstanceData> LoadTrustedDataFromInstanceObject(
+diff --git a/src/wasm/wasm-code-manager.cc b/src/wasm/wasm-code-manager.cc
+index 36e760ee790..ff6e7da39d6 100644
+--- a/src/wasm/wasm-code-manager.cc
++++ b/src/wasm/wasm-code-manager.cc
+@@ -18,6 +18,7 @@
+ #include "src/base/small-vector.h"
+ #include "src/base/string-format.h"
+ #include "src/base/vector.h"
++#include "src/builtins/builtins-inl.h"
+ #include "src/codegen/assembler-inl.h"
+ #include "src/codegen/macro-assembler-inl.h"
+ #include "src/codegen/macro-assembler.h"
+@@ -37,6 +38,7 @@
+ #include "src/wasm/module-compiler.h"
+ #include "src/wasm/names-provider.h"
+ #include "src/wasm/pgo.h"
++#include "src/wasm/signature-hashing.h"
+ #include "src/wasm/std-object-sizes.h"
+ #include "src/wasm/wasm-builtin-list.h"
+ #include "src/wasm/wasm-code-pointer-table-inl.h"
+@@ -623,7 +625,7 @@ std::tuple<int, bool, SourcePosition> WasmCode::GetInliningPosition(
+ }
+ 
+ size_t WasmCode::EstimateCurrentMemoryConsumption() const {
+-  UPDATE_WHEN_CLASS_CHANGES(WasmCode, 96);
++  UPDATE_WHEN_CLASS_CHANGES(WasmCode, 104);
+   size_t result = sizeof(WasmCode);
+   // For meta_data_.
+   result += protected_instructions_size_ + reloc_info_size_ +
+@@ -1033,7 +1035,8 @@ void NativeModule::LogWasmCodes(Isolate* isolate, Tagged<Script> script) {
+   }
+ }
+ 
+-WasmCode* NativeModule::AddCodeForTesting(DirectHandle<Code> code) {
++WasmCode* NativeModule::AddCodeForTesting(DirectHandle<Code> code,
++                                          uint64_t signature_hash) {
+   const size_t relocation_size = code->relocation_size();
+   base::OwnedVector<uint8_t> reloc_info =
+       base::OwnedCopyOf(code->relocation_start(), relocation_size);
+@@ -1131,7 +1134,8 @@ WasmCode* NativeModule::AddCodeForTesting(DirectHandle<Code> code) {
+                    {},                       // deopt data
+                    WasmCode::kWasmFunction,  // kind
+                    ExecutionTier::kNone,     // tier
+-                   kNotForDebugging}};       // for_debugging
++                   kNotForDebugging,         // for_debugging
++                   signature_hash}};         // signature_hash
+   new_code->MaybePrint();
+   new_code->Validate();
+ 
+@@ -1172,11 +1176,16 @@ void NativeModule::InitializeJumpTableForLazyCompilation(
+       "Initialize WasmCodePointerTable");
+   DCHECK_LE(num_wasm_functions, code_pointer_handles_size_);
+   for (uint32_t i = 0; i < num_wasm_functions; i++) {
++    uint64_t signature_hash =
++        module_->num_imported_functions + i < module_->functions.size()
++            ? SignatureHasher::Hash(
++                  module_->functions[module_->num_imported_functions + i].sig)
++            : -1;
+     code_pointer_table->SetEntrypointWithWriteScope(
+         code_pointer_handles_[i],
+         code_space_data.jump_table->instruction_start() +
+             JumpTableAssembler::JumpSlotIndexToOffset(i),
+-        write_scope);
++        signature_hash, write_scope);
+   }
+ }
+ 
+@@ -1200,7 +1209,10 @@ void NativeModule::UseLazyStubLocked(uint32_t func_index) {
+   Address lazy_compile_target =
+       lazy_compile_table_->instruction_start() +
+       JumpTableAssembler::LazyCompileSlotIndexToOffset(slot_index);
+-  PatchJumpTablesLocked(slot_index, lazy_compile_target, jump_table_target);
++  uint64_t signature_hash =
++      SignatureHasher::Hash(module_->functions[func_index].sig);
++  PatchJumpTablesLocked(slot_index, lazy_compile_target, jump_table_target,
++                        signature_hash);
+ }
+ 
+ std::unique_ptr<WasmCode> NativeModule::AddCode(
+@@ -1335,6 +1347,9 @@ std::unique_ptr<WasmCode> NativeModule::AddCodeWithCodeSpace(
+   // relocation information.
+   if (tier == ExecutionTier::kLiftoff) reloc_info = {};
+ 
++  uint64_t signature_hash =
++      SignatureHasher::Hash(module_->functions[index].sig);
++
+   std::unique_ptr<WasmCode> code{new WasmCode{this,
+                                               index,
+                                               dst_code_bytes,
+@@ -1354,6 +1369,7 @@ std::unique_ptr<WasmCode> NativeModule::AddCodeWithCodeSpace(
+                                               kind,
+                                               tier,
+                                               for_debugging,
++                                              signature_hash,
+                                               frame_has_feedback_slot}};
+ 
+   code->MaybePrint();
+@@ -1471,7 +1487,7 @@ WasmCode* NativeModule::PublishCodeLocked(
+     }
+ 
+     PatchJumpTablesLocked(slot_idx, code->instruction_start(),
+-                          code->instruction_start());
++                          code->instruction_start(), code->signature_hash());
+   } else {
+     // The code tables does not hold a reference to the code, hence decrement
+     // the initial ref count of 1. The code was added to the
+@@ -1536,7 +1552,7 @@ void NativeModule::ReinstallDebugCode(WasmCode* code) {
+   code->IncRef();
+ 
+   PatchJumpTablesLocked(slot_idx, code->instruction_start(),
+-                        code->instruction_start());
++                        code->instruction_start(), code->signature_hash());
+ }
+ 
+ std::pair<base::Vector<uint8_t>, NativeModule::JumpTablesRef>
+@@ -1562,12 +1578,29 @@ std::unique_ptr<WasmCode> NativeModule::AddDeserializedCode(
+     ExecutionTier tier) {
+   UpdateCodeSize(instructions.size(), tier, kNotForDebugging);
+ 
+-  return std::unique_ptr<WasmCode>{new WasmCode{
+-      this, index, instructions, stack_slots, ool_spills,
+-      tagged_parameter_slots, safepoint_table_offset, handler_table_offset,
+-      constant_pool_offset, code_comments_offset, unpadded_binary_size,
+-      protected_instructions_data, reloc_info, source_position_table,
+-      inlining_positions, deopt_data, kind, tier, kNotForDebugging}};
++  uint64_t signature_hash =
++      SignatureHasher::Hash(module_->functions[index].sig);
++
++  return std::unique_ptr<WasmCode>{new WasmCode{this,
++                                                index,
++                                                instructions,
++                                                stack_slots,
++                                                ool_spills,
++                                                tagged_parameter_slots,
++                                                safepoint_table_offset,
++                                                handler_table_offset,
++                                                constant_pool_offset,
++                                                code_comments_offset,
++                                                unpadded_binary_size,
++                                                protected_instructions_data,
++                                                reloc_info,
++                                                source_position_table,
++                                                inlining_positions,
++                                                deopt_data,
++                                                kind,
++                                                tier,
++                                                kNotForDebugging,
++                                                signature_hash}};
+ }
+ 
+ std::pair<std::vector<WasmCode*>, std::vector<WellKnownImport>>
+@@ -1680,7 +1713,8 @@ WasmCode* NativeModule::CreateEmptyJumpTableInRegionLocked(
+                    {},                    // deopt data
+                    WasmCode::kJumpTable,  // kind
+                    ExecutionTier::kNone,  // tier
+-                   kNotForDebugging}};    // for_debugging
++                   kNotForDebugging,      // for_debugging
++                   0}};                   // signature_hash
+   return PublishCodeLocked(std::move(code));
+ }
+ 
+@@ -1694,11 +1728,13 @@ void NativeModule::UpdateCodeSize(size_t size, ExecutionTier tier,
+ }
+ 
+ void NativeModule::PatchJumpTablesLocked(uint32_t slot_index, Address target,
+-                                         Address code_pointer_table_target) {
++                                         Address code_pointer_table_target,
++                                         uint64_t signature_hash) {
+   allocation_mutex_.AssertHeld();
+ 
+-  GetProcessWideWasmCodePointerTable()->SetEntrypoint(
+-      code_pointer_handles_[slot_index], code_pointer_table_target);
++  GetProcessWideWasmCodePointerTable()->SetEntrypointAndSignature(
++      code_pointer_handles_[slot_index], code_pointer_table_target,
++      signature_hash);
+ 
+   for (auto& code_space_data : code_space_data_) {
+     // TODO(sroettger): need to unlock both jump tables together
+@@ -2974,10 +3010,6 @@ WasmCodeLookupCache::CacheEntry* WasmCodeLookupCache::GetCacheEntry(
+   return entry;
+ }
+ 
+-Address WasmCodePointerAddress(uint32_t pointer) {
+-  return wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(pointer);
+-}
+-
+ }  // namespace wasm
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/src/wasm/wasm-code-manager.h b/src/wasm/wasm-code-manager.h
+index 0a43200859c..a4ced004966 100644
+--- a/src/wasm/wasm-code-manager.h
++++ b/src/wasm/wasm-code-manager.h
+@@ -87,7 +87,7 @@ class V8_EXPORT_PRIVATE DisjointAllocationPool final {
+ constexpr uint32_t kInvalidWasmCodePointer =
+     WasmCodePointerTable::kInvalidHandle;
+ 
+-// Resolve the entry address of a uint32_t
++// Resolve the entry address of a WasmCodePointer
+ V8_EXPORT_PRIVATE Address WasmCodePointerAddress(uint32_t pointer);
+ 
+ class V8_EXPORT_PRIVATE WasmCode final {
+@@ -213,6 +213,7 @@ class V8_EXPORT_PRIVATE WasmCode final {
+   int unpadded_binary_size() const { return unpadded_binary_size_; }
+   int stack_slots() const { return stack_slots_; }
+   int ool_spills() const { return ool_spills_; }
++  uint64_t signature_hash() const { return signature_hash_; }
+   uint16_t first_tagged_parameter_slot() const {
+     return tagged_parameter_slots_ >> 16;
+   }
+@@ -353,9 +354,10 @@ class V8_EXPORT_PRIVATE WasmCode final {
+            base::Vector<const uint8_t> inlining_positions,
+            base::Vector<const uint8_t> deopt_data, Kind kind,
+            ExecutionTier tier, ForDebugging for_debugging,
+-           bool frame_has_feedback_slot = false)
++           uint64_t signature_hash, bool frame_has_feedback_slot = false)
+       : native_module_(native_module),
+         instructions_(instructions.begin()),
++        signature_hash_(signature_hash),
+         meta_data_(ConcatenateBytes({protected_instructions_data, reloc_info,
+                                      source_position_table, inlining_positions,
+                                      deopt_data})),
+@@ -409,6 +411,7 @@ class V8_EXPORT_PRIVATE WasmCode final {
+ 
+   NativeModule* const native_module_ = nullptr;
+   uint8_t* const instructions_;
++  const uint64_t signature_hash_;
+   // {meta_data_} contains several byte vectors concatenated into one:
+   //  - protected instructions data of size {protected_instructions_size_}
+   //  - relocation info of size {reloc_info_size_}
+@@ -607,7 +610,7 @@ class V8_EXPORT_PRIVATE NativeModule final {
+       ExecutionTier tier);
+ 
+   // Adds anonymous code for testing purposes.
+-  WasmCode* AddCodeForTesting(DirectHandle<Code> code);
++  WasmCode* AddCodeForTesting(DirectHandle<Code> code, uint64_t signature_hash);
+ 
+   // Allocates and initializes the {lazy_compile_table_} and initializes the
+   // first jump table with jumps to the {lazy_compile_table_}.
+@@ -934,7 +937,8 @@ class V8_EXPORT_PRIVATE NativeModule final {
+   // compile table which doesn't have the bti instruction on ARM and is thus not
+   // a valid target for indirect branches.
+   void PatchJumpTablesLocked(uint32_t slot_index, Address target,
+-                             Address code_pointer_table_target);
++                             Address code_pointer_table_target,
++                             uint64_t signature_hash);
+   void PatchJumpTableLocked(WritableJumpTablePair& jump_table_pair,
+                             const CodeSpaceData&, uint32_t slot_index,
+                             Address target);
+diff --git a/src/wasm/wasm-code-pointer-table-inl.h b/src/wasm/wasm-code-pointer-table-inl.h
+index 7bb732c7d36..01ebe8589ee 100644
+--- a/src/wasm/wasm-code-pointer-table-inl.h
++++ b/src/wasm/wasm-code-pointer-table-inl.h
+@@ -15,45 +15,79 @@
+ 
+ namespace v8::internal::wasm {
+ 
+-void WasmCodePointerTableEntry::MakeCodePointerEntry(Address entrypoint) {
++void WasmCodePointerTableEntry::MakeCodePointerEntry(Address entrypoint,
++                                                     uint64_t signature_hash) {
+   entrypoint_.store(entrypoint, std::memory_order_relaxed);
++#ifdef V8_ENABLE_SANDBOX
++  signature_hash_ = signature_hash;
++#endif
+ }
+ 
+-Address WasmCodePointerTableEntry::GetEntrypoint() const {
++void WasmCodePointerTableEntry::UpdateCodePointerEntry(
++    Address entrypoint, uint64_t signature_hash) {
++#ifdef V8_ENABLE_SANDBOX
++  SBXCHECK_EQ(signature_hash_, signature_hash);
++#endif
++  entrypoint_.store(entrypoint, std::memory_order_relaxed);
++}
++
++Address WasmCodePointerTableEntry::GetEntrypoint(
++    uint64_t signature_hash) const {
++#ifdef V8_ENABLE_SANDBOX
++  SBXCHECK_EQ(signature_hash_, signature_hash);
++#endif
++  return entrypoint_.load(std::memory_order_relaxed);
++}
++
++Address WasmCodePointerTableEntry::GetEntrypointWithoutSignatureCheck() const {
+   return entrypoint_.load(std::memory_order_relaxed);
+ }
+ 
+ void WasmCodePointerTableEntry::MakeFreelistEntry(uint32_t next_entry_index) {
+   entrypoint_.store(next_entry_index, std::memory_order_relaxed);
++#ifdef V8_ENABLE_SANDBOX
++  signature_hash_ = -1;
++#endif
+ }
+ 
+ uint32_t WasmCodePointerTableEntry::GetNextFreelistEntryIndex() const {
+   return static_cast<uint32_t>(entrypoint_.load(std::memory_order_relaxed));
+ }
+ 
+-Address WasmCodePointerTable::GetEntrypoint(uint32_t index) const {
+-  return at(index).GetEntrypoint();
++Address WasmCodePointerTable::GetEntrypoint(uint32_t index,
++                                            uint64_t signature_hash) const {
++  return at(index).GetEntrypoint(signature_hash);
+ }
+ 
+-void WasmCodePointerTable::SetEntrypoint(uint32_t index, Address value) {
++Address WasmCodePointerTable::GetEntrypointWithoutSignatureCheck(
++    uint32_t index) const {
++  return at(index).GetEntrypointWithoutSignatureCheck();
++}
++
++void WasmCodePointerTable::UpdateEntrypoint(uint32_t index, Address value,
++                                            uint64_t signature_hash) {
+   WriteScope write_scope("WasmCodePointerTable write");
+-  SetEntrypointWithWriteScope(index, value, write_scope);
++  at(index).UpdateCodePointerEntry(value, signature_hash);
+ }
+ 
+-void WasmCodePointerTable::SetEntrypointWithWriteScope(
+-    uint32_t index, Address value, WriteScope& write_scope) {
+-  at(index).MakeCodePointerEntry(value);
++void WasmCodePointerTable::SetEntrypointAndSignature(uint32_t index,
++                                                     Address value,
++                                                     uint64_t signature_hash) {
++  WriteScope write_scope("WasmCodePointerTable write");
++  at(index).MakeCodePointerEntry(value, signature_hash);
+ }
+ 
+-void WasmCodePointerTable::SetEntrypointWithRwxWriteScope(
+-    uint32_t index, Address value, RwxMemoryWriteScope& write_scope) {
+-  at(index).MakeCodePointerEntry(value);
++void WasmCodePointerTable::SetEntrypointWithWriteScope(
++    uint32_t index, Address value, uint64_t signature_hash,
++    WriteScope& write_scope) {
++  at(index).MakeCodePointerEntry(value, signature_hash);
+ }
+ 
+-uint32_t WasmCodePointerTable::AllocateAndInitializeEntry(Address entrypoint) {
++uint32_t WasmCodePointerTable::AllocateAndInitializeEntry(
++    Address entrypoint, uint64_t signature_hash) {
+   uint32_t index = AllocateUninitializedEntry();
+   WriteScope write_scope("WasmCodePointerTable write");
+-  at(index).MakeCodePointerEntry(entrypoint);
++  at(index).MakeCodePointerEntry(entrypoint, signature_hash);
+   return index;
+ }
+ 
+diff --git a/src/wasm/wasm-code-pointer-table.cc b/src/wasm/wasm-code-pointer-table.cc
+index 17c4864436d..fa7b2e05d82 100644
+--- a/src/wasm/wasm-code-pointer-table.cc
++++ b/src/wasm/wasm-code-pointer-table.cc
+@@ -129,14 +129,14 @@ uint32_t WasmCodePointerTable::GetOrCreateHandleForNativeFunction(
+     return it->second;
+   }
+ 
+-  uint32_t handle = AllocateAndInitializeEntry(addr);
++  uint32_t handle = AllocateAndInitializeEntry(addr, -1);
+   native_function_map_.insert({addr, handle});
+ 
+   return handle;
+ }
+ 
+ bool WasmCodePointerTable::EntrypointEqualTo(uint32_t index, Address address) {
+-  return at(index).GetEntrypoint() == address;
++  return at(index).GetEntrypointWithoutSignatureCheck() == address;
+ }
+ 
+ void WasmCodePointerTable::FreeNativeFunctionHandles() {
+diff --git a/src/wasm/wasm-code-pointer-table.h b/src/wasm/wasm-code-pointer-table.h
+index 923893bb121..87dc092a5b6 100644
+--- a/src/wasm/wasm-code-pointer-table.h
++++ b/src/wasm/wasm-code-pointer-table.h
+@@ -26,14 +26,19 @@ struct WasmCodePointerTableEntry {
+   static constexpr bool IsWriteProtected = true;
+ 
+   // Set the entry to point to a given entrypoint.
+-  inline void MakeCodePointerEntry(Address entrypoint);
++  inline void MakeCodePointerEntry(Address entrypoint, uint64_t signature_hash);
++  inline void UpdateCodePointerEntry(Address entrypoint,
++                                     uint64_t signature_hash);
+ 
+   // Make this entry a freelist entry, containing the index of the next entry
+   // on the freelist.
+   inline void MakeFreelistEntry(uint32_t next_entry_index);
+ 
+   // Load code entrypoint pointer stored in this entry.
+-  inline Address GetEntrypoint() const;
++  inline Address GetEntrypoint(uint64_t signature_hash) const;
++
++  // Load code entrypoint pointer stored in this entry.
++  inline Address GetEntrypointWithoutSignatureCheck() const;
+ 
+   // Get the index of the next entry on the freelist.
+   inline uint32_t GetNextFreelistEntryIndex() const;
+@@ -42,6 +47,9 @@ struct WasmCodePointerTableEntry {
+   friend class WasmCodePointerTable;
+ 
+   std::atomic<Address> entrypoint_;
++#ifdef V8_ENABLE_SANDBOX
++  uint64_t signature_hash_;
++#endif
+ };
+ 
+ // A table for storing valid Wasm code entrypoints. This table allows enforcing
+@@ -67,6 +75,10 @@ class V8_EXPORT_PRIVATE WasmCodePointerTable
+ 
+   using Handle = uint32_t;
+   static constexpr Handle kInvalidHandle = -1;
++#ifdef V8_ENABLE_SANDBOX
++  static constexpr int kOffsetOfSignatureHash =
++      offsetof(WasmCodePointerTableEntry, signature_hash_);
++#endif
+ 
+   using WriteScope = CFIMetadataWriteScope;
+ 
+@@ -77,19 +89,24 @@ class V8_EXPORT_PRIVATE WasmCodePointerTable
+   void TearDown();
+ 
+   // Read the entrypoint at a given index.
+-  inline Address GetEntrypoint(uint32_t index) const;
++  inline Address GetEntrypoint(uint32_t index, uint64_t signature_hash) const;
++
++  inline Address GetEntrypointWithoutSignatureCheck(uint32_t index) const;
+ 
+   // Sets the entrypoint of the entry referenced by the given index.
+   // The Unlocked version can be used in loops, but you need to hold a
+   // `WriteScope` while calling it.
+-  inline void SetEntrypoint(uint32_t index, Address value);
++  inline void UpdateEntrypoint(uint32_t index, Address value,
++                               uint64_t signature_hash);
++  inline void SetEntrypointAndSignature(uint32_t index, Address value,
++                                        uint64_t signature_hash);
+   inline void SetEntrypointWithWriteScope(uint32_t index, Address value,
++                                          uint64_t signature_hash,
+                                           WriteScope& write_scope);
+-  inline void SetEntrypointWithRwxWriteScope(uint32_t index, Address value,
+-                                             RwxMemoryWriteScope& write_scope);
+ 
+   // Allocates a new entry in the table and optionally initialize it.
+-  inline uint32_t AllocateAndInitializeEntry(Address entrypoint);
++  inline uint32_t AllocateAndInitializeEntry(Address entrypoint,
++                                             uint64_t signature_hash);
+   inline uint32_t AllocateUninitializedEntry();
+ 
+   // Free an entry, which will add it to the free list.
+diff --git a/src/wasm/wasm-import-wrapper-cache.cc b/src/wasm/wasm-import-wrapper-cache.cc
+index 6bd0b74a9e5..8ae62cb1dcf 100644
+--- a/src/wasm/wasm-import-wrapper-cache.cc
++++ b/src/wasm/wasm-import-wrapper-cache.cc
+@@ -14,6 +14,7 @@
+ #include "src/wasm/function-compiler.h"
+ #include "src/wasm/std-object-sizes.h"
+ #include "src/wasm/wasm-code-manager.h"
++#include "src/wasm/wasm-code-pointer-table-inl.h"
+ #include "src/wasm/wasm-engine.h"
+ 
+ namespace v8::internal::wasm {
+@@ -117,6 +118,7 @@ WasmCode* WasmImportWrapperCache::ModificationScope::AddWrapper(
+                                 kind,
+                                 ExecutionTier::kNone,
+                                 wasm::kNotForDebugging,
++                                result.signature_hash,
+                                 frame_has_feedback_slot};
+   // The refcount of a WasmCode is initialized to 1. For wrappers, we track
+   // all refcounts explicitly, i.e. there will be a call to {IncRef()} that
+@@ -136,6 +138,16 @@ WasmCode* WasmImportWrapperCache::ModificationScope::AddWrapper(
+   return code;
+ }
+ 
++WasmCode* WasmImportWrapperCache::FindWrapper(uint32_t call_target) {
++  if (call_target == kInvalidWasmCodePointer) return nullptr;
++  base::MutexGuard lock(&mutex_);
++  auto iter = codes_.find(
++      GetProcessWideWasmCodePointerTable()->GetEntrypointWithoutSignatureCheck(
++          call_target));
++  if (iter == codes_.end()) return nullptr;
++  return iter->second;
++}
++
+ WasmCode* WasmImportWrapperCache::CompileWasmImportCallWrapper(
+     Isolate* isolate, ImportCallKind kind, const CanonicalSig* sig,
+     CanonicalTypeIndex sig_index, bool source_positions, int expected_arity,
+diff --git a/src/wasm/wasm-import-wrapper-cache.h b/src/wasm/wasm-import-wrapper-cache.h
+index ceacbdbef6b..40be4b26682 100644
+--- a/src/wasm/wasm-import-wrapper-cache.h
++++ b/src/wasm/wasm-import-wrapper-cache.h
+@@ -89,13 +89,7 @@ class WasmImportWrapperCache {
+   size_t EstimateCurrentMemoryConsumption() const;
+ 
+   // Returns nullptr if {call_target} doesn't belong to a known wrapper.
+-  WasmCode* FindWrapper(uint32_t call_target) {
+-    if (call_target == kInvalidWasmCodePointer) return nullptr;
+-    base::MutexGuard lock(&mutex_);
+-    auto iter = codes_.find(WasmCodePointerAddress(call_target));
+-    if (iter == codes_.end()) return nullptr;
+-    return iter->second;
+-  }
++  V8_EXPORT_PRIVATE WasmCode* FindWrapper(uint32_t call_target);
+ 
+   WasmCode* CompileWasmImportCallWrapper(Isolate* isolate, ImportCallKind kind,
+                                          const CanonicalSig* sig,
+diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
+index 3adf5e58585..8770735528b 100644
+--- a/src/wasm/wasm-js.cc
++++ b/src/wasm/wasm-js.cc
+@@ -2239,16 +2239,8 @@ i::Handle<i::JSFunction> NewPromisingWasmExportedFunction(
+         i_isolate));
+   }
+ 
+-#if V8_ENABLE_SANDBOX
+-  uint64_t signature_hash =
+-      i::wasm::SignatureHasher::Hash(module->functions[func_index].sig);
+-#else
+-  uintptr_t signature_hash = 0;
+-#endif
+-
+   i::DirectHandle<i::WasmInternalFunction> internal =
+-      i_isolate->factory()->NewWasmInternalFunction(implicit_arg, func_index,
+-                                                    signature_hash);
++      i_isolate->factory()->NewWasmInternalFunction(implicit_arg, func_index);
+   i::DirectHandle<i::WasmFuncRef> func_ref =
+       i_isolate->factory()->NewWasmFuncRef(internal, rtt);
+   internal->set_call_target(trusted_instance_data->GetCallTarget(func_index));
+diff --git a/src/wasm/wasm-objects.cc b/src/wasm/wasm-objects.cc
+index e991a483529..4c4c8d4e99c 100644
+--- a/src/wasm/wasm-objects.cc
++++ b/src/wasm/wasm-objects.cc
+@@ -506,10 +506,12 @@ void WasmTableObject::UpdateDispatchTable(
+   }
+   if (target_instance_data->dispatch_table_for_imports()->IsAWrapper(
+           func->func_index)) {
++    uint64_t signature_hash = wasm::SignatureHasher::Hash(func->sig);
+     dispatch_table->SetForWrapper(
+         entry_index, *implicit_arg,
+-        wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(call_target),
+-        sig_id,
++        wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(
++            call_target, signature_hash),
++        sig_id, signature_hash,
+ #if V8_ENABLE_DRUMBRAKE
+         target_func_index,
+ #endif
+@@ -569,16 +571,20 @@ void WasmTableObject::UpdateDispatchTable(
+   wasm::WasmCode* wasm_code =
+       cache->MaybeGet(kind, sig_id, expected_arity, suspend);
+   Address call_target;
++  uint64_t signature_hash;
+   if (wasm_code) {
+     call_target = wasm_code->instruction_start();
++    signature_hash = wasm_code->signature_hash();
+   } else if (UseGenericWasmToJSWrapper(kind, sig, resolved.suspend())) {
+     call_target = Builtins::EntryOf(Builtin::kWasmToJsWrapperAsm, isolate);
++    signature_hash = wasm::SignatureHasher::Hash(sig);
+   } else {
+     constexpr bool kNoSourcePositions = false;
+     wasm_code = cache->CompileWasmImportCallWrapper(isolate, kind, sig, sig_id,
+                                                     kNoSourcePositions,
+                                                     expected_arity, suspend);
+     call_target = wasm_code->instruction_start();
++    signature_hash = wasm_code->signature_hash();
+   }
+ 
+   // Update the dispatch table.
+@@ -590,6 +596,7 @@ void WasmTableObject::UpdateDispatchTable(
+          call_target ==
+              Builtins::EntryOf(Builtin::kWasmToJsWrapperAsm, isolate));
+   dispatch_table->SetForWrapper(entry_index, *import_data, call_target, sig_id,
++                                signature_hash,
+ #if V8_ENABLE_DRUMBRAKE
+                                 WasmDispatchTable::kInvalidFunctionIndex,
+ #endif  // V8_ENABLE_DRUMBRAKE
+@@ -636,7 +643,7 @@ void WasmTableObject::UpdateDispatchTable(
+       table->trusted_dispatch_table(isolate);
+   SBXCHECK(FunctionSigMatchesTable(sig_index, dispatch_table->table_type()));
+   dispatch_table->SetForWrapper(entry_index, implicit_arg, call_target,
+-                                sig_index,
++                                sig_index, wasm_code->signature_hash(),
+ #if V8_ENABLE_DRUMBRAKE
+                                 WasmDispatchTable::kInvalidFunctionIndex,
+ #endif  // V8_ENABLE_DRUMBRAKE
+@@ -1153,8 +1160,9 @@ void ImportedFunctionEntry::SetGenericWasmToJs(
+       instance_data_->dispatch_table_for_imports(), index_);
+   DisallowGarbageCollection no_gc;
+ 
++  uint64_t signature_hash = wasm::SignatureHasher::Hash(sig);
+   instance_data_->dispatch_table_for_imports()->SetForWrapper(
+-      index_, *import_data, wrapper_entry, sig_id, nullptr,
++      index_, *import_data, wrapper_entry, sig_id, signature_hash, nullptr,
+       WasmDispatchTable::kNewEntry);
+ #if V8_ENABLE_DRUMBRAKE
+   instance_data_->imported_function_indices()->set(index_, -1);
+@@ -1180,11 +1188,14 @@ void ImportedFunctionEntry::SetCompiledWasmToJs(
+   Tagged<WasmDispatchTable> dispatch_table =
+       instance_data_->dispatch_table_for_imports();
+   DCHECK_EQ(v8_flags.wasm_jitless, wasm_to_js_wrapper == nullptr);
++  uint64_t signature_hash = wasm_to_js_wrapper
++                                ? wasm_to_js_wrapper->signature_hash()
++                                : wasm::SignatureHasher::Hash(sig);
+   dispatch_table->SetForWrapper(
+       index_, *import_data,
+       v8_flags.wasm_jitless ? Address{}
+                             : wasm_to_js_wrapper->instruction_start(),
+-      sig_id, wasm_to_js_wrapper, WasmDispatchTable::kNewEntry);
++      sig_id, signature_hash, wasm_to_js_wrapper, WasmDispatchTable::kNewEntry);
+ 
+ #if V8_ENABLE_DRUMBRAKE
+   instance_data_->imported_function_indices()->set(index_, -1);
+@@ -1199,11 +1210,11 @@ void ImportedFunctionEntry::SetWasmToWasm(
+     int exported_function_index
+ #endif  // V8_ENABLE_DRUMBRAKE
+ ) {
+-  TRACE_IFT(
+-      "Import Wasm 0x%" PRIxPTR "[%d] = {instance_data=0x%" PRIxPTR
+-      ", target=0x%" PRIxPTR "}\n",
+-      instance_data_->ptr(), index_, target_instance_data.ptr(),
+-      wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(call_target));
++  TRACE_IFT("Import Wasm 0x%" PRIxPTR "[%d] = {instance_data=0x%" PRIxPTR
++            ", target=0x%" PRIxPTR "}\n",
++            instance_data_->ptr(), index_, target_instance_data.ptr(),
++            wasm::GetProcessWideWasmCodePointerTable()
++                ->GetEntrypointWithoutSignatureCheck(call_target));
+   DisallowGarbageCollection no_gc;
+   Tagged<WasmDispatchTable> dispatch_table =
+       instance_data_->dispatch_table_for_imports();
+@@ -1630,16 +1641,8 @@ Handle<WasmFuncRef> WasmTrustedInstanceData::GetOrCreateFuncRef(
+           trusted_instance_data->managed_object_maps()->get(sig_index.index)),
+       isolate};
+ 
+-#if V8_ENABLE_SANDBOX
+-  uint64_t signature_hash =
+-      wasm::SignatureHasher::Hash(module->functions[function_index].sig);
+-#else
+-  uintptr_t signature_hash = 0;
+-#endif
+-
+   DirectHandle<WasmInternalFunction> internal_function =
+-      isolate->factory()->NewWasmInternalFunction(implicit_arg, function_index,
+-                                                  signature_hash);
++      isolate->factory()->NewWasmInternalFunction(implicit_arg, function_index);
+   Handle<WasmFuncRef> func_ref =
+       isolate->factory()->NewWasmFuncRef(internal_function, rtt);
+   trusted_instance_data->func_refs()->set(function_index, *func_ref);
+@@ -1922,13 +1925,14 @@ WasmDispatchTableData::~WasmDispatchTableData() {
+ }
+ 
+ uint32_t WasmDispatchTableData::Add(int index, Address call_target,
+-                                    wasm::WasmCode* compiled_wrapper) {
++                                    wasm::WasmCode* compiled_wrapper,
++                                    uint64_t signature_hash) {
+   uint32_t code_pointer;
+   auto it = wrappers_.find(index);
+   if (it == wrappers_.end()) {
+     code_pointer =
+         wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-            call_target);
++            call_target, signature_hash);
+     auto [wrapper_cache, was_inserted] =
+         wrappers_.emplace(index, WrapperEntry{code_pointer, compiled_wrapper});
+     USE(was_inserted);
+@@ -1936,8 +1940,8 @@ uint32_t WasmDispatchTableData::Add(int index, Address call_target,
+   } else {
+     auto& [existing_code_pointer, wrapper_code] = it->second;
+     code_pointer = existing_code_pointer;
+-    wasm::GetProcessWideWasmCodePointerTable()->SetEntrypoint(code_pointer,
+-                                                              call_target);
++    wasm::GetProcessWideWasmCodePointerTable()->UpdateEntrypoint(
++        code_pointer, call_target, signature_hash);
+     DCHECK_NULL(wrapper_code);
+     DCHECK_NOT_NULL(compiled_wrapper);
+     wrapper_code = compiled_wrapper;
+@@ -2014,6 +2018,7 @@ void WasmDispatchTable::SetForNonWrapper(int index, Tagged<Object> implicit_arg,
+ void WasmDispatchTable::SetForWrapper(int index, Tagged<Object> implicit_arg,
+                                       Address call_target,
+                                       wasm::CanonicalTypeIndex sig_id,
++                                      uint64_t signature_hash,
+ #if V8_ENABLE_DRUMBRAKE
+                                       uint32_t function_index,
+ #endif  // V8_ENABLE_DRUMBRAKE
+@@ -2038,8 +2043,8 @@ void WasmDispatchTable::SetForWrapper(int index, Tagged<Object> implicit_arg,
+       uint32_t old_target = ReadField<uint32_t>(offset + kTargetBias);
+       offheap_data()->Remove(index, old_target);
+     }
+-    uint32_t code_pointer =
+-        offheap_data()->Add(index, call_target, compiled_wrapper);
++    uint32_t code_pointer = offheap_data()->Add(
++        index, call_target, compiled_wrapper, signature_hash);
+     WriteField<uint32_t>(offset + kTargetBias, code_pointer);
+   } else {
+ #if V8_ENABLE_DRUMBRAKE
+@@ -2071,8 +2076,8 @@ void WasmDispatchTable::InstallCompiledWrapper(int index,
+   SBXCHECK_BOUNDS(index, length());
+   if (v8_flags.wasm_jitless) return;  // Nothing to do.
+ 
+-  uint32_t call_target =
+-      offheap_data()->Add(index, wrapper->instruction_start(), wrapper);
++  uint32_t call_target = offheap_data()->Add(
++      index, wrapper->instruction_start(), wrapper, wrapper->signature_hash());
+   USE(call_target);
+   // When installing a compiled wrapper, we already had the generic wrapper in
+   // place, which shares the same code pointer table entry.
+@@ -2508,8 +2513,7 @@ bool WasmCapiFunction::IsWasmCapiFunction(Tagged<Object> object) {
+ 
+ Handle<WasmCapiFunction> WasmCapiFunction::New(
+     Isolate* isolate, Address call_target, DirectHandle<Foreign> embedder_data,
+-    wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig,
+-    uintptr_t signature_hash) {
++    wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig) {
+   // TODO(jkummerow): Install a JavaScript wrapper. For now, calling
+   // these functions directly is unsupported; they can only be called
+   // from Wasm code.
+@@ -2522,7 +2526,7 @@ Handle<WasmCapiFunction> WasmCapiFunction::New(
+   DirectHandle<WasmCapiFunctionData> fun_data =
+       isolate->factory()->NewWasmCapiFunctionData(
+           call_target, embedder_data, BUILTIN_CODE(isolate, Illegal), rtt,
+-          sig_index, sig, signature_hash);
++          sig_index, sig);
+   DirectHandle<SharedFunctionInfo> shared =
+       isolate->factory()->NewSharedFunctionInfoForWasmCapiFunction(fun_data);
+   Handle<JSFunction> result =
+@@ -2709,24 +2713,19 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
+           ? isolate->builtins()->code_handle(Builtin::kJSToJSWrapper)
+           : isolate->builtins()->code_handle(Builtin::kJSToJSWrapperInvalidSig);
+ 
+-#if V8_ENABLE_SANDBOX
+-  uint64_t signature_hash = wasm::SignatureHasher::Hash(sig);
+-#else
+-  uintptr_t signature_hash = 0;
+-#endif
+-
+   DirectHandle<WasmJSFunctionData> function_data =
+       factory->NewWasmJSFunctionData(sig_id, callable, js_to_js_wrapper_code,
+-                                     rtt, suspend, wasm::kNoPromise,
+-                                     signature_hash);
++                                     rtt, suspend, wasm::kNoPromise);
+   DirectHandle<WasmInternalFunction> internal_function{
+       function_data->internal(), isolate};
+ 
+   if (!wasm::IsJSCompatibleSignature(canonical_sig)) {
+     Address builtin_entry =
+         Builtins::EntryOf(Builtin::kWasmToJsWrapperInvalidSig, isolate);
++    uint64_t signature_hash = wasm::SignatureHasher::Hash(sig);
+     uint32_t wrapper_code_pointer =
+-        function_data->offheap_data()->set_generic_wrapper(builtin_entry);
++        function_data->offheap_data()->set_generic_wrapper(builtin_entry,
++                                                           signature_hash);
+     internal_function->set_call_target(wrapper_code_pointer);
+ #if V8_ENABLE_DRUMBRAKE
+   } else if (v8_flags.wasm_jitless) {
+@@ -2760,8 +2759,10 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
+     } else if (UseGenericWasmToJSWrapper(kind, canonical_sig, suspend)) {
+       Address code_entry =
+           Builtins::EntryOf(Builtin::kWasmToJsWrapperAsm, isolate);
+-      code_pointer =
+-          function_data->offheap_data()->set_generic_wrapper(code_entry);
++
++      uint64_t signature_hash = wasm::SignatureHasher::Hash(sig);
++      code_pointer = function_data->offheap_data()->set_generic_wrapper(
++          code_entry, signature_hash);
+     } else {
+       // Initialize the import wrapper cache if that hasn't happened yet.
+       cache->LazyInitialize(isolate);
+@@ -2800,20 +2801,21 @@ uint32_t WasmJSFunctionData::OffheapData::set_compiled_wrapper(
+   if (wrapper_code_pointer_ == wasm::kInvalidWasmCodePointer) {
+     wrapper_code_pointer_ =
+         wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-            wrapper->instruction_start());
++            wrapper->instruction_start(), wrapper->signature_hash());
+   } else {
+-    wasm::GetProcessWideWasmCodePointerTable()->SetEntrypoint(
+-        wrapper_code_pointer_, wrapper->instruction_start());
++    wasm::GetProcessWideWasmCodePointerTable()->UpdateEntrypoint(
++        wrapper_code_pointer_, wrapper->instruction_start(),
++        wrapper->signature_hash());
+   }
+   return wrapper_code_pointer_;
+ }
+ 
+ uint32_t WasmJSFunctionData::OffheapData::set_generic_wrapper(
+-    Address code_entry) {
++    Address code_entry, uint64_t signature_hash) {
+   DCHECK_EQ(wrapper_code_pointer_, wasm::kInvalidWasmCodePointer);
+   wrapper_code_pointer_ =
+       wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-          code_entry);
++          code_entry, signature_hash);
+   return wrapper_code_pointer_;
+ }
+ 
+diff --git a/src/wasm/wasm-objects.h b/src/wasm/wasm-objects.h
+index 12a573fb372..c4b8380c88f 100644
+--- a/src/wasm/wasm-objects.h
++++ b/src/wasm/wasm-objects.h
+@@ -714,8 +714,8 @@ class WasmDispatchTableData {
+   // wrappers. This function adds an entry for a wrapper. If {compiled_wrapper}
+   // is nullptr, the entry is for the generic wrapper.
+   // The CodePointerTableEntry is reused for the generic and compiled wrapper.
+-  uint32_t Add(int index, Address call_target,
+-               wasm::WasmCode* compiled_wrapper);
++  uint32_t Add(int index, Address call_target, wasm::WasmCode* compiled_wrapper,
++               uint64_t signature_hash);
+   void Remove(int index, uint32_t call_target);
+ 
+   // The {wrappers_} data structure tracks installed wrappers, both generic
+@@ -845,6 +845,7 @@ class WasmDispatchTable : public ExposedTrustedObject {
+   void V8_EXPORT_PRIVATE SetForWrapper(int index, Tagged<Object> implicit_arg,
+                                        Address call_target,
+                                        wasm::CanonicalTypeIndex sig_id,
++                                       uint64_t signature_hash,
+ #if V8_ENABLE_DRUMBRAKE
+                                        uint32_t function_index,
+ #endif  // V8_ENABLE_DRUMBRAKE
+@@ -974,8 +975,7 @@ class WasmCapiFunction : public JSFunction {
+   static Handle<WasmCapiFunction> New(Isolate* isolate, Address call_target,
+                                       DirectHandle<Foreign> embedder_data,
+                                       wasm::CanonicalTypeIndex sig_index,
+-                                      const wasm::CanonicalSig* sig,
+-                                      uintptr_t signature_hash);
++                                      const wasm::CanonicalSig* sig);
+ 
+   const wasm::CanonicalSig* sig() const;
+ 
+@@ -1146,7 +1146,7 @@ class WasmJSFunctionData
+ 
+     // These functions return the CPT entry owned by this class.
+     uint32_t set_compiled_wrapper(wasm::WasmCode* wrapper);
+-    uint32_t set_generic_wrapper(Address call_target);
++    uint32_t set_generic_wrapper(Address call_target, uint64_t signature_hash);
+ 
+    private:
+     uint32_t wrapper_code_pointer_ = wasm::kInvalidWasmCodePointer;
+@@ -1514,6 +1514,7 @@ MaybeHandle<Object> JSToWasmObject(Isolate* isolate, const WasmModule* module,
+ // respective JS representation. The caller is responsible for not providing an
+ // object which cannot be transformed to JS.
+ Handle<Object> WasmToJSObject(Isolate* isolate, Handle<Object> value);
++
+ }  // namespace wasm
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/src/wasm/wasm-objects.tq b/src/wasm/wasm-objects.tq
+index b6f96f49447..3b5e9c0daf0 100644
+--- a/src/wasm/wasm-objects.tq
++++ b/src/wasm/wasm-objects.tq
+@@ -92,12 +92,6 @@ extern class WasmInternalFunction extends ExposedTrustedObject {
+   call_target: uint32_t;
+   @if(WASM_CODE_POINTER_NEEDS_PADDING) optional_padding: uint32;
+   @ifnot(WASM_CODE_POINTER_NEEDS_PADDING) optional_padding: void;
+-
+-  // The signature hash. See signature-hashing.h for background.
+-  // The value stored here must be in sync with {call_target}!
+-  // Ideally we'd type this as "uint64", but Torque doesn't support that,
+-  // and we only enable the sandbox when uintptr == uint64 anyway.
+-  @if(V8_ENABLE_SANDBOX) signature_hash: uintptr;
+ }
+ 
+ extern operator '.implicit_arg' macro LoadImplicitArgFromWasmInternalFunction(
+diff --git a/src/wasm/wrappers.cc b/src/wasm/wrappers.cc
+index b6099976291..d83ec95630d 100644
+--- a/src/wasm/wrappers.cc
++++ b/src/wasm/wrappers.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include <bit>
+ #include <optional>
+ 
+ #include "src/base/small-vector.h"
+@@ -364,8 +365,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ 
+   OpIndex BuildCallAndReturn(V<Context> js_context, V<HeapObject> function_data,
+                              base::Vector<OpIndex> args, bool do_conversion,
+-                             bool set_in_wasm_flag,
+-                             uint64_t expected_sig_hash) {
++                             bool set_in_wasm_flag) {
+     const int rets_count = static_cast<int>(sig_->return_count());
+     base::SmallVector<OpIndex, 1> rets(rets_count);
+ 
+@@ -381,8 +381,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+           V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
+               function_data, LoadOp::Kind::TaggedBase().Immutable(),
+               WasmExportedFunctionData::kProtectedInternalOffset));
+-      auto [target, implicit_arg] =
+-          BuildFunctionTargetAndImplicitArg(internal, expected_sig_hash);
++      auto [target, implicit_arg] = BuildFunctionTargetAndImplicitArg(internal);
+       BuildCallWasmFromWrapper(__ phase_zone(), sig_, target, implicit_arg,
+                                args, base::VectorOf(rets));
+     }
+@@ -432,11 +431,6 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+         __ Load(js_closure, LoadOp::Kind::TaggedBase(),
+                 MemoryRepresentation::TaggedPointer(),
+                 JSFunction::kSharedFunctionInfoOffset);
+-#ifdef V8_ENABLE_SANDBOX
+-    uint64_t signature_hash = SignatureHasher::Hash(sig_);
+-#else
+-    uint64_t signature_hash = 0;
+-#endif
+     V<WasmFunctionData> function_data =
+         V<WasmFunctionData>::Cast(__ LoadTrustedPointerField(
+             shared, LoadOp::Kind::TaggedBase(),
+@@ -488,7 +482,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+       }
+       jsval =
+           BuildCallAndReturn(js_context, function_data, base::VectorOf(args),
+-                             do_conversion, set_in_wasm_flag, signature_hash);
++                             do_conversion, set_in_wasm_flag);
+       GOTO(done, jsval);
+       __ Bind(slow_path);
+     }
+@@ -514,7 +508,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+     }
+ 
+     jsval = BuildCallAndReturn(js_context, function_data, base::VectorOf(args),
+-                               do_conversion, set_in_wasm_flag, signature_hash);
++                               do_conversion, set_in_wasm_flag);
+     // If both the default and a fast transformation paths are present,
+     // get the return value based on the path used.
+     if (include_fast_path) {
+@@ -1337,6 +1331,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ 
+   V<WordPtr> BuildLoadCallTargetFromExportedFunctionData(
+       V<WasmFunctionData> function_data) {
++    // TODO(sroettger): this code should do a signature check, but it's only
++    // used for CAPI.
+     V<WasmInternalFunction> internal =
+         V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
+             function_data, LoadOp::Kind::TaggedBase().Immutable(),
+@@ -1344,10 +1340,12 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+     V<Word32> code_pointer = __ Load(internal, LoadOp::Kind::TaggedBase(),
+                                      MemoryRepresentation::Uint32(),
+                                      WasmInternalFunction::kCallTargetOffset);
++    constexpr size_t entry_size_log2 =
++        std::bit_width(sizeof(WasmCodePointerTableEntry)) - 1;
+     return __ Load(
+         __ ExternalConstant(ExternalReference::wasm_code_pointer_table()),
+         __ ChangeUint32ToUintPtr(code_pointer), LoadOp::Kind::RawAligned(),
+-        MemoryRepresentation::UintPtr(), 0, kSystemPointerSizeLog2);
++        MemoryRepresentation::UintPtr(), 0, entry_size_log2);
+   }
+ 
+   const OpIndex SafeLoad(OpIndex base, int offset, CanonicalValueType type) {
+diff --git a/test/cctest/compiler/test-code-generator.cc b/test/cctest/compiler/test-code-generator.cc
+index 1c16b781edc..190fc1ae178 100644
+--- a/test/cctest/compiler/test-code-generator.cc
++++ b/test/cctest/compiler/test-code-generator.cc
+@@ -1687,10 +1687,11 @@ TEST(Regress_1171759) {
+   std::shared_ptr<wasm::NativeModule> module =
+       AllocateNativeModule(handles.main_isolate(), code->instruction_size());
+   wasm::WasmCodeRefScope wasm_code_ref_scope;
+-  wasm::WasmCode* wasm_code = module->AddCodeForTesting(code);
++  wasm::WasmCode* wasm_code =
++      module->AddCodeForTesting(code, desc->signature_hash());
+   uint32_t code_pointer =
+       wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-          wasm_code->instruction_start());
++          wasm_code->instruction_start(), wasm_code->signature_hash());
+ 
+   // Generate a minimal calling function, to push stack arguments.
+   RawMachineAssemblerTester<int32_t> mt;
+diff --git a/test/cctest/compiler/test-multiple-return.cc b/test/cctest/compiler/test-multiple-return.cc
+index 8b43c27eaf8..b745e379215 100644
+--- a/test/cctest/compiler/test-multiple-return.cc
++++ b/test/cctest/compiler/test-multiple-return.cc
+@@ -191,10 +191,12 @@ void TestReturnMultipleValues(MachineType type, int min_count, int max_count) {
+       std::shared_ptr<wasm::NativeModule> module = AllocateNativeModule(
+           handles.main_isolate(), code->instruction_size());
+       wasm::WasmCodeRefScope wasm_code_ref_scope;
+-      wasm::WasmCode* wasm_code = module->AddCodeForTesting(code);
++      wasm::WasmCode* wasm_code =
++          module->AddCodeForTesting(code, desc->signature_hash());
+       uint32_t code_pointer =
+           wasm::GetProcessWideWasmCodePointerTable()
+-              ->AllocateAndInitializeEntry(wasm_code->instruction_start());
++              ->AllocateAndInitializeEntry(wasm_code->instruction_start(),
++                                           wasm_code->signature_hash());
+ 
+       RawMachineAssemblerTester<int32_t> mt(CodeKind::JS_TO_WASM_FUNCTION);
+       const int input_count = 2 + param_count;
+@@ -243,7 +245,9 @@ void TestReturnMultipleValues(MachineType type, int min_count, int max_count) {
+ // Create a frame larger than UINT16_MAX to force TF to use an extra register
+ // when popping the frame.
+ TEST(TestReturnMultipleValuesLargeFrame) {
+-  TestReturnMultipleValues<20000, 20000>(MachineType::Int32(), 2, 3);
++  TestReturnMultipleValues<wasm::kV8MaxWasmFunctionParams,
++                           wasm::kV8MaxWasmFunctionParams>(MachineType::Int32(),
++                                                           2, 3);
+ }
+ 
+ TEST_MULTI(Int32, MachineType::Int32())
+@@ -292,10 +296,11 @@ void ReturnLastValue(MachineType type) {
+     std::shared_ptr<wasm::NativeModule> module =
+         AllocateNativeModule(handles.main_isolate(), code->instruction_size());
+     wasm::WasmCodeRefScope wasm_code_ref_scope;
+-    wasm::WasmCode* wasm_code = module->AddCodeForTesting(code);
++    wasm::WasmCode* wasm_code =
++        module->AddCodeForTesting(code, desc->signature_hash());
+     uint32_t code_pointer =
+         wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-            wasm_code->instruction_start());
++            wasm_code->instruction_start(), wasm_code->signature_hash());
+ 
+     // Generate caller.
+     int expect = return_count - 1;
+@@ -361,10 +366,11 @@ void ReturnSumOfReturns(MachineType type) {
+     std::shared_ptr<wasm::NativeModule> module =
+         AllocateNativeModule(handles.main_isolate(), code->instruction_size());
+     wasm::WasmCodeRefScope wasm_code_ref_scope;
+-    wasm::WasmCode* wasm_code = module->AddCodeForTesting(code);
++    wasm::WasmCode* wasm_code =
++        module->AddCodeForTesting(code, desc->signature_hash());
+     uint32_t code_pointer =
+         wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-            wasm_code->instruction_start());
++            wasm_code->instruction_start(), wasm_code->signature_hash());
+ 
+     // Generate caller.
+     RawMachineAssemblerTester<int32_t> mt;
+diff --git a/test/cctest/wasm/test-c-wasm-entry.cc b/test/cctest/wasm/test-c-wasm-entry.cc
+index 6af082f2932..b7e3340086f 100644
+--- a/test/cctest/wasm/test-c-wasm-entry.cc
++++ b/test/cctest/wasm/test-c-wasm-entry.cc
+@@ -61,7 +61,7 @@ class CWasmEntryArgTester {
+     WriteToBuffer(&packer, args...);
+     uint32_t wasm_call_target =
+         GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-            wasm_code_->instruction_start());
++            wasm_code_->instruction_start(), wasm_code_->signature_hash());
+     DirectHandle<Object> object_ref = runner_.builder().instance_object();
+     Execution::CallWasm(isolate_, c_wasm_entry_, wasm_call_target, object_ref,
+                         packer.argv());
+diff --git a/test/cctest/wasm/wasm-run-utils.cc b/test/cctest/wasm/wasm-run-utils.cc
+index 370168f4b55..cf4dd9e154d 100644
+--- a/test/cctest/wasm/wasm-run-utils.cc
++++ b/test/cctest/wasm/wasm-run-utils.cc
+@@ -303,12 +303,13 @@ void TestingModuleBuilder::AddIndirectFunctionTable(
+       if (function_index < test_module_->num_imported_functions &&
+           trusted_instance_data_->dispatch_table_for_imports()->IsAWrapper(
+               function_index)) {
++        uint64_t signature_hash = SignatureHasher::Hash(function.sig);
+         trusted_instance_data_->dispatch_table(table_index)
+             ->SetForWrapper(
+                 i, *entry.implicit_arg(),
+                 wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(
+-                    entry.call_target()),
+-                sig_id,
++                    entry.call_target(), signature_hash),
++                sig_id, signature_hash,
+ #if V8_ENABLE_DRUMBRAKE
+                 function.func_index,
+ #endif  // !V8_ENABLE_DRUMBRAKE
+@@ -572,15 +573,16 @@ WasmFunctionCompiler::WasmFunctionCompiler(Zone* zone, const FunctionSig* sig,
+ 
+ WasmFunctionCompiler::~WasmFunctionCompiler() = default;
+ 
+-/* static */
+-FunctionSig* WasmRunnerBase::CreateSig(Zone* zone, MachineType return_type,
++FunctionSig* WasmRunnerBase::CreateSig(MachineType return_type,
+                                        base::Vector<MachineType> param_types) {
+   int return_count = return_type.IsNone() ? 0 : 1;
+   int param_count = param_types.length();
+ 
++  Zone& zone = builder_.SignatureZone();
++
+   // Allocate storage array in zone.
+   ValueType* sig_types =
+-      zone->AllocateArray<ValueType>(return_count + param_count);
++      zone.AllocateArray<ValueType>(return_count + param_count);
+ 
+   // Convert machine types to local types, and check that there are no
+   // MachineType::None()'s in the parameters.
+@@ -590,7 +592,7 @@ FunctionSig* WasmRunnerBase::CreateSig(Zone* zone, MachineType return_type,
+     CHECK_NE(MachineType::None(), param);
+     sig_types[idx++] = ValueType::For(param);
+   }
+-  return zone->New<FunctionSig>(return_count, param_count, sig_types);
++  return zone.New<FunctionSig>(return_count, param_count, sig_types);
+ }
+ 
+ }  // namespace wasm
+diff --git a/test/cctest/wasm/wasm-run-utils.h b/test/cctest/wasm/wasm-run-utils.h
+index ec27f3cfde5..66b2ab33bbc 100644
+--- a/test/cctest/wasm/wasm-run-utils.h
++++ b/test/cctest/wasm/wasm-run-utils.h
+@@ -129,6 +129,8 @@ class TestingModuleBuilder {
+     return reinterpret_cast<T*>(globals_data_ + global->offset);
+   }
+ 
++  Zone& SignatureZone() { return test_module_->signature_zone; }
++
+   // TODO(14034): Allow selecting type finality.
+   ModuleTypeIndex AddSignature(const FunctionSig* sig) {
+     const bool is_final = true;
+@@ -402,11 +404,6 @@ class WasmRunnerBase : public InitializedHandleScope {
+ 
+   void SwitchToDebug() { builder_.SwitchToDebug(); }
+ 
+-  template <typename ReturnType, typename... ParamTypes>
+-  const FunctionSig* CreateSig() {
+-    return WasmRunnerBase::CreateSig<ReturnType, ParamTypes...>(&zone_);
+-  }
+-
+   static const CanonicalSig* CanonicalizeSig(const FunctionSig* sig) {
+     // TODO(clemensb): Make this a single function call.
+     CanonicalTypeIndex sig_id = GetTypeCanonicalizer()->AddRecursiveGroup(sig);
+@@ -414,12 +411,12 @@ class WasmRunnerBase : public InitializedHandleScope {
+   }
+ 
+   template <typename ReturnType, typename... ParamTypes>
+-  static FunctionSig* CreateSig(Zone* zone) {
++  FunctionSig* CreateSig() {
+     std::array<MachineType, sizeof...(ParamTypes)> param_machine_types{
+         {MachineTypeForC<ParamTypes>()...}};
+     base::Vector<MachineType> param_vec(param_machine_types.data(),
+                                         param_machine_types.size());
+-    return CreateSig(zone, MachineTypeForC<ReturnType>(), param_vec);
++    return CreateSig(MachineTypeForC<ReturnType>(), param_vec);
+   }
+ 
+   // TODO(clemensb): Remove, use {CallViaJS} directly.
+@@ -461,8 +458,8 @@ class WasmRunnerBase : public InitializedHandleScope {
+   }
+ 
+  private:
+-  static FunctionSig* CreateSig(Zone* zone, MachineType return_type,
+-                                base::Vector<MachineType> param_types);
++  FunctionSig* CreateSig(MachineType return_type,
++                         base::Vector<MachineType> param_types);
+ 
+  protected:
+   wasm::WasmCodeRefScope code_ref_scope_;
+diff --git a/test/fuzzer/multi-return.cc b/test/fuzzer/multi-return.cc
+index ce4eb3c607e..d548f6aca5c 100644
+--- a/test/fuzzer/multi-return.cc
++++ b/test/fuzzer/multi-return.cc
+@@ -251,10 +251,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+   std::shared_ptr<wasm::NativeModule> module =
+       AllocateNativeModule(i_isolate, code->instruction_size());
+   wasm::WasmCodeRefScope wasm_code_ref_scope;
+-  wasm::WasmCode* wasm_code = module->AddCodeForTesting(code);
++  wasm::WasmCode* wasm_code =
++      module->AddCodeForTesting(code, desc->signature_hash());
+   uint32_t code_pointer =
+       wasm::GetProcessWideWasmCodePointerTable()->AllocateAndInitializeEntry(
+-          wasm_code->instruction_start());
++          wasm_code->instruction_start(), wasm_code->signature_hash());
+   // Generate wrapper.
+   int expect = 0;
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,52 @@
+From 21fcc74333ed48097025343dcdb70227e04f933c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Dominik=20Inf=C3=BChr?= <dinfuehr@chromium.org>
+Date: Wed, 7 May 2025 11:04:22 +0200
+Subject: [PATCH] [heap] Fix sandbox access in
+ MutablePageMetadata::owner_identity()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+owner_identity() is used in a SBXCHECK and this is not supposed to
+access the sandbox. However, in a DCHECK we were accessing the
+sandbox just to check the page flags in a DCHECK. This CL allows
+the sandbox access just for the DCHECK.
+
+Bug: 411598604, 415968772
+Cq-Include-Trybots: luci.v8.try:v8_linux64_pku_dbg,v8_linux64_pku_rel
+Change-Id: I9d73e39917e6ddb320d8be7aa93197bda81d17d2
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6516383
+Commit-Queue: Dominik Inführ <dinfuehr@chromium.org>
+Reviewed-by: Stephen Röttger <sroettger@google.com>
+Cr-Commit-Position: refs/heads/main@{#100112}
+---
+ src/heap/mutable-page-metadata-inl.h | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/heap/mutable-page-metadata-inl.h b/src/heap/mutable-page-metadata-inl.h
+index bb8197b9974..9feb072179e 100644
+--- a/src/heap/mutable-page-metadata-inl.h
++++ b/src/heap/mutable-page-metadata-inl.h
+@@ -10,6 +10,7 @@
+ 
+ #include "src/heap/memory-chunk-metadata-inl.h"
+ #include "src/heap/spaces-inl.h"
++#include "src/sandbox/hardware-support.h"
+ 
+ namespace v8 {
+ namespace internal {
+@@ -52,7 +53,10 @@ void MutablePageMetadata::MoveExternalBackingStoreBytes(
+ }
+ 
+ AllocationSpace MutablePageMetadata::owner_identity() const {
+-  DCHECK_EQ(owner() == nullptr, Chunk()->InReadOnlySpace());
++  {
++    AllowSandboxAccess temporary_sandbox_access;
++    DCHECK_EQ(owner() == nullptr, Chunk()->InReadOnlySpace());
++  }
+   if (!owner()) return RO_SPACE;
+   return owner()->identity();
+ }
+-- 
+2.43.0
+

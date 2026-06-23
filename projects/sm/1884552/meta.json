@@ -1,0 +1,46 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1884552",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/IonAnalysis.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion MaybeFoldDiamondConditionBlock \u2014 Successor Count Check Admits Degenerate MTableSwitch, UpdateTestSuccessors toGoto() Cast Dereferences Switch Jump Table as Block Pointer. CVE-2024-3854 (sec-high). A type confusion and out-of-bounds read vulnerability exists in SpiderMonkey's Ion JIT compiler in the MaybeFoldDiamondConditionBlock optimization in js/src/jit/IonAnalysis.cpp. The optimization looks for a diamond pattern where an initialBlock branches into trueBranch and falseBranch that merge at a phiBlock, followed by a testBlock. When matching trueBranch and falseBranch, the code only verifies the number of incoming and outgoing edges, not the actual control instruction type. If an empty switch statement (MTableSwitch with a single successor) appears in one of the branches, it passes the check because it has one successor, same as MGoto. In UpdateTestSuccessors, the code assumes any block with a single successor ends in MGoto (asserts ins->isGoto()), but the degenerate switch violates this assumption. In non-debug builds, the MTableSwitch is incorrectly cast to MGoto, and the pointer to the switch's successors vector backing buffer is treated as the target block, leading to out-of-bounds reads when removePredecessor accesses fields from this garbage pointer. The fix (changeset cf42085d7c1d) refactors IsDiamondPattern to check that the last instruction is actually a Goto instead of just checking the successor count.",
+    "fix_commits": [
+        "fa7f622001a7",
+        "7860e1e15faf"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-refactor-isdiamondpattern.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1884552: Refactor IsDiamondPattern r=jandem",
+            "source_commit": "fa7f622001a7",
+            "commit": "fa7f622001a7",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/fa7f622001a7",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/fa7f622001a7"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-testcase.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1884552: Add testcase r=jandem",
+            "source_commit": "7860e1e15faf",
+            "commit": "7860e1e15faf",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/7860e1e15faf",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/7860e1e15faf"
+        }
+    ],
+    "vrp": null
+}

@@ -1,0 +1,50 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1814899",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CodeGenerator.cpp",
+        "js/src/jit/shared/CodeGenerator-shared.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/jit/shared"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Incorrect code generation",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion CodeGenerator OsiSpace — Missing ensureOsiSpace() Before Call Sites + Erroneous lastOsiPointOffset_ Advance Lets Consecutive OSI Patches Overlap. CVE-2023-25751 (sec-high, MFSA 2023-09, Firefox 111). Ion's on-stack invalidation (OSI) mechanism lets the GC atomically replace a live jitcode call return address with a bailout stub when the underlying Ion code has been invalidated (e.g. by shape changes or compacting GC). An OSI point is patched by overwriting a `PatchWrite_NearCallSize()` (typically 5 bytes on x86_64) span of instructions immediately before the associated `callJit` / `callWithABI`. To guarantee that span is always present, `js::jit::CodeGeneratorShared::ensureOsiSpace()` in js/src/jit/shared/CodeGenerator-shared.cpp pads the code stream with no-ops until `masm.currentOffset() - lastOsiPointOffset_ >= PatchWrite_NearCallSize()`. The vulnerable version had two interacting defects. First, in js/src/jit/CodeGenerator.cpp, several Ion call-emitting routines — `callVMInternal`, `visitCallNative`, `visitCallDOMNative`, `visitCallGeneric`, `visitCallKnown`, `emitApplyGeneric`, `visitGetDOMProperty`, `visitSetDOMProperty`, `emitIonToWasmCallBase` — emitted `masm.callJit` / `masm.callWithABI` *without* calling `ensureOsiSpace()` first, so the code immediately preceding the call was whatever the previous codegen had emitted (often only 2–3 bytes of instructions). Second, `CodeGeneratorShared::ensureOsiSpace()` itself contained a bogus trailing assignment `lastOsiPointOffset_ = masm.currentOffset();` which advanced the invariant anchor even when no OSI point was actually being emitted — so subsequent checks saw the span as satisfied when it was not. The combined effect is that two OSI points can sit closer together in the Ion code stream than `PatchWrite_NearCallSize()`. When the GC later patches the second OSI point, the 5-byte near-call instruction it writes overlaps the bytes of the first OSI point, corrupting that earlier instruction. Execution resuming through the corrupted instruction lands in middle-of-instruction bytes, producing either a wildpointer crash (the debug assertion in the Ion frame iterator fires: `PatchableBackedge` invariants) or, in release builds, arbitrary-looking control flow that an attacker can use as a JIT miscompile primitive. The fix (commit d307cab06d56b4be62796b083b16feb86a47829c by Iain Ireland, 2023-02-13, r=jandem; Phabricator D169274) adds `ensureOsiSpace();` before each of the nine call-site emitters in CodeGenerator.cpp and removes the stray `lastOsiPointOffset_ = masm.currentOffset();` from CodeGenerator-shared.cpp so the invariant is anchored only by actual OSI-point emission in `markOsiPoint`. The in-tree regression test (`js/src/jit-test/tests/ion/bug1814899.js`, committed separately as 5ba1f3caa6dd8 on 2023-04-25) ships as poc.js verbatim: it sets up a bar/foo mutual-recursion pair inside a `with({})` scope, uses a `for..in` over a string to exercise the `visitCallGeneric`/`visitCallNative` path, and drops `gczeal(14, 1)` inside `bar` to force compacting GC patching of the Ion code while the colliding OSI points are live.",
+    "fix_commits": [
+        "d307cab06d56b4be62796b083b16feb86a47829c",
+        "5ba1f3caa6dd855ad9703944c4887069db5078aa"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-ensure-more-osispace.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1814899: Ensure more OsiSpace r=jandem",
+            "source_commit": "d307cab06d56b4be62796b083b16feb86a47829c",
+            "commit": "d307cab06d56b4be62796b083b16feb86a47829c",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/d307cab06d56b4be62796b083b16feb86a47829c",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/d307cab06d56b4be62796b083b16feb86a47829c",
+            "phabricator": "D169274"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-testcase.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1814899: Add testcase r=jandem",
+            "source_commit": "5ba1f3caa6dd855ad9703944c4887069db5078aa",
+            "commit": "5ba1f3caa6dd855ad9703944c4887069db5078aa",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/5ba1f3caa6dd855ad9703944c4887069db5078aa",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/5ba1f3caa6dd855ad9703944c4887069db5078aa",
+            "phabricator": "D169275"
+        }
+    ],
+    "vrp": null
+}

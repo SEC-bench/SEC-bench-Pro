@@ -1,0 +1,26 @@
+diff --git a/src/maglev/maglev-ir.h b/src/maglev/maglev-ir.h
+index 0b03695..c1e7e09 100644
+--- a/src/maglev/maglev-ir.h
++++ b/src/maglev/maglev-ir.h
+@@ -6435,7 +6435,9 @@ class VirtualObject : public FixedInputValueNodeT<0, VirtualObject> {
+   ValueNode* get(uint32_t offset) const {
+     DCHECK_EQ(type_, kDefault);
+     if (is_new_style_vobj()) {
+-      return slots_.data[object_layout_->SlotAtOffset(offset)];
++      uint32_t slot_index = object_layout_->SlotAtOffset(offset);
++      SBXCHECK_LT(slot_index, slot_count());
++      return slots_.data[slot_index];
+     }
+     SBXCHECK_LT(offset / kTaggedSize, slot_count());
+     return slots_.data[offset / kTaggedSize];
+@@ -6448,7 +6450,9 @@ class VirtualObject : public FixedInputValueNodeT<0, VirtualObject> {
+     // should be stored in known_node_aspects/NodeInfo.
+     DCHECK(!value->properties().is_conversion());
+     if (is_new_style_vobj()) {
+-      slots_.data[object_layout_->SlotAtOffset(offset)] = value;
++      uint32_t slot_index = object_layout_->SlotAtOffset(offset);
++      SBXCHECK_LT(slot_index, slot_count());
++      slots_.data[slot_index] = value;
+       return;
+     }
+     SBXCHECK_LT(offset / kTaggedSize, slot_count());

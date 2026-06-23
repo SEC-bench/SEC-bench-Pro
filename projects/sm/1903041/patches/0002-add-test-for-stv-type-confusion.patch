@@ -1,0 +1,83 @@
+From ca21196ef25cd9f655dba12136cf39f035a09a7c Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Mon, 26 Aug 2024 14:41:41 +0000
+Subject: [PATCH] Bug 1903041: Add test for STV type confusion. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D214990
+---
+ js/src/jit-test/tests/wasm/gc/bug-1903041.js | 28 ++++++++++++++++++++
+ js/src/wasm/WasmTypeDef.h                    | 11 ++++----
+ 2 files changed, 34 insertions(+), 5 deletions(-)
+ create mode 100644 js/src/jit-test/tests/wasm/gc/bug-1903041.js
+
+diff --git a/js/src/jit-test/tests/wasm/gc/bug-1903041.js b/js/src/jit-test/tests/wasm/gc/bug-1903041.js
+new file mode 100644
+index 0000000000000..ce62f32c9353e
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/gc/bug-1903041.js
+@@ -0,0 +1,28 @@
++// |jit-test| test-also=--setpref=wasm_test_serialization=true; skip-if: !wasmGcEnabled()
++
++wasmFailValidateText(`(module
++  (type $a (struct))
++  (rec
++    (type $b (sub (struct
++      (field (ref $b))
++    )))
++    (type $c (sub $b (struct
++      (field (ref $a))
++    )))
++  )
++)`, /incompatible super type/);
++
++wasmFailValidateText(`(module
++  (type $a (struct))
++  (rec
++    (type $b (sub (struct
++      (field (ref $b))
++    )))
++    (type $c (sub $b (struct
++      (field (ref $c))
++    )))
++    (type $d (sub $c (struct
++      (field (ref $a))
++    )))
++  )
++)`, /incompatible super type/);
+diff --git a/js/src/wasm/WasmTypeDef.h b/js/src/wasm/WasmTypeDef.h
+index 48987cf88d928..813d013bd0d0d 100644
+--- a/js/src/wasm/WasmTypeDef.h
++++ b/js/src/wasm/WasmTypeDef.h
+@@ -828,7 +828,7 @@ class TypeDef {
+     const SuperTypeVector* subSTV = subTypeDef->superTypeVector();
+     const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
+ 
+-    // During construction of a recursion group, the super type vector may not
++    // During construction of a recursion group, the super type vectors may not
+     // have been computed yet, in which case we need to fall back to a linear
+     // search.
+     if (!subSTV || !superSTV) {
+@@ -841,8 +841,12 @@ class TypeDef {
+       return false;
+     }
+ 
+-    // The supertype vector does exist.  So check it points back here.
++    // The supertype vectors do exist. Check that they point to the right
++    // places.
++    MOZ_ASSERT(subSTV);
++    MOZ_ASSERT(superSTV);
+     MOZ_ASSERT(subSTV->typeDef() == subTypeDef);
++    MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
+ 
+     // We need to check if `superTypeDef` is one of `subTypeDef`s super types
+     // by checking in `subTypeDef`s super type vector. We can use the static
+@@ -853,9 +857,6 @@ class TypeDef {
+       return false;
+     }
+ 
+-    MOZ_ASSERT(superSTV);
+-    MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
+-
+     return subSTV->type(subTypingDepth) == superSTV;
+   }
+ 

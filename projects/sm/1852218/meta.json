@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1852218",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JitHints.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --no-threads --disable-oom-functions --baseline-eager --ion-warmup-threshold=0",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "JitHints::addIonHint — mozilla::HashTable remove() Called With Live AddPtr → shrinkIfUnderloaded Invalidates Cached Pointer / Bucket Metadata Corruption. CVE-2023-5172 (sec-high). In js/src/jit/JitHints.cpp, the function addIonHint() accepts an AddPtr (a live hash table lookup handle) and, when the hint map exceeds IonHintMaxEntries (5000), removes the oldest hint entry before inserting the new one. The remove() call mutates the hash table while the AddPtr is still live, violating mozilla::detail::HashTable's mutation invariant. In debug builds this triggers an assertion failure on mMutationCount. In release builds, remove() can call shrinkIfUnderloaded() which may reallocate the hash table's backing storage, invalidating the internal pointer cached in AddPtr. Additionally, if the removed entry shares a hash bucket with the new entry, the slot metadata (Free vs Removed) becomes inconsistent, potentially enabling an attacker to corrupt the hash table state. The fix (changeset 78b325d096c9) reorders the operations to insert the new hint first and remove the oldest hint afterward, ensuring no live AddPtr exists during the removal mutation.",
+    "fix_commits": [
+        "fd2d87c96285a5eb430ae45e28a4a2f351e95293"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-remove-old-hints-after-adding-new-hints.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1852218: Remove old hints after adding new hints",
+            "source_commit": "fd2d87c96285a5eb430ae45e28a4a2f351e95293",
+            "commit": "fd2d87c96285a5eb430ae45e28a4a2f351e95293",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/fd2d87c96285a5eb430ae45e28a4a2f351e95293",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/fd2d87c96285a5eb430ae45e28a4a2f351e95293",
+            "phabricator": "D187807"
+        }
+    ],
+    "vrp": null
+}

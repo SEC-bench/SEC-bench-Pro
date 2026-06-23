@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:394635429",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/regexp/regexp-parser.cc"
+  ],
+  "target_subdir": [
+    "src/regexp"
+  ],
+  "target_vulnerability_type": "Race condition",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A TOCTOU (Time-of-Check-Time-of-Use) race condition in the V8 RegExp parser allows a sandbox escape via out-of-bounds access on the RegExpCapture list. When parsing a regex containing backreferences or named captures, RegExpParserImpl::ScanForCaptures() eagerly scans the full pattern to determine the total capture count (stored in capture_count_), which is then used by GetCapture() to size the captures_ ZoneList. However, since the regex pattern string resides in sandbox-controlled memory, a concurrent worker thread can modify the pattern between the scan phase and the actual parse phase. If the scan phase observes N captures and the subsequent parse phase encounters M > N captures, GetCapture() allocates a list of length N but is then called with an index up to M, resulting in an out-of-bounds access beyond the ZoneList. The returned out-of-bounds RegExpCapture* pointer is then used in two exploit primitives: (1) capture->set_body(body) writes an attacker-controlled value to an arbitrary address, and (2) builder->AddAtom(body) performs an indirect call through the attacker-controlled pointer, enabling control flow hijack.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "6c5f6bdc3652c1bed3b5f3e4a42090cd684e4d75 [regexp] Harden access of captures during RegExp parsing",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6239220",
+      "cl": 6239220,
+      "source_commit": "6c5f6bdc3652c1bed3b5f3e4a42090cd684e4d75",
+      "commit": "6c5f6bdc3652c1bed3b5f3e4a42090cd684e4d75",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6239220 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6239220",
+      "source_cl": 6239220,
+      "source_ref": "refs/changes/20/6239220/2",
+      "source_patchset": 2
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446714227",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--fuzzing --sandbox-fuzzing --allow-natives-syntax --expose-gc --jit-fuzzing --single-threaded",
+  "target_source_files": [
+    "src/compiler/heap-refs.cc"
+  ],
+  "target_subdir": [
+    "src/compiler"
+  ],
+  "target_vulnerability_type": "Out-of-bounds write",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A race condition in MapData::MapData (src/compiler/heap-refs.cc) causes inconsistent caching of Map fields, leading to an out-of-bounds write during Maglev IR graph construction. The MapData constructor reads instance_size_ and in_object_properties_ from the live Map object in two separate non-atomic operations (lines 897 and 913). A concurrent modification of the Map's instance_size_in_words field (e.g., during in-object slack tracking of an Array map) between these two reads can produce an inconsistent state: instance_size_ captures the old smaller value while in_object_properties_ is computed from the newly-increased instance_size, yielding a value that implies more in-object properties than the cached instance_size can hold. When MaglevGraphBuilder::TryReadBoilerplateForFastLiteral uses this MapData, CreateJSArray allocates a VirtualObject with slot_count derived from the stale small instance_size_, but the subsequent loop iterates inobject_properties times (the inflated cached count), calling VirtualObject::set with offsets beyond the allocated slot array. This out-of-bounds write into ASAN-poisoned Zone memory constitutes a V8 sandbox violation. The bug is triggered by concurrently modifying an Array map's instance_size while Maglev compiles a function containing a fast array literal (VisitCreateArrayLiteral path), achievable via --jit-fuzzing --single-threaded --fuzzing flags.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "manual-backport-of-6993031",
+      "evidence_text": "Backport of CL 6993031/6999407: add SBXCHECK_LT for VirtualObject slot indices.",
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/v8/v8/+/6993031",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/6999407"
+      ],
+      "source_cls": [
+        6993031,
+        6999407
+      ],
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6993031",
+      "source_commit": "15a72141745c7c66baf0a776ec88177424b0172e",
+      "source_cl": 6999407
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:365376497",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--wasm-staging --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/deoptimizer/deoptimizer.cc"
+  ],
+  "target_subdir": [
+    "src/deoptimizer"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "The V8 deoptimizer's lazy deoptimization mechanism (DeoptimizeMarkedCode) fails to account for suspended JSPI (JavaScript Promise Integration) Wasm stacks. When a JavaScript function is marked for deoptimization (e.g., due to an invalidated stable map dependency), the deoptimizer patches return addresses on the current thread's stack and all archived thread stacks to redirect execution through the deoptimizer. However, it does not iterate over suspended Wasm stacks stored in isolate->wasm_stacks_. When a JS function frame resides on such a suspended JSPI stack (the Wasm execution was suspended waiting for a Promise), its return address is never patched. Upon resumption of that Wasm stack, execution continues in the now-invalid optimized code with stale assumptions (e.g., about object map/type), bypassing all deoptimization invariants. This leads to type confusion that can be exploited to leak heap object addresses and, combined with a sandbox escape, achieve full remote code execution.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 227,
+      "evidence_text": "Not seeing any issues on Canary related to this change; merges approved for [https://crrev.com/c/5850428](<https://crrev.com/c/5850428>) please backmerge to 12.8 and 12.9 by EOD tomorrow, Friday, 13 September so this fix can be included in the recut of 129 Stable for release Tuesday",
+      "url": "https://crrev.com/c/5850428",
+      "cl": 5850428,
+      "commit": "906e41b88fa5b79d2afc699f8c4da87c4eb9c7e5",
+      "description": "Local patch exported from https://crrev.com/c/5850428 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/5850428",
+      "source_cl": 5850428,
+      "source_commit": "906e41b88fa5b79d2afc699f8c4da87c4eb9c7e5",
+      "source_ref": "refs/changes/28/5850428/2",
+      "source_patchset": 2
+    }
+  ]
+}

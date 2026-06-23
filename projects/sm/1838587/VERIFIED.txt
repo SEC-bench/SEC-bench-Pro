@@ -1,0 +1,10 @@
+VERIFIED at 2026-05-29T05:59:40Z — orchestrator end-to-end on bug 1838587 (sec-high JIT)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type (iter 1/100, 25 lines)
+  - Crash: Assertion failure: slotIndex <= (255), at js/src/jit/CacheIRWriter.h:469
+            -> SEGV in js::jit::CacheIRWriter::loadArgumentFixedSlot
+            -> via tryAttachBoundFunction during CacheIR stub attach for a call
+               with many bound arguments — slotIndex overflowed 8-bit slot id
+  - Fix (patches/0001-fix-from-git-7233c12030b8.patch): "Use loadArgumentDynamic
+    Slot in tryAttachBoundFunction" — switches to dynamic-slot encoding so the
+    8-bit ceiling no longer applies to bound-function args
+  - Fixed image blocks PoC 10/10

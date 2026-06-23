@@ -1,0 +1,91 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+=================================================================
+==10==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x7877dbfff7f0 at pc 0x56006291dac6 bp 0x7ffe1e2340f0 sp 0x7ffe1e2338b0
+WRITE of size 4294967286 at 0x7877dbfff7f0 thread T0
+    #0 0x56006291dac5 in __asan_memmove /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_interceptors_memintrinsics.cpp:71:3
+    #1 0x56006737542b in us_arrayCopy third_party/icu/source/common/unistr.cpp:87:5
+    #2 0x56006737542b in icu_74::UnicodeString::doAppend(char16_t const*, int, int) third_party/icu/source/common/unistr.cpp:1641:7
+    #3 0x5600638cc199 in v8::internal::Intl::ToICUUnicodeString(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, int) src/objects/intl-objects.cc:240:10
+    #4 0x5600638db9bc in v8::internal::Intl::CompareStrings(v8::internal::Isolate*, icu_74::Collator const&, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::String>, v8::internal::Intl::CompareStringsOptions) src/objects/intl-objects.cc:1483:7
+    #5 0x5600638d9d07 in v8::internal::Intl::StringLocaleCompare(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, char const*) third_party/libc++/src/include/__memory/shared_ptr.h
+    #6 0x560062b78c84 in v8::internal::Builtin_Impl_StringPrototypeLocaleCompareIntl(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-intl.cc:74:31
+    #7 0x560066d208b5 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #8 0x560066c79c74 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #9 0x560066c7775b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #10 0x560066c774aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #11 0x560062ea1564 in Call src/execution/simulator.h:191:12
+    #12 0x560062ea1564 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:437:22
+    #13 0x560062ea2b08 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:537:10
+    #14 0x5600629fd6e7 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2147:7
+    #15 0x5600629862f7 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1017:44
+    #16 0x5600629b2513 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4959:10
+    #17 0x5600629bcffe in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5904:37
+    #18 0x5600629bc6d6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5812:18
+    #19 0x5600629bf768 in v8::Shell::Main(int, char**) src/d8/d8.cc:6668:18
+    #20 0x7dc260f411c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x7dc260f4128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x560062880029 in _start (/src/v8/out/x64.asan/d8+0x10f2029) (BuildId: ffbc4a392f73c6e7)
+
+0x7877dbfff7f0 is located 0 bytes after 4294967280-byte region [0x7876dbfff800,0x7877dbfff7f0)
+allocated by thread T0 here:
+    #0 0x56006291f714 in malloc /b/s/w/ir/cache/builder/src/third_party/llvm/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3
+    #1 0x56006737662d in allocate third_party/icu/source/common/unistr.cpp:382:34
+    #2 0x56006737662d in icu_74::UnicodeString::cloneArrayIfNeeded(int, int, signed char, int**, signed char) third_party/icu/source/common/unistr.cpp:1892:8
+    #3 0x5600673753c2 in icu_74::UnicodeString::doAppend(char16_t const*, int, int) third_party/icu/source/common/unistr.cpp:1631:7
+    #4 0x5600638cc199 in v8::internal::Intl::ToICUUnicodeString(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, int) src/objects/intl-objects.cc:240:10
+    #5 0x5600638db9bc in v8::internal::Intl::CompareStrings(v8::internal::Isolate*, icu_74::Collator const&, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::String>, v8::internal::Intl::CompareStringsOptions) src/objects/intl-objects.cc:1483:7
+    #6 0x5600638d9d07 in v8::internal::Intl::StringLocaleCompare(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::String>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>, char const*) third_party/libc++/src/include/__memory/shared_ptr.h
+    #7 0x560062b78c84 in v8::internal::Builtin_Impl_StringPrototypeLocaleCompareIntl(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-intl.cc:74:31
+    #8 0x560066d208b5 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #9 0x560066c79c74 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #10 0x560066c7775b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #11 0x560066c774aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #12 0x560062ea1564 in Call src/execution/simulator.h:191:12
+    #13 0x560062ea1564 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:437:22
+    #14 0x560062ea2b08 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:537:10
+    #15 0x5600629fd6e7 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2147:7
+    #16 0x5600629862f7 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1017:44
+    #17 0x5600629b2513 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4959:10
+    #18 0x5600629bcffe in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5904:37
+    #19 0x5600629bc6d6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5812:18
+    #20 0x5600629bf768 in v8::Shell::Main(int, char**) src/d8/d8.cc:6668:18
+    #21 0x7dc260f411c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x7dc260f4128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #23 0x560062880029 in _start (/src/v8/out/x64.asan/d8+0x10f2029) (BuildId: ffbc4a392f73c6e7)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow third_party/icu/source/common/unistr.cpp:87:5 in us_arrayCopy
+Shadow bytes around the buggy address:
+  0x7877dbfff500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7877dbfff580: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7877dbfff600: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7877dbfff680: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7877dbfff700: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7877dbfff780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00[fa]fa
+  0x7877dbfff800: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7877dbfff880: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7877dbfff900: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7877dbfff980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7877dbfffa00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==10==ABORTING
+
+## V8 sandbox violation detected!
+

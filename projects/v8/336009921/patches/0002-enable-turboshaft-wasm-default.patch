@@ -1,0 +1,15 @@
+diff --git a/src/flags/flag-definitions.h b/src/flags/flag-definitions.h
+index 3d248e3a7df..c2f8f7a77f4 100644
+--- a/src/flags/flag-definitions.h
++++ b/src/flags/flag-definitions.h
+@@ -1376,9 +1376,8 @@ DEFINE_BOOL(turboshaft_enable_debug_features, false,
+ DEFINE_BOOL(turboshaft_enable_debug_features, false,
+             "enables Turboshaft's DebugPrint, StaticAssert and "
+             "CheckTurboshaftTypeOf operations")
+-DEFINE_BOOL(turboshaft_wasm, false,
++DEFINE_BOOL(turboshaft_wasm, true,
+             "enable TurboFan's Turboshaft phases for wasm")
+-DEFINE_WEAK_IMPLICATION(future, turboshaft_wasm)
+ DEFINE_BOOL(turboshaft_wasm_load_elimination, false,
+             "enable Turboshaft's WasmLoadElimination")
+ DEFINE_WEAK_IMPLICATION(turboshaft_wasm, turboshaft_wasm_load_elimination)

@@ -1,0 +1,26 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x561d7bd1c06e bp 0x7ffe71aa0830 sp 0x7ffe71aa07b0 T0)
+==10==The signal is caused by a READ memory access.
+==10==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x561d7bd1c06e in js::gc::Cell::zoneFromAnyThread() const /src/gecko-dev/js/src/gc/Cell.h
+    #1 0x561d7bd1c06e in JS::Compartment::wrap(JSContext*, JS::MutableHandle<JSString*>) /src/gecko-dev/js/src/vm/Compartment.cpp:159:12
+    #2 0x561d7b89bc91 in JS::Compartment::wrap(JSContext*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Compartment-inl.h:51:10
+    #3 0x561d7befd98a in JSContext::getPendingException(JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/JSContext.cpp:1147:23
+    #4 0x561d7bde4329 in JS::GetPendingExceptionStack(JSContext*, JS::ExceptionStack*) /src/gecko-dev/js/src/vm/Exception.cpp:35:12
+    #5 0x561d7bde409e in JS::StealPendingExceptionStack(JSContext*, JS::ExceptionStack*) /src/gecko-dev/js/src/vm/Exception.cpp:17:8
+    #6 0x561d7b7e1c5d in js::shell::AutoReportException::~AutoReportException() /src/gecko-dev/js/src/shell/js.cpp:10111:8
+    #7 0x561d7b7ef504 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11176:5
+    #8 0x561d7b7e4b18 in main /src/gecko-dev/js/src/shell/js.cpp:11577:12
+    #9 0x7fb0e69791c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #10 0x7fb0e697928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #11 0x561d7b6e93e8 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x29bf3e8) (BuildId: 06910f53ef3fa3879ba521195cac1cb1)
+
+==10==Register values:
+rax = 0xfffe2f2f2f2f2f2c  rbx = 0x00000fffce35415a  rcx = 0x1fffc5e5e5e5e5e5  rdx = 0x00000300a5c80001  
+rdi = 0x00007ca0e5de0c70  rsi = 0x00007da0e5de0080  rbp = 0x00007ffe71aa0830  rsp = 0x00007ffe71aa07b0  
+ r8 = 0x00000300a5c80001   r9 = 0x0000000000000000  r10 = 0x00000fffce354122  r11 = 0x0000000000000000  
+r12 = 0x000018052e400508  r13 = 0x00007ffe71aa0910  r14 = 0x000018052e400508  r15 = 0x00007ffe71aa0ad0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Cell.h in js::gc::Cell::zoneFromAnyThread() const
+==10==ABORTING

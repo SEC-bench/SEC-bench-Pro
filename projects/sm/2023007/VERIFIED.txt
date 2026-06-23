@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-29T13:30:00Z — 2026-Q1 import on bug 2023007 (sec-high, 2026-Mar)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Hit MOZ_CRASH(*** Compartment mismatch <a> vs. <b> at argument 0) at /src/gecko-dev/js/src/vm/JSContext-inl.h:56`
+  - matches the report's expected "Compartment mismatch with a structured clone of a CCW to a WebAssembly.Memory" exactly — the JSContext assertion that fires when an object whose compartment ≠ cx's current realm is passed to an API call.
+  - root cause: StructuredClone::writeSharedWasmMemory did not enter the target object's realm before serializing — it used the JSContext realm, which is wrong when the source is a CCW. Triggered when worker postMessage clones a WebAssembly.Memory across compartments.
+  - flags: `--fuzzing-safe --ion-offthread-compile=off --more-compartments`.
+  - fixed image (git a38514932bd9 "Enter the correct realm in writeSharedWasmMemory") blocks PoC 5/5.
+  - This is the freshest import in the dataset (fix landed 2026-03-25, ~2 months before this verify).

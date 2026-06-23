@@ -1,0 +1,81 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1827073",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JSJitFrameIter.h",
+        "js/src/jit/JitFrames.cpp",
+        "js/src/jit/RematerializedFrame.cpp",
+        "js/src/vm/FrameIter-inl.h",
+        "js/src/vm/ArgumentsObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/vm"
+    ],
+    "command_options": "--baseline-warmup-threshold=10 --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds write",
+    "error_type": "ASAN_CRASH",
+    "description": "InlineFrameIterator::unaliasedForEachActual — Callback Invoked nformals Times Instead of nactuals → GCVector infallibleAppend Overflow. Out-of-bounds write vulnerability (csectype-bounds, sec-high) in InlineFrameIterator::unaliasedForEachActual in js/src/jit/JSJitFrameIter.h. When the number of actual arguments (nactuals) is less than the number of formal parameters (nformals), the method incorrectly calls the callback nformals times instead of nactuals times. This causes CopyScriptFrameIterArgs::init in js/src/vm/ArgumentsObject.cpp to invoke infallibleAppend on a GCVector more times than the reserved capacity allows, overflowing the vector's internal buffer and triggering an assertion failure (mLength + 1 <= mTail.mReserved) at mozilla/Vector.h:1303. The bug was exposed by changeset e0aa2e4351ba (bug 1825741) which changed argument handling in ArgumentsObject.cpp. In a release build, this results in a heap buffer overflow when constructing an ArgumentsObject from JIT-inlined frames via the function.arguments getter, potentially allowing memory corruption. The fix was a multi-part patch: changeset 82fddd67a4ae removed unused ReadFrame_Formals, changeset ecbe2aa640a0 simplified unaliasedForEachActual by removing ReadFrame_Overflown, and changeset 39eaca8bc0bf corrected the actual argument reading logic to respect nactuals bounds.",
+    "fix_commits": [
+        "af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a",
+        "9c190ac9cba9de260ebcc12048ceb00f9370142b",
+        "7d0e94636caa2d02aac935b79e959ff38ee39121",
+        "b71d94fb35c0f54be3d0a855204d68e0c6ef7684"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-bug-1827073-part-1-remove-unused-readframe-formals.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1827073 part 1 - Remove unused ReadFrame_Formals. r=iain",
+            "source_commit": "af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a",
+            "commit": "af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a",
+            "phabricator": "D175112"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-bug-1827073-part-2-remove-readframe-overflown-and.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1827073 part 2 - Remove ReadFrame_Overflown and simplify",
+            "source_commit": "9c190ac9cba9de260ebcc12048ceb00f9370142b",
+            "commit": "9c190ac9cba9de260ebcc12048ceb00f9370142b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/9c190ac9cba9de260ebcc12048ceb00f9370142b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/9c190ac9cba9de260ebcc12048ceb00f9370142b",
+            "phabricator": "D175113"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0003-bug-1827073-part-3-fix-reading-of-actual-arguments.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 3,
+            "description": "Bug 1827073 part 3 - Fix reading of actual arguments. r=iain",
+            "source_commit": "7d0e94636caa2d02aac935b79e959ff38ee39121",
+            "commit": "7d0e94636caa2d02aac935b79e959ff38ee39121",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/7d0e94636caa2d02aac935b79e959ff38ee39121",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/7d0e94636caa2d02aac935b79e959ff38ee39121",
+            "phabricator": "D175114"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0004-bug-1827073-part-4-add-test-and-release-assertion.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 4,
+            "description": "Bug 1827073 part 4 - Add test and release assertion. r=iain",
+            "source_commit": "b71d94fb35c0f54be3d0a855204d68e0c6ef7684",
+            "commit": "b71d94fb35c0f54be3d0a855204d68e0c6ef7684",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/b71d94fb35c0f54be3d0a855204d68e0c6ef7684",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/b71d94fb35c0f54be3d0a855204d68e0c6ef7684",
+            "phabricator": "D175115"
+        }
+    ],
+    "vrp": null
+}

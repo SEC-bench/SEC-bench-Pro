@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:398999390",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax",
+  "target_source_files": [
+    "src/json/json-stringifier.cc"
+  ],
+  "target_subdir": [
+    "src/json"
+  ],
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "DCHECK",
+  "description": "When an ExternalTwoByteString that serves as the parent of a SlicedString is internalized via String::MakeThin(), it can be converted into a ThinString pointing to a SeqOneByteString (when the equivalent internalized string has one-byte encoding). However, the SlicedString's own instance type (kTwoByteStringTag | kSlicedStringTag) is never updated to reflect this encoding change. In JsonStringifier::SerializeString(), after calling String::Flatten() on the SlicedString (which returns the SlicedString unchanged, since SlicedStrings are considered flat), the code checks IsOneByteRepresentation() on the SlicedString's stale instance type, concludes it is two-byte, and calls SerializeString_<uc16, uc16>. That function calls GetCharVector<uc16>() which invokes GetFlatContent(), follows the parent chain (SlicedString -> ThinString -> SeqOneByteString), and obtains a one-byte FlatContent. The subsequent DCHECK(flat.IsTwoByte()) fires in debug/ASAN builds; in non-ASAN release builds the one-byte buffer is read as two-byte data, causing an out-of-bounds read and garbled output.",
+  "vrp": 2000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 217,
+      "evidence_text": "Fixed: 398999390; Reviewed-on: CL 6304799",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6304799",
+      "cl": 6304799,
+      "commit": "8db16e651ff456e0eea6e576045623d2039a1d34",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6304799 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6304799",
+      "source_cl": 6304799,
+      "source_commit": "8db16e651ff456e0eea6e576045623d2039a1d34",
+      "source_ref": "refs/changes/99/6304799/9",
+      "source_patchset": 9
+    }
+  ]
+}

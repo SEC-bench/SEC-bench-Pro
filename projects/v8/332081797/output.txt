@@ -1,0 +1,42 @@
+abort: CSA_DCHECK failed: Torque assert 'Is<A>(o)' failed [src/builtins/cast.tq:846] [../../src/builtins/js-to-wasm.tq:740] [../../src/builtins/js-to-wasm.tq:800]
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x5aae765eb536]
+    1: JsToWasmFrame [pc: 0x5aae76706b7a]
+    2: 0 [0x7ea100258e8d] [wasm://wasm/2519ddea:~1] [pc=0x5aae76704ed3](this=0x7ea1002416c9 <JSGlobalProxy>#0#)
+    3: /* anonymous */ [0x7ea100258a89] [/testcase/poc.js:5] [bytecode=0x7fd20004004d offset=96](this=0x7ea1002416c9 <JSGlobalProxy>#0#)
+    4: InternalFrame [pc: 0x5aae7653559c]
+    5: EntryFrame [pc: 0x5aae765352c7]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x5aae765eb536]
+[1]: JsToWasmFrame [pc: 0x5aae76706b7a]
+[2]: 0 [0x7ea100258e8d] [wasm://wasm/2519ddea:~1] [pc=0x5aae76704ed3](this=0x7ea1002416c9 <JSGlobalProxy>#0#) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[3]: /* anonymous */ [0x7ea100258a89] [/testcase/poc.js:5] [bytecode=0x7fd20004004d offset=96](this=0x7ea1002416c9 <JSGlobalProxy>#0#) {
+  // expression stack (top to bottom)
+  [03] : 0x7ea1002416c9 <JSGlobalProxy>#0#
+  [02] : 0x7ea100048ffd <Module map = 0x7ea10024ed59>#1#
+  [01] : 0x7ea100258e8d <JSFunction js-to-wasm::n (sfi = 0x7ea100258e5d)>#2#
+  [00] : 0x7ea100000069 <undefined>
+--------- s o u r c e   c o d e ---------
+var wasm_code = new Uint8Array([0,97,115,109,1,0,0,0,1,12,2,80,0,95,1,99,116,0,96,0,1,116,3,2,1,1,4,12,1,64,0,100,0,1,1,2,251,1,0,11,7,8,1,4,109,97,105,110,0,0,10,12,1,10,0,65,0,37,0,251,2,0,0,11]);\x0avar wasm_module = new WebAssembly.Module(wasm_code);\x0avar wasm_instance = new WebAssembly.Instance(was...
+
+-----------------------------------------
+}
+
+[4]: InternalFrame [pc: 0x5aae7653559c]
+[5]: EntryFrame [pc: 0x5aae765352c7]
+-- ObjectCacheKey --
+
+ #0# 0x7ea1002416c9: 0x7ea1002416c9 <JSGlobalProxy>
+ #1# 0x7ea100048ffd: 0x7ea100048ffd <Module map = 0x7ea10024ed59>
+ #2# 0x7ea100258e8d: 0x7ea100258e8d <JSFunction js-to-wasm::n (sfi = 0x7ea100258e5d)>
+=====================
+

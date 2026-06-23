@@ -1,0 +1,45 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:454927471",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax --sandbox-testing --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/maglev/maglev-ir.cc",
+    "src/builtins/js-trampoline-assembler.cc"
+  ],
+  "target_subdir": [
+    "src/maglev",
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Stack corruption",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "Maglev can directly call a disabled builtin with a stale dispatch handle, producing stack imbalance and sandbox violation.",
+  "vrp": "22000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "security-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "410f860463dd8df0905b757fdd7ca53ee1a88c4d [sandbox][maglev] Generate direct calls only to compatible builtins",
+      "url": "",
+      "cl": null,
+      "commit": "",
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/v8/v8/+/7102180",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/7147003"
+      ],
+      "source_cls": [
+        7102180,
+        7147003
+      ],
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7102180",
+      "source_commit": "410f860463dd8df0905b757fdd7ca53ee1a88c4d",
+      "source_cl": 7102180,
+      "description": "Security backport for 454927471: prevent Maglev direct calls to disabled or incompatible builtins with release-mode sandbox checks."
+    }
+  ]
+}

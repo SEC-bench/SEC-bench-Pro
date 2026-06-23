@@ -1,0 +1,112 @@
+From c8104bed78889aaebf43316c1ba6acf61bb3a8ba Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Thu, 5 Feb 2026 17:22:21 +0000
+Subject: [PATCH] Bug 2013549 - Give synthetic module environments a
+ *namespace* property the same as for cyclic modules
+ r=spidermonkey-reviewers,dminor
+
+Module environments are given this special internal property that can hold a
+reference to the module's namespace object if needed. The property itself is
+used when module's namespace is imported and then that binding is exported. An
+import of that uses the binding of the module namespace object in the original
+object's environment.
+
+For cyclic modules this happens by Parser::moduleBody adding a fake declaration
+for this name, but this is not done for synthetic modules which don't come from
+parsed JS. The patch adds this name for synthetic modules.
+
+Differential Revision: https://phabricator.services.mozilla.com/D281434
+---
+ js/src/builtin/ModuleObject.cpp |  9 ++++++---
+ js/src/vm/EnvironmentObject.h   |  2 +-
+ js/src/vm/Modules.cpp           |  5 +++--
+ js/src/vm/Scope.cpp             | 19 +++++++++++++++----
+ 4 files changed, 25 insertions(+), 10 deletions(-)
+
+diff --git a/js/src/builtin/ModuleObject.cpp b/js/src/builtin/ModuleObject.cpp
+index 92ca19bdee7cd..fd83fccea9b92 100644
+--- a/js/src/builtin/ModuleObject.cpp
++++ b/js/src/builtin/ModuleObject.cpp
+@@ -941,8 +941,9 @@ bool ModuleObject::isInstance(HandleValue value) {
+ }
+ 
+ bool ModuleObject::hasCyclicModuleFields() const {
+-  // This currently only returns false if we GC during initialization.
+-  return !getReservedSlot(CyclicModuleFieldsSlot).isUndefined();
++  bool result = !getReservedSlot(CyclicModuleFieldsSlot).isUndefined();
++  MOZ_ASSERT_IF(result, !hasSyntheticModuleFields());
++  return result;
+ }
+ 
+ CyclicModuleFields* ModuleObject::cyclicModuleFields() {
+@@ -1482,7 +1483,9 @@ bool ModuleObject::createSyntheticEnvironment(JSContext* cx,
+     return false;
+   }
+ 
+-  MOZ_ASSERT(env->shape()->propMapLength() == values.length());
++  // We expect one property per synthetic value plus one for the *namespace*
++  // binding.
++  MOZ_ASSERT(env->shape()->propMapLength() == values.length() + 1);
+ 
+   for (uint32_t i = 0; i < values.length(); i++) {
+     env->setAliasedBinding(env->firstSyntheticValueSlot() + i, values[i]);
+diff --git a/js/src/vm/EnvironmentObject.h b/js/src/vm/EnvironmentObject.h
+index e9dd45027e595..b5c044987e161 100644
+--- a/js/src/vm/EnvironmentObject.h
++++ b/js/src/vm/EnvironmentObject.h
+@@ -773,7 +773,7 @@ class ModuleEnvironmentObject : public EnvironmentObject {
+   // `env` may be a DebugEnvironmentProxy, but not a hollow environment.
+   static ModuleEnvironmentObject* find(JSObject* env);
+ 
+-  uint32_t firstSyntheticValueSlot() { return RESERVED_SLOTS; }
++  uint32_t firstSyntheticValueSlot() { return RESERVED_SLOTS + 1; }
+ 
+  private:
+   static bool lookupProperty(JSContext* cx, HandleObject obj, HandleId id,
+diff --git a/js/src/vm/Modules.cpp b/js/src/vm/Modules.cpp
+index b6e57fc7403f0..24df191b61fe7 100644
+--- a/js/src/vm/Modules.cpp
++++ b/js/src/vm/Modules.cpp
+@@ -1705,8 +1705,9 @@ static bool InnerModuleLinking(JSContext* cx, Handle<ModuleObject*> module,
+                                size_t* indexOut) {
+   // Step 1. If module is not a Cyclic Module Record, then
+   if (!module->hasCyclicModuleFields()) {
+-    // Step 1.a. Perform ? module.Link(). (Skipped)
+-    // Step 2.b. Return index.
++    // Step 1.a. Perform ? module.Link().
++    // (Skipped as we have already created the environment for these modules).
++    // Step 1.b. Return index.
+     *indexOut = index;
+     return true;
+   }
+diff --git a/js/src/vm/Scope.cpp b/js/src/vm/Scope.cpp
+index 155a0025ebdd2..ac515c0d123d0 100644
+--- a/js/src/vm/Scope.cpp
++++ b/js/src/vm/Scope.cpp
+@@ -161,11 +161,22 @@ SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
+ 
+   RootedId id(cx);
+   uint32_t slotIndex = numSlots;
++
++  auto addProperty = [&](PropertyName* name) {
++    id = NameToId(name);
++    return SharedPropMap::addPropertyWithKnownSlot(
++        cx, cls, &map, &mapLength, id, propFlags, slotIndex, &objectFlags);
++  };
++
++  // Add internal *namespace* property.
++  if (!addProperty(cx->names().star_namespace_star_)) {
++    return nullptr;
++  }
++  slotIndex++;
++
++  // Add synthetic exports.
+   for (JSAtom* exportName : module->syntheticExportNames()) {
+-    id = NameToId(exportName->asPropertyName());
+-    if (!SharedPropMap::addPropertyWithKnownSlot(cx, cls, &map, &mapLength, id,
+-                                                 propFlags, slotIndex,
+-                                                 &objectFlags)) {
++    if (!addProperty(exportName->asPropertyName())) {
+       return nullptr;
+     }
+     slotIndex++;

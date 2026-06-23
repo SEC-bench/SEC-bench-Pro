@@ -1,0 +1,39 @@
+Assertion failure: mLength + 1 <= mTail.mReserved, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:1303
+#01: ???[/out/js +0x36b42c0]
+#02: ???[/out/js +0x36b302a]
+#03: ???[/out/js +0x36b1e49]
+#04: ???[/out/js +0x369d6ff]
+#05: ???[/out/js +0x2d7cc6f]
+#06: ???[/out/js +0x2d9e78c]
+#07: ???[/out/js +0x43a6e88]
+#08: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5df39c0772f5 bp 0x7fff421e8e60 sp 0x7fff421e8d00 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5df39c0772f5 in void mozilla::Vector<JS::Value, 8ul, js::TempAllocPolicy>::internalAppend<JS::Value const&>(JS::Value const&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:1303:3
+    #1 0x5df39c0772f5 in void mozilla::Vector<JS::Value, 8ul, js::TempAllocPolicy>::infallibleAppend<JS::Value const&>(JS::Value const&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:789:5
+    #2 0x5df39c0772f5 in void JS::GCVector<JS::Value, 8ul, js::TempAllocPolicy>::infallibleAppend<JS::Value const&>(JS::Value const&) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:117:19
+    #3 0x5df39c0772f5 in void js::MutableWrappedPtrOperations<JS::GCVector<JS::Value, 8ul, js::TempAllocPolicy>, JS::Rooted<JS::StackGCVector<JS::Value, js::TempAllocPolicy>>>::infallibleAppend<JS::Value const&>(JS::Value const&) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:299:11
+    #4 0x5df39c0772f5 in CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)::operator()(JS::Value const&) const /src/gecko-dev/js/src/vm/ArgumentsObject.cpp:179:50
+    #5 0x5df39c0772f5 in void js::jit::SnapshotIterator::readFunctionFrameArgs<CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)>(CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)&, js::ArgumentsObject**, JS::Value*, unsigned int, unsigned int, JSScript*, js::jit::MaybeReadFallback&) /src/gecko-dev/js/src/jit/JSJitFrameIter.h:569:7
+    #6 0x5df39c076029 in void js::jit::InlineFrameIterator::readFrameArgsAndLocals<CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&), js::jit::InlineFrameIterator::Nop>(JSContext*, CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)&, js::jit::InlineFrameIterator::Nop&, JSObject**, bool*, JS::Value*, js::ArgumentsObject**, JS::Value*, js::jit::ReadFrameArgsBehavior, js::jit::MaybeReadFallback&) const /src/gecko-dev/js/src/jit/JSJitFrameIter.h:689:11
+    #7 0x5df39c074e48 in void js::jit::InlineFrameIterator::unaliasedForEachActual<CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)>(JSContext*, CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&), js::jit::ReadFrameArgsBehavior, js::jit::MaybeReadFallback&) const /src/gecko-dev/js/src/jit/JSJitFrameIter.h:748:5
+    #8 0x5df39c074e48 in void js::FrameIter::unaliasedForEachActual<CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)>(JSContext*, CopyScriptFrameIterArgs::init(JSContext*)::'lambda'(JS::Value const&)) /src/gecko-dev/js/src/vm/FrameIter-inl.h:33:26
+    #9 0x5df39c0606fe in CopyScriptFrameIterArgs::init(JSContext*) /src/gecko-dev/js/src/vm/ArgumentsObject.cpp:178:11
+    #10 0x5df39c0606fe in js::ArgumentsObject::createUnexpected(JSContext*, js::ScriptFrameIter&) /src/gecko-dev/js/src/vm/ArgumentsObject.cpp:361:13
+    #11 0x5df39b73fc6e in ArgumentsGetterImpl(JSContext*, JS::CallArgs const&) /src/gecko-dev/js/src/vm/JSFunction.cpp:201:36
+    #12 0x5df39b76178b in bool JS::CallNonGenericMethod<&IsFunction(JS::Handle<JS::Value>), &ArgumentsGetterImpl(JSContext*, JS::CallArgs const&)>(JSContext*, JS::CallArgs const&) /src/gecko-dev/obj-debug-asan/dist/include/js/CallNonGenericMethod.h:103:12
+    #13 0x5df39b76178b in ArgumentsGetter(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/JSFunction.cpp:220:10
+    #14 0x5df39cd69e87 in js::jit::CallNativeGetter(JSContext*, JS::Handle<JSFunction*>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/VMFunctions.cpp:1472:8
+    #15 0x35cc6e5b901e  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fff421e8da0  rcx = 0x00005df3996be9a0  rdx = 0x0000000000000000  
+rdi = 0x00005df39ed93d50  rsi = 0x00007fff421e8cb8  rbp = 0x00007fff421e8e60  rsp = 0x00007fff421e8d00  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007fff421e8d20  r13 = 0x00007fff421e8f00  r14 = 0x0000000000000002  r15 = 0x0000000000000005  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:1303:3 in void mozilla::Vector<JS::Value, 8ul, js::TempAllocPolicy>::internalAppend<JS::Value const&>(JS::Value const&)
+==13==ABORTING

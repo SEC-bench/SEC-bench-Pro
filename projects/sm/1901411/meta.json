@@ -1,0 +1,106 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1901411",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/AsyncIteration.cpp",
+        "js/src/vm/AsyncIteration.h",
+        "js/src/vm/List-inl.h"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "AsyncGeneratorDrainQueue — Object.prototype.then Getter Re-enters AsyncGeneratorAwaitReturn, Mutating State From 'completed' Back to 'awaiting-return' Between Queue Operations (cross-engine spec bug, CVE-2024-7652). CVE-2024-7652 (sec-high). A spec-level bug in the ECMAScript AsyncGenerator protocol causes type confusion in js::AsyncGeneratorDrainQueue (AsyncIteration.cpp:605). When AsyncGeneratorAwaitReturn sets the generator state to 'completed' and then calls AsyncGeneratorCompleteStep, the promise resolution accesses the 'then' property of the iterator result object. An attacker can define a getter on Object.prototype.then that re-enters the generator by calling g.return(), resetting the state from 'completed' to 'awaiting-return'. When AsyncGeneratorDrainQueue subsequently executes, the generator state is no longer 'completed', violating its assertion. In non-debug builds, this causes dequeuing from an empty request list, leading to type confusion via use of uninitialized or invalid memory as an AsyncGeneratorRequest. The fix adjusts AsyncGeneratorDrainQueue to handle re-entrant state changes. This is a cross-engine spec bug also affecting V8 and JavaScriptCore.",
+    "fix_commits": [
+        "907e0ce2a1ae",
+        "ac781d872218",
+        "c217581ee0f2",
+        "4c95847d3b31",
+        "9a76402a4a10",
+        "1ab696252ab8"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-part-1-partially-revert.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1901411 - Part 1: Partially revert",
+            "source_commit": "907e0ce2a1ae",
+            "commit": "907e0ce2a1ae",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/907e0ce2a1ae",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/907e0ce2a1ae",
+            "phabricator": "D213351"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-part-2-fix-sanity-check-for-debugger.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1901411 - Part 2: Fix sanity check for debugger.",
+            "source_commit": "ac781d872218",
+            "commit": "ac781d872218",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/ac781d872218",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/ac781d872218",
+            "phabricator": "D213352"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0003-part-3-revert-inlining-of.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 3,
+            "description": "Bug 1901411 - Part 3: Revert inlining of",
+            "source_commit": "c217581ee0f2",
+            "commit": "c217581ee0f2",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/c217581ee0f2",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/c217581ee0f2",
+            "phabricator": "D213353"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0004-part-4-revert-inlining-of.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 4,
+            "description": "Bug 1901411 - Part 4: Revert inlining of",
+            "source_commit": "4c95847d3b31",
+            "commit": "4c95847d3b31",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/4c95847d3b31",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/4c95847d3b31",
+            "phabricator": "D213354"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0005-part-5-revert-inlining-of.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 5,
+            "description": "Bug 1901411 - Part 5: Revert inlining of",
+            "source_commit": "9a76402a4a10",
+            "commit": "9a76402a4a10",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/9a76402a4a10",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/9a76402a4a10",
+            "phabricator": "D213355"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0006-part-6-revert-inlining-of.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 6,
+            "description": "Bug 1901411 - Part 6: Revert inlining of",
+            "source_commit": "1ab696252ab8",
+            "commit": "1ab696252ab8",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1ab696252ab8",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/1ab696252ab8",
+            "phabricator": "D213356"
+        }
+    ],
+    "vrp": null
+}

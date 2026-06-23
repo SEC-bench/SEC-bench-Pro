@@ -1,0 +1,46 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1888892",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CacheIRCompiler.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --gc-zeal=10",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "CacheIRCompiler TraceWeakBaselineStubFrame \u2014 Ignores TraceWeakCacheIRStub False Return, Active Sparse-GetElement Stub Retains Dead Array.prototype Shape After Proxy Proto Swap. CVE-2024-3858 (sec-high). A wild pointer dereference vulnerability exists in SpiderMonkey's Baseline JIT CacheIR stub tracing logic in js/src/jit/CacheIRCompiler.cpp. The bug occurs when an active Baseline stub on the stack (a Sparse GetElement stub) recursively calls a function through an element getter. That function changes Array.prototype's prototype to a new Proxy object, causing the original Array.prototype shape to become dead. The active Baseline CacheIR stub is traced in TraceWeakBaselineStubFrame which calls TraceCacheIRStub with traceWeakEdges=false, so the dead shape is not traced. Later, TraceWeakCacheIRStub is called and returns false upon detecting the dead shape, but TraceWeakBaselineStubFrame ignores this return value and does not clean up the stub. The next time the BaselineStub frame is traced, it finds the same stub but the shape field now contains garbage (freed memory), causing a crash in js::CheckTracedThing<js::Shape> when trying to dereference the poisoned pointer. The root cause traces back to bug 1837620. The fix (changeset a8ef03c9c00a) ensures that all fields in TraceCacheIRStub are properly traced when called for Baseline stub frames, rather than returning early after encountering a dead weak edge.",
+    "fix_commits": [
+        "a334c67b34d1",
+        "a3fcfbe38991"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-trace-all-fields-in-traceweakcacheirstub.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1888892 fix part 1",
+            "source_commit": "a334c67b34d1",
+            "commit": "a334c67b34d1",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/a334c67b34d1",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/a334c67b34d1"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-and-comment.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1888892 fix part 2",
+            "source_commit": "a3fcfbe38991",
+            "commit": "a3fcfbe38991",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/a3fcfbe38991",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/a3fcfbe38991"
+        }
+    ],
+    "vrp": null
+}

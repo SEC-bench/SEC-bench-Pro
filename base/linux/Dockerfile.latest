@@ -1,0 +1,95 @@
+# Per-CVE upstream-latest Linux kernel image.
+#
+# Build with a validated Linux CVE directory as the Docker context:
+#
+#   docker build -f base/linux/Dockerfile.latest \
+#     --build-arg LINUX_REF=origin/master \
+#     -t hwiwonlee/linux.x86_64.latest:CVE-2022-0185 \
+#     /path/to/linux/CVE-2022-0185
+#
+# The context format intentionally matches the 89 validated Linux leaves:
+# secb_config.json, build.sh, secb.sh, init.sh, and config/ are copied exactly
+# like Dockerfile/Dockerfile.fixed. Layers before the per-CVE COPY steps are
+# shared through Docker's build cache across every latest leaf.
+
+FROM hwiwonlee/linux.base:latest
+
+SHELL ["/bin/bash", "-lc"]
+
+ARG LINUX_REF=origin/master
+# Set by build_latest_images.sh for moving refs such as origin/master so Docker
+# does not incorrectly reuse an old fetched commit.
+ARG LINUX_REF_CACHE_BUST=manual
+ARG KBUILD_JOBS
+
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# The validated leaves install locales/ripgrep, with a small minority also
+# needing pkg-config or 32-bit libc support. Install the superset once in a
+# cacheable layer before per-CVE files are copied.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc-multilib \
+    libc6-dev-i386 \
+    locales \
+    pkg-config \
+    ripgrep \
+    && sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+RUN set -eux; \
+    : "cache-bust=${LINUX_REF_CACHE_BUST}"; \
+    ref="$LINUX_REF"; \
+    if [[ "$ref" == origin/* ]]; then \
+      branch="${ref#origin/}"; \
+      git -C /src/linux.git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"; \
+    elif git -C /src/linux.git rev-parse --verify -q "${ref}^{commit}" >/dev/null; then \
+      :; \
+    else \
+      git -C /src/linux.git fetch origin "$ref" || true; \
+    fi; \
+    latest_commit="$(git -C /src/linux.git rev-parse "${ref}^{commit}" 2>/dev/null || git -C /src/linux.git rev-parse FETCH_HEAD^{commit})"; \
+    rm -rf /src/linux; \
+    git -C /src/linux.git worktree prune; \
+    git -C /src/linux.git worktree add --detach /src/linux "$latest_commit"; \
+    git -C /src/linux reset --hard; \
+    git -C /src/linux clean -xdf; \
+    echo "$latest_commit" > /LATEST_KERNEL_COMMIT; \
+    echo "$ref" > /LATEST_KERNEL_REF
+
+WORKDIR /src
+
+COPY build.sh        /src/build.sh
+COPY secb.sh         /usr/local/bin/secb
+COPY init.sh         /rootfs/init.sh
+
+RUN mkdir -p /run/secb /out /tmp/secb && chmod 1777 /out /tmp/secb
+COPY secb_config.json /run/secb/config.json
+RUN rm -rf /meta.json /rootfs/meta.json /poc
+COPY config/         /config/
+
+RUN chmod +x /src/build.sh /usr/local/bin/secb /rootfs/init.sh
+
+RUN set -eux; \
+    latest_commit="$(cat /LATEST_KERNEL_COMMIT)"; \
+    test -n "$latest_commit"; \
+    git -C /src/linux reset --hard "$latest_commit"; \
+    git -C /src/linux clean -xdf; \
+    tmp="$(mktemp)"; \
+    jq --arg commit "$latest_commit" '.kernel.build_commit = $commit' /run/secb/config.json > "$tmp"; \
+    mv "$tmp" /run/secb/config.json
+
+RUN SECB_REBUILD_KERNEL=1 SECB_ALLOW_EMPTY_POC=1 /src/build.sh && \
+    cd /src/linux && \
+    git reset --hard "$(cat /LATEST_KERNEL_COMMIT)" && \
+    git clean -xdf && \
+    rm -rf /tmp/secb/poc /poc && \
+    rm -f /out/vmlinux /out/System.map && \
+    chmod 1777 /out /tmp/secb
+
+RUN secb-sanitize-git /src/linux

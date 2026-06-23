@@ -1,0 +1,25 @@
+Assertion failure: [barrier verifier] Unmarked edge: JS Object 2639c2a740b0 'shape' edge to JS Shape 2639c2a64160, at /src/gecko-dev/js/src/gc/Verifier.cpp:384
+#01: ???[/out/js +0x3f345d8]
+#02: ???[/out/js +0x341c60d]
+#03: ??? (???:???)
+Hit MOZ_CRASH() at /src/gecko-dev/js/src/gc/Verifier.cpp:385
+#01: ???[/out/js +0x3f345ec]
+#02: ???[/out/js +0x341c60d]
+#03: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5c8a42166621 bp 0x7ffe59cb7530 sp 0x7ffe59cb6ee0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5c8a42166621 in js::gc::GCRuntime::endVerifyPreBarriers() /src/gecko-dev/js/src/gc/Verifier.cpp:385:13
+    #1 0x5c8a4164e60c in VerifyPreBarriers(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:2346:3
+    #2 0x1551c93e4861  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffe59cb7440  rcx = 0x00005c8a3f0939e0  rdx = 0x0000000000000000  
+rdi = 0x00005c8a445a1250  rsi = 0x00007ffe59cb6e98  rbp = 0x00007ffe59cb7530  rsp = 0x00007ffe59cb6ee0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00005c8a3ed8d8a0  r13 = 0x00002639c2a740b0  r14 = 0x00005c8a3f093540  r15 = 0x00007ffe59cb6fb0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Verifier.cpp:385:13 in js::gc::GCRuntime::endVerifyPreBarriers()
+==13==ABORTING

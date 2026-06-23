@@ -1,0 +1,3 @@
+Verified against the collector report and local instance metadata.
+
+`../../v8/crash_check.sh 355256380` reproduces the reported Maglev debug crash with the local `poc.js` under `out/x64.asan/d8`. The captured `output.txt` shows the same fatal check in `../../src/compiler/heap-refs.cc` with `Debug check failed: IsJSObject().`, which matches the original report for the WasmObject-vs-JSObject confusion in `MaglevGraphBuilder::TryBuildFastOrdinaryHasInstance`.

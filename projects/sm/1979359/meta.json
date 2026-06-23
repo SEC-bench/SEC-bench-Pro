@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1979359",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/ds/Bitmap.h",
+    "js/src/gc/AtomMarking-inl.h"
+  ],
+  "target_subdir": [
+    "js/src/ds",
+    "js/src/gc"
+  ],
+  "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --enable-symbols-as-weakmap-keys",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "ASAN_CRASH",
+  "description": "GCRuntime::isSymbolReferencedByUncollectedZone consulted the atomsUsedByUncollectedZones bitmap without bounds checking, so a symbol allocated after the start of an incremental GC slice fell outside the bitmap and read past it during WeakMap entry marking (WeakMap<Value, Value>::markEntry). sec-high csectype-bounds. Requires --enable-symbols-as-weakmap-keys (nightly-only). Fix: add range check (git 56674d4f9366, jcoppeard@mozilla.com).",
+  "fix_commits": [
+    "56674d4f9366"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-56674d4f9366.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1979359 fix",
+      "source_commit": "56674d4f9366",
+      "commit": "56674d4f9366",
+      "url": "https://github.com/mozilla/gecko-dev/commit/56674d4f9366",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/56674d4f9366"
+    }
+  ],
+  "vrp": null
+}

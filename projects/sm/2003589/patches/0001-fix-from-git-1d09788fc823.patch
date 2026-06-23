@@ -1,0 +1,338 @@
+From 1d09788fc8234e4ab0dc3b9f2a99ff66cb90e274 Mon Sep 17 00:00:00 2001
+From: alexical <dothayer@mozilla.com>
+Date: Thu, 4 Dec 2025 07:19:32 +0000
+Subject: [PATCH] Bug 2003589 - Only enumerate own properties in Object.keys
+ ObjToIterator r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D274985
+---
+ js/src/builtin/Object.cpp                     |  2 -
+ .../tests/ion/object-keys-proxy-proto.js      |  4 +
+ js/src/jit/CodeGenerator.cpp                  |  6 +-
+ js/src/jit/VMFunctionList-inl.h               |  6 +-
+ js/src/vm/Iteration.cpp                       | 83 +++++++++++--------
+ js/src/vm/Iteration.h                         | 18 ++--
+ 6 files changed, 72 insertions(+), 47 deletions(-)
+ create mode 100644 js/src/jit-test/tests/ion/object-keys-proxy-proto.js
+
+diff --git a/js/src/builtin/Object.cpp b/js/src/builtin/Object.cpp
+index 0288f735e491..d845de248ae8 100644
+--- a/js/src/builtin/Object.cpp
++++ b/js/src/builtin/Object.cpp
+@@ -1546,7 +1546,6 @@ static bool TryEnumerableOwnPropertiesNative(JSContext* cx, HandleObject obj,
+     if (piter) {
+       do {
+         NativeIterator* ni = piter->getNativeIterator();
+-        MOZ_ASSERT(ni->isReusable());
+ 
+         // Guard against indexes.
+         if (ni->mayHavePrototypeProperties()) {
+@@ -1845,7 +1844,6 @@ static bool CountEnumerableOwnPropertiesNative(JSContext* cx, HandleObject obj,
+                                         LookupInShapeIteratorCache(cx, nobj));
+   if (piter) {
+     NativeIterator* ni = piter->getNativeIterator();
+-    MOZ_ASSERT(ni->isReusable());
+ 
+     // Guard against indexes.
+     if (!ni->mayHavePrototypeProperties()) {
+diff --git a/js/src/jit-test/tests/ion/object-keys-proxy-proto.js b/js/src/jit-test/tests/ion/object-keys-proxy-proto.js
+new file mode 100644
+index 000000000000..772832167a4c
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/object-keys-proxy-proto.js
+@@ -0,0 +1,4 @@
++for (var i = 0 ; i < 99 ; i++) {
++  [].__proto__.__proto__ = new Proxy(Object, Object);
++  Object.keys([]);
++}
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index c5de7b8749bc..85a430b65245 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -18498,11 +18498,11 @@ void CodeGenerator::visitObjectToIterator(LObjectToIterator* lir) {
+ 
+   if (lir->mir()->skipRegistration()) {
+     if (lir->mir()->wantsIndices()) {
+-      ool = oolCallVM<Fn, GetIteratorWithIndicesUnregistered>(
++      ool = oolCallVM<Fn, GetIteratorWithIndicesForObjectKeys>(
+           lir, ArgList(obj), StoreRegisterTo(iterObj));
+     } else {
+-      ool = oolCallVM<Fn, GetIteratorUnregistered>(lir, ArgList(obj),
+-                                                   StoreRegisterTo(iterObj));
++      ool = oolCallVM<Fn, GetIteratorForObjectKeys>(lir, ArgList(obj),
++                                                    StoreRegisterTo(iterObj));
+     }
+   } else {
+     if (lir->mir()->wantsIndices()) {
+diff --git a/js/src/jit/VMFunctionList-inl.h b/js/src/jit/VMFunctionList-inl.h
+index d78b01a98e17..132f2deca753 100644
+--- a/js/src/jit/VMFunctionList-inl.h
++++ b/js/src/jit/VMFunctionList-inl.h
+@@ -205,10 +205,10 @@ namespace jit {
+   _(GetImportOperation, js::GetImportOperation)                                \
+   _(GetIntrinsicValue, js::jit::GetIntrinsicValue)                             \
+   _(GetIterator, js::GetIterator)                                              \
+-  _(GetIteratorUnregistered, js::GetIteratorUnregistered)                      \
++  _(GetIteratorForObjectKeys, js::GetIteratorForObjectKeys)                    \
+   _(GetIteratorWithIndices, js::GetIteratorWithIndices)                        \
+-  _(GetIteratorWithIndicesUnregistered,                                        \
+-    js::GetIteratorWithIndicesUnregistered)                                    \
++  _(GetIteratorWithIndicesForObjectKeys,                                       \
++    js::GetIteratorWithIndicesForObjectKeys)                                   \
+   _(GetNonSyntacticGlobalThis, js::GetNonSyntacticGlobalThis)                  \
+   _(GetOrCreateModuleMetaObject, js::GetOrCreateModuleMetaObject)              \
+   _(GetPendingExceptionStack, js::GetPendingExceptionStack)                    \
+diff --git a/js/src/vm/Iteration.cpp b/js/src/vm/Iteration.cpp
+index 3c995c3d22b7..756876de6361 100644
+--- a/js/src/vm/Iteration.cpp
++++ b/js/src/vm/Iteration.cpp
+@@ -791,7 +791,8 @@ static inline size_t AllocationSize(size_t propertyCount,
+ static PropertyIteratorObject* CreatePropertyIterator(
+     JSContext* cx, Handle<JSObject*> objBeingIterated, HandleIdVector props,
+     bool supportsIndices, PropertyIndexVector* indices,
+-    uint32_t cacheableProtoChainLength, uint32_t ownPropertyCount) {
++    uint32_t cacheableProtoChainLength, uint32_t ownPropertyCount,
++    bool forObjectKeys) {
+   MOZ_ASSERT_IF(indices, supportsIndices);
+   if (props.length() >= NativeIterator::PropCountLimit) {
+     ReportAllocationOverflow(cx);
+@@ -827,9 +828,9 @@ static PropertyIteratorObject* CreatePropertyIterator(
+ 
+   // This also registers |ni| with |propIter|.
+   bool hadError = false;
+-  new (mem)
+-      NativeIterator(cx, propIter, objBeingIterated, props, supportsIndices,
+-                     indices, numShapes, ownPropertyCount, &hadError);
++  new (mem) NativeIterator(cx, propIter, objBeingIterated, props,
++                           supportsIndices, indices, numShapes,
++                           ownPropertyCount, forObjectKeys, &hadError);
+   if (hadError) {
+     return nullptr;
+   }
+@@ -853,7 +854,8 @@ NativeIterator::NativeIterator(JSContext* cx,
+                                Handle<JSObject*> objBeingIterated,
+                                HandleIdVector props, bool supportsIndices,
+                                PropertyIndexVector* indices, uint32_t numShapes,
+-                               uint32_t ownPropertyCount, bool* hadError)
++                               uint32_t ownPropertyCount, bool forObjectKeys,
++                               bool* hadError)
+     : objectBeingIterated_(nullptr),
+       iterObj_(propIter),
+       objShape_(numShapes > 0 ? objBeingIterated->shape() : nullptr),
+@@ -878,6 +880,10 @@ NativeIterator::NativeIterator(JSContext* cx,
+     flags_ |= Flags::IndicesSupported;
+   }
+ 
++  if (forObjectKeys) {
++    flags_ |= Flags::OwnPropertiesOnly;
++  }
++
+   // NOTE: This must be done first thing: The caller can't free `this` on error
+   //       because it has GCPtr fields whose barriers have already fired; the
+   //       store buffer has pointers to them. Only the GC can free `this` (via
+@@ -1188,26 +1194,34 @@ static bool IndicesAreValid(NativeObject* obj, NativeIterator* ni) {
+ }
+ #endif
+ 
+-template <bool WantIndices, bool SkipRegistration>
+-static PropertyIteratorObject* GetIteratorImpl(JSContext* cx,
+-                                               HandleObject obj) {
++static PropertyIteratorObject* GetIteratorImpl(JSContext* cx, HandleObject obj,
++                                               bool wantIndices,
++                                               bool forObjectKeys) {
+   MOZ_ASSERT(!obj->is<PropertyIteratorObject>());
+   MOZ_ASSERT(cx->compartment() == obj->compartment(),
+              "We may end up allocating shapes in the wrong zone!");
+ 
+   uint32_t cacheableProtoChainLength = 0;
+   if (PropertyIteratorObject* iterobj = LookupInIteratorCache(
+-          cx, obj, &cacheableProtoChainLength, !SkipRegistration)) {
++          cx, obj, &cacheableProtoChainLength, !forObjectKeys)) {
+     NativeIterator* ni = iterobj->getNativeIterator();
+-    bool recreateWithIndices = WantIndices && ni->indicesSupported();
+-    if (!recreateWithIndices) {
+-      MOZ_ASSERT_IF(WantIndices && ni->indicesAvailable(),
++    bool recreateWithIndices = wantIndices && ni->indicesSupported();
++    bool recreateWithProtoProperties =
++        !forObjectKeys && ni->ownPropertiesOnly();
++    if (!recreateWithIndices && !recreateWithProtoProperties) {
++      MOZ_ASSERT_IF(wantIndices && ni->indicesAvailable(),
+                     IndicesAreValid(&obj->as<NativeObject>(), ni));
+-      if (!SkipRegistration) {
++      if (!forObjectKeys) {
+         RegisterEnumerator(cx, ni, obj);
+       }
+       return iterobj;
+     }
++    // We don't want to get in a pattern where an Object.keys + indices
++    // use case clobbers us because it wants indices, and then we clobber
++    // it because we want prototype keys. This prevents that.
++    if (!recreateWithIndices && ni->indicesAvailable()) {
++      wantIndices = true;
++    }
+   }
+ 
+   if (cacheableProtoChainLength > 0 && !CanStoreInIteratorCache(obj)) {
+@@ -1228,21 +1242,24 @@ static PropertyIteratorObject* GetIteratorImpl(JSContext* cx,
+     }
+   } else {
+     uint32_t flags = 0;
++    if (forObjectKeys) {
++      flags |= JSITER_OWNONLY;
++    }
+     PropertyEnumerator enumerator(cx, obj, flags, &keys, &indices);
+     if (!enumerator.snapshot(cx)) {
+       return nullptr;
+     }
+     supportsIndices = enumerator.supportsIndices();
+     ownPropertyCount = enumerator.ownPropertyCount();
+-    MOZ_ASSERT_IF(WantIndices && supportsIndices,
++    MOZ_ASSERT_IF(wantIndices && supportsIndices,
+                   keys.length() == indices.length());
+   }
+ 
+   // If the object has dense elements, mark the dense elements as
+-  // maybe-in-iteration. However if we're unregistered (as is the case in
+-  // an Object.keys scalar replacement), we're not able to do the appropriate
+-  // invalidations on deletion etc. anyway. Accordingly, we're forced to just
+-  // disable the indices optimization for this iterator entirely.
++  // maybe-in-iteration. However if this is for Object.keys, we're not able to
++  // do the appropriate invalidations on deletion etc. anyway. Accordingly,
++  // we're forced to just disable the indices optimization for this iterator
++  // entirely.
+   //
+   // The iterator is a snapshot so if indexed properties are added after this
+   // point we don't need to do anything. However, the object might have sparse
+@@ -1253,7 +1270,7 @@ static PropertyIteratorObject* GetIteratorImpl(JSContext* cx,
+   // is set correctly.
+   if (obj->is<NativeObject>() &&
+       obj->as<NativeObject>().getDenseInitializedLength() > 0) {
+-    if (SkipRegistration) {
++    if (forObjectKeys) {
+       supportsIndices = false;
+     } else {
+       obj->as<NativeObject>().markDenseElementsMaybeInIteration();
+@@ -1261,20 +1278,20 @@ static PropertyIteratorObject* GetIteratorImpl(JSContext* cx,
+   }
+ 
+   PropertyIndexVector* indicesPtr =
+-      WantIndices && supportsIndices ? &indices : nullptr;
+-  PropertyIteratorObject* iterobj =
+-      CreatePropertyIterator(cx, obj, keys, supportsIndices, indicesPtr,
+-                             cacheableProtoChainLength, ownPropertyCount);
++      wantIndices && supportsIndices ? &indices : nullptr;
++  PropertyIteratorObject* iterobj = CreatePropertyIterator(
++      cx, obj, keys, supportsIndices, indicesPtr, cacheableProtoChainLength,
++      ownPropertyCount, forObjectKeys);
+   if (!iterobj) {
+     return nullptr;
+   }
+-  if (!SkipRegistration) {
++  if (!forObjectKeys) {
+     RegisterEnumerator(cx, iterobj->getNativeIterator(), obj);
+   }
+ 
+   cx->check(iterobj);
+   MOZ_ASSERT_IF(
+-      WantIndices && supportsIndices,
++      wantIndices && supportsIndices,
+       IndicesAreValid(&obj->as<NativeObject>(), iterobj->getNativeIterator()));
+ 
+ #ifdef DEBUG
+@@ -1296,22 +1313,22 @@ static PropertyIteratorObject* GetIteratorImpl(JSContext* cx,
+ }
+ 
+ PropertyIteratorObject* js::GetIterator(JSContext* cx, HandleObject obj) {
+-  return GetIteratorImpl<false, false>(cx, obj);
++  return GetIteratorImpl(cx, obj, false, false);
+ }
+ 
+ PropertyIteratorObject* js::GetIteratorWithIndices(JSContext* cx,
+                                                    HandleObject obj) {
+-  return GetIteratorImpl<true, false>(cx, obj);
++  return GetIteratorImpl(cx, obj, true, false);
+ }
+ 
+-PropertyIteratorObject* js::GetIteratorUnregistered(JSContext* cx,
+-                                                    HandleObject obj) {
+-  return GetIteratorImpl<false, true>(cx, obj);
++PropertyIteratorObject* js::GetIteratorForObjectKeys(JSContext* cx,
++                                                     HandleObject obj) {
++  return GetIteratorImpl(cx, obj, false, true);
+ }
+ 
+-PropertyIteratorObject* js::GetIteratorWithIndicesUnregistered(
++PropertyIteratorObject* js::GetIteratorWithIndicesForObjectKeys(
+     JSContext* cx, HandleObject obj) {
+-  return GetIteratorImpl<true, true>(cx, obj);
++  return GetIteratorImpl(cx, obj, true, true);
+ }
+ 
+ PropertyIteratorObject* js::LookupInIteratorCache(JSContext* cx,
+@@ -1679,7 +1696,7 @@ PropertyIteratorObject* GlobalObject::getOrCreateEmptyIterator(JSContext* cx) {
+   if (!cx->global()->data().emptyIterator) {
+     RootedIdVector props(cx);  // Empty
+     PropertyIteratorObject* iter =
+-        CreatePropertyIterator(cx, nullptr, props, false, nullptr, 0, 0);
++        CreatePropertyIterator(cx, nullptr, props, false, nullptr, 0, 0, false);
+     if (!iter) {
+       return nullptr;
+     }
+diff --git a/js/src/vm/Iteration.h b/js/src/vm/Iteration.h
+index fbbe0dbd590e..0a0518572c3e 100644
+--- a/js/src/vm/Iteration.h
++++ b/js/src/vm/Iteration.h
+@@ -283,12 +283,15 @@ struct NativeIterator : public NativeIteratorListNode {
+     // Whether indices are actually valid in the reserved area
+     static constexpr uint32_t IndicesAvailable = 0x40;
+ 
++    // If this iterator was created only for own properties
++    static constexpr uint32_t OwnPropertiesOnly = 0x80;
++
+     // If any of these bits are set on a |NativeIterator|, it isn't
+     // currently reusable.  (An active |NativeIterator| can't be stolen
+     // *right now*; a |NativeIterator| that's had its properties mutated
+     // can never be reused, because it would give incorrect results.)
+     static constexpr uint32_t NotReusable =
+-        Active | HasUnvisitedPropertyDeletion;
++        Active | HasUnvisitedPropertyDeletion | OwnPropertiesOnly;
+   };
+ 
+   // We have a full u32 for this, but due to the way we compute the address
+@@ -327,7 +330,8 @@ struct NativeIterator : public NativeIteratorListNode {
+   NativeIterator(JSContext* cx, Handle<PropertyIteratorObject*> propIter,
+                  Handle<JSObject*> objBeingIterated, HandleIdVector props,
+                  bool supportsIndices, PropertyIndexVector* indices,
+-                 uint32_t numShapes, uint32_t ownPropertyCount, bool* hadError);
++                 uint32_t numShapes, uint32_t ownPropertyCount,
++                 bool forObjectKeys, bool* hadError);
+ 
+   JSObject* objectBeingIterated() const { return objectBeingIterated_; }
+ 
+@@ -487,6 +491,8 @@ struct NativeIterator : public NativeIteratorListNode {
+ 
+   bool indicesSupported() const { return flags_ & Flags::IndicesSupported; }
+ 
++  bool ownPropertiesOnly() const { return flags_ & Flags::OwnPropertiesOnly; }
++
+   // Whether this is the shared empty iterator object used for iterating over
+   // null/undefined.
+   bool isEmptyIteratorSingleton() const {
+@@ -708,10 +714,10 @@ PropertyIteratorObject* LookupInShapeIteratorCache(JSContext* cx,
+ PropertyIteratorObject* GetIterator(JSContext* cx, HandleObject obj);
+ PropertyIteratorObject* GetIteratorWithIndices(JSContext* cx, HandleObject obj);
+ 
+-PropertyIteratorObject* GetIteratorUnregistered(JSContext* cx,
+-                                                HandleObject obj);
+-PropertyIteratorObject* GetIteratorWithIndicesUnregistered(JSContext* cx,
+-                                                           HandleObject obj);
++PropertyIteratorObject* GetIteratorForObjectKeys(JSContext* cx,
++                                                 HandleObject obj);
++PropertyIteratorObject* GetIteratorWithIndicesForObjectKeys(JSContext* cx,
++                                                            HandleObject obj);
+ 
+ PropertyIteratorObject* ValueToIterator(JSContext* cx, HandleValue vp);
+ 
+-- 
+2.43.0
+

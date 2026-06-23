@@ -1,0 +1,50 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446113730",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/wasm/wasm-objects.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A use-after-free vulnerability in V8's WebAssembly dispatch table growth logic allows sandbox bypass via WasmCPT (Code Pointer Table) handle UAF. In WasmDispatchTable::Grow(), when a dispatch table is grown, the offheap wrapper refcount holders (wrappers_ in WasmDispatchTableData) are moved via std::move() to the newly allocated table, transferring all std::shared_ptr<WasmImportWrapperHandle> ownership to the new table. However, dispatch_table_for_imports is an internally managed WasmDispatchTable that is never registered in the protected_uses list of any instance. Consequently, when Grow() is called on it (achievable via in-sandbox corruption by overwriting a user-controlled WasmTableObject's trusted_dispatch_table pointer to point to dispatch_table_for_imports, then calling table.grow()), the instance's dispatch_table_for_imports field is not updated to the new table. The new table \u2014 now holding the only wrapper refcounts \u2014 becomes unreachable and its wrappers_ are destructed, freeing the underlying WasmCodePointerTable entries. The original dispatch_table_for_imports continues to hold stale CPT entry indices that are now freed. These freed CPT entries can be reallocated by native Wasm functions. Calling an imported function through the stale dispatch table then invokes the native Wasm function instead, causing a type confusion between WasmImportData and WasmTrustedInstanceData. The exploit leverages the coincidence that kMemory0StartOffset == kWasmImportDataSigOffset to treat a CanonicalSig* as memory0_start, enabling arbitrary read/write outside the sandbox.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Local patch generated from V8 commit bf854e1d872f6815d3fe3547fe5a31294f29e04a to make validation and patched-image builds independent of remote Gerrit fetches.",
+      "context": "local-format-patch",
+      "evidence_text": "Bug: 446113730; Reviewed-on: CL 6973457",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973457",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973457",
+      "source_cl": 6973457,
+      "cl": 6973457,
+      "source_commit": "bf854e1d872f6815d3fe3547fe5a31294f29e04a",
+      "commit": "bf854e1d872f6815d3fe3547fe5a31294f29e04a"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "description": "Local patch generated from V8 commit 1d13848287a6e226862b1e1a90b6ae747c8a2ba2 to make validation and patched-image builds independent of remote Gerrit fetches.",
+      "context": "local-format-patch",
+      "evidence_text": "Bug: 446113730; Reviewed-on: CL 6972023",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6972023",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6972023",
+      "source_cl": 6972023,
+      "cl": 6972023,
+      "source_commit": "1d13848287a6e226862b1e1a90b6ae747c8a2ba2",
+      "commit": "1d13848287a6e226862b1e1a90b6ae747c8a2ba2"
+    }
+  ]
+}

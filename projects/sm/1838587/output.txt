@@ -1,0 +1,25 @@
+Assertion failure: slotIndex <= (255), at /src/gecko-dev/js/src/jit/CacheIRWriter.h:469
+#01: ???[/out/js +0x4724fff]
+#02: ???[/out/js +0x4617070]
+#03: ???[/out/js +0x4617b65]
+#04: ???[/out/js +0x416993e]
+#05: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55f61e1f802c bp 0x7ffd22181510 sp 0x7ffd221814f0 T0)
+==10==The signal is caused by a WRITE memory access.
+==10==Hint: address points to the zero page.
+    #0 0x55f61e1f802c in js::jit::CacheIRWriter::loadArgumentFixedSlot(js::jit::ArgumentKind, unsigned int, js::jit::CallFlags) /src/gecko-dev/js/src/jit/CacheIRWriter.h:469:5
+    #1 0x55f61e0ea06f in js::jit::CallIRGenerator::tryAttachBoundFunction(JS::Handle<js::BoundFunctionObject*>) /src/gecko-dev/js/src/jit/CacheIR.cpp:11288:14
+    #2 0x55f61e0eab64 in js::jit::CallIRGenerator::tryAttachStub() /src/gecko-dev/js/src/jit/CacheIR.cpp:11348:5
+    #3 0x55f61dc3c93d in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1545:17
+    #4 0x1fd0dd214486  (<unknown module>)
+
+==10==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffd221819d0  rcx = 0x000055f61aaaf7c0  rdx = 0x0000000000000000  
+rdi = 0x000055f61fda3e70  rsi = 0x00007ffd221814a8  rbp = 0x00007ffd22181510  rsp = 0x00007ffd221814f0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000000  r13 = 0x00007ffd221819d0  r14 = 0x0000000000000100  r15 = 0x0000000000000001  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/CacheIRWriter.h:469:5 in js::jit::CacheIRWriter::loadArgumentFixedSlot(js::jit::ArgumentKind, unsigned int, js::jit::CallFlags)
+==10==ABORTING

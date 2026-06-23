@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1988967",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/IonAnalysis.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --ion-regalloc=simple",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Ion regalloc with --ion-regalloc=simple did not insert a keep-alive use of the result of `import()` when followed by a recursive `apply` with `^0` coercion: NeedsKeepAlive only inspected the def-instruction and missed the use-instruction. Ion then dead-eliminated the import Promise's nursery cell before its forwarding pointer was updated \u2192 crash in js::Nursery::forwardBufferPointer when the next GC scan walked the stale buffer. sec-high. Fix: also check use-instruction in NeedsKeepAlive (git 5dcdd12edecd r=iain, Phabricator D265302).",
+  "fix_commits": [
+    "5dcdd12edecd"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-5dcdd12edecd.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1988967 fix",
+      "source_commit": "5dcdd12edecd",
+      "commit": "5dcdd12edecd",
+      "url": "https://github.com/mozilla/gecko-dev/commit/5dcdd12edecd",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/5dcdd12edecd"
+    }
+  ],
+  "vrp": null
+}

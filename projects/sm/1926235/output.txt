@@ -1,0 +1,33 @@
+[13] Assertion failure: slotIndex <= (255), at /src/gecko-dev/js/src/jit/CacheIRWriter.h:497
+#01: ???[/out/js +0x51d486f]
+#02: ???[/out/js +0x505a3d9]
+#03: ???[/out/js +0x5083da8]
+#04: ???[/out/js +0x5085b69]
+#05: ???[/out/js +0x5092a8c]
+#06: ???[/out/js +0x5094fbc]
+#07: ???[/out/js +0x5096fbe]
+#08: ???[/out/js +0x4938289]
+#09: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x6296dfd3189c bp 0x7ffc51b68970 sp 0x7ffc51b68950 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x6296dfd3189c in js::jit::CacheIRWriter::loadArgumentFixedSlot(js::jit::ArgumentKind, unsigned int, js::jit::CallFlags) /src/gecko-dev/js/src/jit/CacheIRWriter.h:497:5
+    #1 0x6296dfbb73d8 in js::jit::InlinableNativeIRGenerator::emitNativeCalleeGuard() /src/gecko-dev/js/src/jit/CacheIR.cpp:6315:16
+    #2 0x6296dfbe0da7 in js::jit::InlinableNativeIRGenerator::tryAttachDateGetTime(js::jit::InlinableNative) /src/gecko-dev/js/src/jit/CacheIR.cpp:10444:5
+    #3 0x6296dfbe2b68 in js::jit::InlinableNativeIRGenerator::tryAttachStub() /src/gecko-dev/js/src/jit/CacheIR.cpp:12260:14
+    #4 0x6296dfbefa8b in js::jit::CallIRGenerator::tryAttachInlinableNative(JS::Handle<JSFunction*>, js::jit::CallFlags) /src/gecko-dev/js/src/jit/CacheIR.cpp:11776:20
+    #5 0x6296dfbf1fbb in js::jit::CallIRGenerator::tryAttachCallNative(JS::Handle<JSFunction*>) /src/gecko-dev/js/src/jit/CacheIR.cpp:12508:5
+    #6 0x6296dfbf3fbd in js::jit::CallIRGenerator::tryAttachStub() /src/gecko-dev/js/src/jit/CacheIR.cpp:12791:10
+    #7 0x6296df495288 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1631:17
+    #8 0x2ccafc860d5e  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffc51b68f70  rcx = 0x00006296dbd1f600  rdx = 0x0000000000000000  
+rdi = 0x00006296e1a9fc50  rsi = 0x00007ffc51b68908  rbp = 0x00007ffc51b68970  rsp = 0x00007ffc51b68950  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007ffc51b68b08  r13 = 0x000000000000002b  r14 = 0x00000000000000ff  r15 = 0x00007ffc51b68b18  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/CacheIRWriter.h:497:5 in js::jit::CacheIRWriter::loadArgumentFixedSlot(js::jit::ArgumentKind, unsigned int, js::jit::CallFlags)
+==13==ABORTING

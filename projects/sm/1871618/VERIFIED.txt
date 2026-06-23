@@ -1,0 +1,9 @@
+VERIFIED at 2026-05-29T14:00:00Z — Tier B retry on bug 1871618 (sec-high csectype-uaf, 2023-Dec/2024-Jan)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/jit/JitScript.h:191:32 in js::jit::ICScript::active() const`
+  - exact match against report's UAF location (the assertion fires on jemalloc-poison reads inside ICScript)
+  - root cause path: JitScript::purgeStubs iterated through inactive ICScripts via direct pointer traversal — when a previously-freed child ICScript's memory was reused (jemalloc poisoned the slot), the bytecode-size field returned garbage and the iteration walked into freed memory.
+  - fix lives under sibling Bug 1871947 (jdemooij Comment 10: "This is a duplicate of bug 1871947. I verified the patch for bug 1871947 fixes this test case too"). batch2's git log --grep="Bug 1871618" missed it because Mozilla's commit message uses the canonical bug number.
+  - fixed image (git d2fc02524025 "Bug 1871947 - Use forEachICScript in purgeInactiveICScripts", Phabricator D197603, 1 file / 6 lines) blocks PoC 10/10
+  - PoC is probabilistic (race-timing under --gc-zeal=10,233 + --blinterp-warmup-threshold=1) — vuln required up to 30 iters in crash_check.sh; single-shot from output.txt sometimes prints differential-testing diffs instead of crashing.
+  - meta.json.fixes.covers_bug field records that the canonical fix landed under bug 1871947.

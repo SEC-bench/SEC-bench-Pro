@@ -1,0 +1,41 @@
+
+
+#
+# Fatal error in ../../src/wasm/baseline/liftoff-assembler.cc, line 1096
+# Debug check failed: offset == var.offset() (128 vs. 112).
+#
+#
+#
+#FailureMessage Object: 0x70798db7f860
+==== C stack trace ===============================
+
+    out/arm64.debug.asan/d8(___interceptor_backtrace+0x46) [0x58e62f13e8c6]
+    out/arm64.debug.asan/d8(+0x7fe05a3) [0x58e634fd65a3]
+    out/arm64.debug.asan/d8(+0x7fde4ba) [0x58e634fd44ba]
+    out/arm64.debug.asan/d8(+0x7fb5308) [0x58e634fab308]
+    out/arm64.debug.asan/d8(+0x7fb48cf) [0x58e634faa8cf]
+    out/arm64.debug.asan/d8(+0x5098e32) [0x58e63208ee32]
+    out/arm64.debug.asan/d8(+0x50bb685) [0x58e6320b1685]
+    out/arm64.debug.asan/d8(+0x50a914e) [0x58e63209f14e]
+    out/arm64.debug.asan/d8(+0x50a4040) [0x58e63209a040]
+    out/arm64.debug.asan/d8(+0x52925d1) [0x58e6322885d1]
+    out/arm64.debug.asan/d8(+0x5290f9f) [0x58e632286f9f]
+    out/arm64.debug.asan/d8(+0x5325277) [0x58e63231b277]
+    out/arm64.debug.asan/d8(+0x503c4b9) [0x58e6320324b9]
+    out/arm64.debug.asan/d8(+0x503b7d2) [0x58e6320317d2]
+    out/arm64.debug.asan/d8(+0x595eeb2) [0x58e632954eb2]
+    out/arm64.debug.asan/d8(+0x595d623) [0x58e632953623]
+    out/arm64.debug.asan/d8(+0x595d158) [0x58e632953158]
+    out/arm64.debug.asan/d8(+0x595b0f7) [0x58e6329510f7]
+    out/arm64.debug.asan/d8(+0x595a5f0) [0x58e6329505f0]
+    out/arm64.debug.asan/d8(+0x2bc4305) [0x58e62fbba305]
+    out/arm64.debug.asan/d8(+0x2bc734b) [0x58e62fbbd34b]
+    out/arm64.debug.asan/d8(+0x22b57e9) [0x58e62f2ab7e9]
+    out/arm64.debug.asan/d8(+0x220d947) [0x58e62f203947]
+    out/arm64.debug.asan/d8(+0x22385fe) [0x58e62f22e5fe]
+    out/arm64.debug.asan/d8(+0x224291f) [0x58e62f23891f]
+    out/arm64.debug.asan/d8(+0x2241d56) [0x58e62f237d56]
+    out/arm64.debug.asan/d8(+0x2245406) [0x58e62f23b406]
+    /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3) [0x70798fe38083]
+    out/arm64.debug.asan/d8(_start+0x2e) [0x58e62f0fa02e]
+Trace/breakpoint trap

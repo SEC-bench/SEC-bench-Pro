@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-30T05:50:00Z — 2025-Q2 batch on bug 1965751 (sec-high csectype-uaf, 2025-May)
+  - CONFIMRED: RUNTIME_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: (value & RESERVED_MASK) == 0, at /src/gecko-dev/js/src/gc/Cell.h:109` via `JSString::base() const` during minor-GC string tenuring
+  - matches report's Cell.h:109 assertion (the "GC pointer is not aligned" check fires when reading a corrupted base-string pointer)
+  - root cause: tenuring promotion of a rope/dependent-string whose base pointer also needed promotion left the dependent string holding the un-promoted (old, nursery) base pointer. The post-barrier list had already been processed, so the next minor GC walked into the freed nursery slot and read garbage as the next-string pointer.
+  - PoC: 9-line extracted inline from Report.md.
+  - flags: `--fuzzing-safe --ion-offthread-compile=off` (default).
+  - fixed image (git 0f4762548281 "Always update to promoted root base string and post-barrier r=jonco", multi-file: gc/Tenuring.cpp, gc/Nursery.h, vm/StringType.cpp) blocks PoC 5/5.

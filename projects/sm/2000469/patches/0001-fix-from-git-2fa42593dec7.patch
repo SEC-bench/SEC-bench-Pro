@@ -1,0 +1,28 @@
+From 2fa42593dec7de35a707f80e47898e459e4297bb Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Tue, 25 Nov 2025 07:55:04 +0000
+Subject: [PATCH] Bug 2000469 - Check dependency in MGuardShape::foldsTo.
+ r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D273543
+---
+ js/src/jit/MIR.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/js/src/jit/MIR.cpp b/js/src/jit/MIR.cpp
+index 2f28628e7b3f..f5c147cdfe92 100644
+--- a/js/src/jit/MIR.cpp
++++ b/js/src/jit/MIR.cpp
+@@ -7179,7 +7179,8 @@ MDefinition* MGuardSpecificInt32::foldsTo(TempAllocator& alloc) {
+ 
+ MDefinition* MGuardShape::foldsTo(TempAllocator& alloc) {
+   if (object()->isGuardShape() &&
+-      shape() == object()->toGuardShape()->shape()) {
++      shape() == object()->toGuardShape()->shape() && dependency() &&
++      object()->dependency() == dependency()) {
+     return object();
+   }
+   return this;
+-- 
+2.43.0
+

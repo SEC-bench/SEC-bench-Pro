@@ -1,0 +1,52 @@
+diff --git a/src/objects/backing-store.h b/src/objects/backing-store.h
+index 33eb0b0d2aa..39cbaac3aa3 100644
+--- a/src/objects/backing-store.h
++++ b/src/objects/backing-store.h
+@@ -11,6 +11,7 @@
+ #include "include/v8-array-buffer.h"
+ #include "include/v8-internal.h"
+ #include "src/handles/handles.h"
++#include "src/sandbox/sandbox.h"
+ 
+ namespace v8::internal {
+ 
+@@ -78,7 +79,13 @@ class V8_EXPORT_PRIVATE BackingStore : public BackingStoreBase {
+   static std::unique_ptr<BackingStore> EmptyBackingStore(SharedFlag shared);
+ 
+   // Accessors.
+-  void* buffer_start() const { return buffer_start_; }
++  // Internally, we treat nullptr as the empty buffer value. However,
++  // externally, we should use the EmptyBackingStoreBuffer() constant for that
++  // purpose as the buffer pointer should always point into the sandbox. As
++  // such, this is the place where we convert between these two.
++  void* buffer_start() const {
++    return buffer_start_ != nullptr ? buffer_start_ : EmptyBackingStoreBuffer();
++  }
+   size_t byte_length(
+       std::memory_order memory_order = std::memory_order_relaxed) const {
+     return byte_length_.load(memory_order);
+diff --git a/src/objects/js-array-buffer.cc b/src/objects/js-array-buffer.cc
+index af97651a723..1dad58118ef 100644
+--- a/src/objects/js-array-buffer.cc
++++ b/src/objects/js-array-buffer.cc
+@@ -87,13 +87,13 @@ void JSArrayBuffer::Attach(std::shared_ptr<BackingStore> backing_store) {
+   // at least one page for the BackingStore (so {IsEmpty()} is always false).
+   CHECK_IMPLIES(backing_store->is_wasm_memory(), !backing_store->IsEmpty());
+   // Non-empty backing stores must start at a non-null pointer.
+-  DCHECK_IMPLIES(backing_store_buffer == nullptr, backing_store->IsEmpty());
+-  // Empty backing stores can be backed by a null pointer or an externally
+-  // provided pointer: Either is acceptable. If pointers are sandboxed then
+-  // null pointers must be replaced by a special null entry.
+-  if (V8_ENABLE_SANDBOX_BOOL && !backing_store_buffer) {
+-    backing_store_buffer = EmptyBackingStoreBuffer();
+-  }
++  DCHECK_IMPLIES(backing_store_buffer == EmptyBackingStoreBuffer(),
++                 backing_store->IsEmpty());
++  // Empty backing stores can be backed by an empty buffer pointer or by an
++  // externally provided pointer: Either is acceptable. However, the pointer
++  // must always point into the sandbox, so nullptr is not acceptable if the
++  // sandbox is enabled.
++  DCHECK_IMPLIES(V8_ENABLE_SANDBOX_BOOL, backing_store_buffer != nullptr);
+   set_backing_store(isolate, backing_store_buffer);
+ 
+   // GSABs need to read their byte_length from the BackingStore. Maintain the

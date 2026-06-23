@@ -1,0 +1,110 @@
+From aa2cbd9e4ed70238694e07f1c525941aa1e04429 Mon Sep 17 00:00:00 2001
+From: Andreas Haas <ahaas@chromium.org>
+Date: Wed, 21 Aug 2024 16:55:04 +0200
+Subject: [PATCH] [wasm][wrapper] Don't store converted references in arguments
+
+When the generic js-to-wasm wrapper converts tagged parameters, it has
+to store the converted parameters somewhere to protect them from
+potential GCs. The existing implementation stored the converted
+parameters in the incoming arguments array. However, the incoming
+arguments array is observable from JavaScript through
+Function.prototype.arguments, which means that writing converted
+parameters (i.e. WebAssembly references) into the arguments array means
+that WebAssembly objects leak into JavaScript.
+
+With this CL the converted parameters are not written into the arguments
+array anymore, but instead a FixedArray is allocated to store converted
+parameters.
+
+R=thibaudm@chromium.org
+
+Bug: 359949835
+Change-Id: Icfa4f86456a00132b23b239db1f9aa66a270f7fd
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5804141
+Reviewed-by: Thibaud Michaud <thibaudm@chromium.org>
+Commit-Queue: Andreas Haas <ahaas@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#95757}
+---
+ src/builtins/js-to-wasm.tq                    | 19 ++++++++++++--
+ .../mjsunit/regress/wasm/regress-359949835.js | 25 +++++++++++++++++++
+ 2 files changed, 42 insertions(+), 2 deletions(-)
+ create mode 100644 test/mjsunit/regress/wasm/regress-359949835.js
+
+diff --git a/src/builtins/js-to-wasm.tq b/src/builtins/js-to-wasm.tq
+index 2bce6005d1a..ea17bbb8026 100644
+--- a/src/builtins/js-to-wasm.tq
++++ b/src/builtins/js-to-wasm.tq
+@@ -611,6 +611,15 @@ macro JSToWasmWrapperHelper(
+ 
+   let locationAllocator = LocationAllocatorForParams(paramBuffer);
+   let hasRefParam: bool = false;
++  // A storage for converted reference parameters, so that they don't get
++  // garbage collected if the conversion of primitive parameters causes a GC.
++  // The storage gets allocated lazily when the first reference parameter gets
++  // converted to avoid performance regressions for signatures without tagged
++  // parameters. An old implementation used the `arguments` array as the storage
++  // for converted reference parameters, but this does not work because then
++  // converted reference parameters can be accessed from JavaScript using
++  // `Function.prototype.arguments`.
++  let convertedTagged: FixedArray|Smi = Convert<Smi>(0);
+ 
+   let paramTypeIndex: int32 = 0;
+   for (let paramIndex: int32 = 0; paramTypeIndex < paramCount; paramIndex++) {
+@@ -661,7 +670,12 @@ macro JSToWasmWrapperHelper(
+       // primitive types are finished. For now we write the converted parameter
+       // back to the stack.
+       hasRefParam = true;
+-      arguments[Convert<intptr>(paramIndex)] =
++      if (TaggedIsSmi(convertedTagged)) {
++        convertedTagged =
++            WasmAllocateZeroedFixedArray(Convert<intptr>(paramCount));
++      }
++      UnsafeCast<FixedArray>(convertedTagged)
++          .objects[Convert<intptr>(paramIndex)] =
+           JSToWasmObject(context, trustedInstanceData, paramType, param);
+     }
+   }
+@@ -687,7 +701,8 @@ macro JSToWasmWrapperHelper(
+         paramIndex++;
+         continue;
+       }
+-      const param = arguments[Convert<intptr>(paramIndex++)];
++      const param = UnsafeCast<FixedArray>(convertedTagged)
++                        .objects[Convert<intptr>(paramIndex++)];
+       let toRef = locationAllocator.GetGPSlot();
+       *toRef = BitcastTaggedToWord(param);
+       k++;
+diff --git a/test/mjsunit/regress/wasm/regress-359949835.js b/test/mjsunit/regress/wasm/regress-359949835.js
+new file mode 100644
+index 00000000000..ec6876bfc1d
+--- /dev/null
++++ b/test/mjsunit/regress/wasm/regress-359949835.js
+@@ -0,0 +1,25 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
++
++const builder = new WasmModuleBuilder();
++let $sig0 = builder.addType(makeSig([kWasmFuncRef], []));
++let func0 = builder.addImport('q', 'func', $sig0);
++
++builder.addExport('main', func0);
++
++function f23(a24) {
++    try {
++      typeof a24.arguments[0];
++    } catch(e) {}
++}
++const o27 = {
++    "func": f23,
++};
++const o28 = {
++    "q": o27,
++};
++const v31 = builder.instantiate(o28).exports.main;
++v31(v31);
+-- 
+2.43.0
+

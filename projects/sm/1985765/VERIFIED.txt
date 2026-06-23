@@ -1,0 +1,9 @@
+VERIFIED at 2026-05-30T00:00:00Z — 2025-Q3 batch on bug 1985765 (sec-high csectype-uaf, 2025-Aug)
+  - CONFIMRED: RUNTIME_CRASH/ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: !gc::IsAboutToBeFinalized(r.front().value()), at /src/gecko-dev/js/src/gc/WeakMap-inl.h:424`
+  - exact match against report's WeakMap UAF assertion
+  - root cause: dense bitmap (atoms-used-by-uncollected-zones) computed wrong bitmask when checking a single bit. With --enable-symbols-as-weakmap-keys + private-field classes seeded as WeakMap keys across globals, a Symbol entry was incorrectly considered marked across zones → WeakMap::clearAndCompact saw an about-to-be-finalized entry that should already have been swept.
+  - PoC: extracted inline from Report.md (collector heuristic missed it; bug had no .js attachment but `The following testcase crashes…` block was clearly delimited).
+  - flags: `--fuzzing-safe --ion-offthread-compile=off --enable-symbols-as-weakmap-keys --more-compartments` (per report; --enable-symbols-as-weakmap-keys is nightly-only).
+  - fixed image (git 3a8fb49d343b "Fix bitmask calculation when checking dense bitmap bit", Phabricator D263252, 1-line js/src/ds/Bitmap.h) blocks PoC 5/5.
+  - Same ExclusiveData=delete patch as 1871618 / 1884518 (2025-Aug source still pre-Q2-2024-fix upstream).

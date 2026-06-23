@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:2000469",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/MIR.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --no-threads --fast-warmup",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "IonMonkey MGuardShape::foldsTo did not check the dependency chain before folding away the guard, allowing growSlotsPure to be called with a stale shape after Int8Array.reduceRight invoked a setter that shifted an array out from under the IC. Hits the numDynamicSlots() MOZ_ASSERT at vm/JSObject-inl.h:36. sec-high. Fix: check dependency in MGuardShape::foldsTo (git 2fa42593dec7).",
+  "fix_commits": [
+    "2fa42593dec7"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-2fa42593dec7.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 2000469 fix",
+      "source_commit": "2fa42593dec7",
+      "commit": "2fa42593dec7",
+      "url": "https://github.com/mozilla/gecko-dev/commit/2fa42593dec7",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/2fa42593dec7"
+    }
+  ],
+  "vrp": null
+}

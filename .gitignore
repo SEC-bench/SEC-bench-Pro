@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+uv.lock
+
+# Virtual environments
+.venv/
+venv/
+
+# Agents
+.claude
+.codex
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# OS/editor noise
+.DS_Store
+
+# Generated evaluation outputs
+baks/
+output/
+results/
+trajectories/
+harness/output/
+harness/results/
+
+*_logs
+fix_validation
+fixed_build_logs
+latest_build_logs
+final_validation_logs
+fix.json
+fix_commit_inventory.csv
+distributed
+rerun

@@ -1,0 +1,51 @@
+commit 1c39b127b06b161ba0d52412d4b8d188472efbe7
+Author: Ryan Hunt <rhunt@eqrion.net>
+Date:   Fri Mar 27 18:41:28 2026 +0000
+
+    Bug 2024918 - Fix scalar replacement. r=jseward,jpages
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D288998
+
+diff --git a/js/src/jit/ScalarReplacement.cpp b/js/src/jit/ScalarReplacement.cpp
+index 93cd316407b5..7cc0afa18380 100644
+--- a/js/src/jit/ScalarReplacement.cpp
++++ b/js/src/jit/ScalarReplacement.cpp
+@@ -3618,11 +3618,7 @@ class WasmStructMemoryView : public MDefinitionVisitorDefaultNoop {
+   bool mergeIntoSuccessorState(MBasicBlock* curr, MBasicBlock* succ,
+                                BlockState** pSuccState);
+ 
+-#ifdef DEBUG
+   void assertSuccess();
+-#else
+-  void assertSuccess() {}
+-#endif
+ 
+   bool oom() const { return oom_; }
+ 
+@@ -3639,15 +3635,13 @@ void WasmStructMemoryView::setEntryBlockState(BlockState* state) {
+   state_ = state;
+ }
+ 
+-#ifdef DEBUG
+ void WasmStructMemoryView::assertSuccess() {
+   // Make sure that the undefined value used as a placeholder is not used.
+-  MOZ_ASSERT(!undefinedVal_->hasUses());
++  MOZ_RELEASE_ASSERT(!undefinedVal_->hasUses());
+ 
+   // Make sure that the MWasmNewStruct instruction is not used anymore.
+-  MOZ_ASSERT(!struct_->hasUses());
++  MOZ_RELEASE_ASSERT(!struct_->hasUses());
+ }
+-#endif
+ 
+ MBasicBlock* WasmStructMemoryView::startingBlock() { return startBlock_; }
+ 
+@@ -3897,7 +3891,7 @@ static bool IsWasmStructEscaped(MDefinition* ins, MInstruction* newStruct) {
+       }
+       case MDefinition::Opcode::WasmStoreFieldRef: {
+         // Escaped if it's stored into another struct.
+-        if (def->toWasmStoreFieldRef()->value() == newStruct) {
++        if (def->toWasmStoreFieldRef()->value() == ins) {
+           JitSpewDef(JitSpew_Escape, "is escaped by\n", def);
+           return true;
+         }

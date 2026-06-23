@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-29T22:50:00Z — 2024-Q2 batch on bug 1895123 (sec-high, 2024-Apr/May)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `AddressSanitizer: SEGV on unknown address (high value)` with PC in unknown module — exactly the UD2-on-wasm-import-stub pattern the report describes (Crash [@ ??] on UD2 with WebAssembly)
+  - root cause path: wasm import stub did not emit a stack map for a frame that involved suspending JS Promise integration via `WebAssembly.Function` with externref parameters used inside `evalInWorker`. GC during the host callback saw a frame with no map, attempted to scan a frame slot as a Cell with stale type tag → UD2 trap on the GC type-check.
+  - PoC swapped: report attached two .js files; the canonical small repro `1.js` triggers crash reliably while `test.js` (`evalInWorker(\`...\`)` wrapper variant) ran clean in our isolated container. Used 1.js.
+  - flags: `--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off` (per report).
+  - fixed image (git a6d934ae638b "Create stack map in wasm import stub if needed", Phabricator D210515, 45 lines in WasmStubs.cpp) blocks PoC 5/5.
+  - ExclusiveData=delete patch required (2024-05 source pre-dates Mozilla's 2024-Q2 upstream fix of the broken move ctor).

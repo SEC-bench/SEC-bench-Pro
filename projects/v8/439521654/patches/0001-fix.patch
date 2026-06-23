@@ -1,0 +1,129 @@
+From 3bbb4dcb340460be8ff9afe51290cfe94d7188ff Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marja=20H=C3=B6ltt=C3=A4?= <marja@chromium.org>
+Date: Fri, 5 Sep 2025 12:46:03 +0200
+Subject: [PATCH] [rab/gsab] Handle GSABs growing during sorting gracefully
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The previous sandbox hardening (
+https://chromium-review.googlesource.com/c/v8/v8/+/6268383 ) was not
+correct; it didn't handle the case that the GSAB is grown by a
+background thread gracefully.
+
+The easiest fix is to avoid reading the length again and figure out how
+many elements we need to sort based on the byte_length we already read.
+
+Bug: 385775375
+Change-Id: I70f0b051ffad61f1f80cd50f0dbdbd0fa7ab1287
+Fixed: 439522866
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6918956
+Reviewed-by: Anton Bikineev <bikineev@chromium.org>
+Commit-Queue: Marja Hölttä <marja@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102346}
+---
+ src/runtime/runtime-typedarray.cc         | 12 ++++---
+ test/mjsunit/regress/regress-439522866.js | 43 +++++++++++++++++++++++
+ test/mjsunit/sandbox/regress-385775375.js |  2 +-
+ 3 files changed, 52 insertions(+), 5 deletions(-)
+ create mode 100644 test/mjsunit/regress/regress-439522866.js
+
+diff --git a/src/runtime/runtime-typedarray.cc b/src/runtime/runtime-typedarray.cc
+index ff80d08a3c1..efd89acb6b3 100644
+--- a/src/runtime/runtime-typedarray.cc
++++ b/src/runtime/runtime-typedarray.cc
+@@ -120,6 +120,10 @@ RUNTIME_FUNCTION(Runtime_TypedArraySortFast) {
+   }
+ #endif
+ 
++  // After reading the byte length, avoid reading the bytelength or length
++  // again. If the buffer is shared, it might have been grown by a
++  // background thread. In that case we should ignore the new length and just
++  // sort the old elements and write them into the beginning of the array.
+   const size_t byte_length = array->GetByteLength();
+ 
+   // In case of a SAB, the data is copied into temporary memory, as
+@@ -151,15 +155,15 @@ RUNTIME_FUNCTION(Runtime_TypedArraySortFast) {
+ 
+   DisallowGarbageCollection no_gc;
+ 
+-  size_t length = array->GetLength();
+-  DCHECK_LT(1, length);
+-
++  // The type is not necessarily consistent with the byte_length we read (a
++  // sandbox attacker might have changed it). The code below must handle it
++  // gracefully.
+   switch (array->type()) {
+ #define TYPED_ARRAY_SORT(Type, type, TYPE, ctype)                            \
+   case kExternal##Type##Array: {                                             \
+     ctype* data = copy_data ? reinterpret_cast<ctype*>(data_copy_ptr)        \
+                             : static_cast<ctype*>(array->DataPtr());         \
+-    SBXCHECK(length * sizeof(ctype) == byte_length);                         \
++    size_t length = byte_length / sizeof(ctype);                             \
+     if (kExternal##Type##Array == kExternalFloat64Array ||                   \
+         kExternal##Type##Array == kExternalFloat32Array) {                   \
+       if (COMPRESS_POINTERS_BOOL && alignof(ctype) > kTaggedSize) {          \
+diff --git a/test/mjsunit/regress/regress-439522866.js b/test/mjsunit/regress/regress-439522866.js
+new file mode 100644
+index 00000000000..d14b629c6ba
+--- /dev/null
++++ b/test/mjsunit/regress/regress-439522866.js
+@@ -0,0 +1,43 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++function workerScript() {
++  onmessage = function(e) {
++    const gsab = e.data.gsab;
++    const newSize = e.data.newSize;
++    const sync = new Int32Array(e.data.sync);
++    Atomics.store(sync, 0, 1);
++    Atomics.notify(sync, 0);
++    Atomics.wait(sync, 0, 1);
++    gsab.grow(newSize);
++    postMessage("done");
++  };
++}
++
++function main() {
++  // Large sizes to increase memcpy time and OOB impact.
++  const initialSize = 512 * 1024;
++  const maxSize = 2 * initialSize;
++  const newSize = maxSize;
++  const syncSAB = new SharedArrayBuffer(4);
++  const sync = new Int32Array(syncSAB);
++  // States: 0=init, 1=worker ready, 2=main ready (grow now)
++  for (let i = 0; i < 5; i++) {
++    // Reset synchronization state.
++    Atomics.store(sync, 0, 0);
++    let gsab_i = new SharedArrayBuffer(initialSize, { maxByteLength: maxSize });
++    const ta_i = new Int8Array(gsab_i);
++    const worker = new Worker(workerScript, { type: 'function' });
++    worker.postMessage({ gsab: gsab_i, newSize: newSize, sync: syncSAB });
++    // Wait for worker to become ready.
++    while (Atomics.load(sync, 0) !== 1) {}
++    // Signal worker to resize buffer.
++    Atomics.store(sync, 0, 2);
++    Atomics.notify(sync, 0);
++    ta_i.sort();
++    worker.getMessage();
++    worker.terminate();
++  }
++}
++main();
+diff --git a/test/mjsunit/sandbox/regress-385775375.js b/test/mjsunit/sandbox/regress-385775375.js
+index 03722395b41..26637b0261b 100644
+--- a/test/mjsunit/sandbox/regress-385775375.js
++++ b/test/mjsunit/sandbox/regress-385775375.js
+@@ -30,6 +30,6 @@ let bit_field2_val = sbx_memory.getUint8(bit_field2_addr);
+ let worker = corruptInBackground(
+     bit_field2_addr, bit_field2_val, bit_field2_val ^ 0xff);
+ 
+-for (let i = 0; i < 10000; ++i) {
++for (let i = 0; i < 100; ++i) {
+   ar.sort();
+ }
+-- 
+2.43.0
+

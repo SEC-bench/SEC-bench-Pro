@@ -1,0 +1,37 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1917807",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmFrameIter.cpp",
+        "js/src/wasm/WasmStubs.cpp",
+        "js/src/jit/JitFrames.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm",
+        "js/src/jit"
+    ],
+    "command_options": "--wasm-compiler=ion --blinterp-eager --fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Stack corruption",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm JIT entry frame footer alignment mismatch for return_call_indirect tail calls. CVE-2024-9403 (sec-high, MFSA 2024-50, Firefox 131). GenerateJitEntry in js/src/wasm/WasmStubs.cpp reserved the JIT-to-wasm exit footer using the wrong parameter-area alignment for cases where the entered function later performed return_call_indirect to a target with a different argument layout. The inherited entry frame footer no longer matched what WasmFrameIter and JitFrames expected; when the tail target trapped, stack walking read the ExitFrameType byte from a stale offset, causing a debug AssertJitExitFrame failure or ASAN fault while SavedStacks walked the corrupted wasm/JIT frame. The fix aligns the exit footer size with WasmStackAlignment and computes the stack argument bytes consistently for both the original callee and coerced tail-call argument layout.",
+    "fix_commits": [
+        "16781a13b5ecce172cf06a272f1cee629c9afee2"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-generatejitentry-call-parameters-alignment.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1917807 - Fix GenerateJitEntry call parameters alignment.",
+            "source_commit": "16781a13b5ecce172cf06a272f1cee629c9afee2",
+            "commit": "16781a13b5ecce172cf06a272f1cee629c9afee2",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/16781a13b5ecce172cf06a272f1cee629c9afee2",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/16781a13b5ecce172cf06a272f1cee629c9afee2",
+            "phabricator": "D221868"
+        }
+    ],
+    "vrp": null
+}

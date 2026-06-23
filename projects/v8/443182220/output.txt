@@ -1,0 +1,173 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+V8 is running with experimental features enabled. Stability and security will suffer.
+JS_OBJECT_TYPE at 0x7ecf0010b7a9
+JS_FUNCTION_TYPE at 0x7ecf0010b7c5
+CLOSURE_FEEDBACK_CELL_ARRAY_TYPE at 0x7ecf0010b7e1
+FIXED_ARRAY_TYPE at 0x7ecf0010b7f1
+JS_PROMISE_TYPE at 0x7ecf0010b849
+JS_ASYNC_FUNCTION_OBJECT_TYPE at 0x7ecf0010b85d
+JS_OBJECT_TYPE at 0x7ecf0010b889
+JS_FUNCTION_TYPE at 0x7ecf0010b8a5
+JS_PROMISE_TYPE at 0x7ecf0010b8c1
+JS_PROMISE_TYPE at 0x7ecf0010b8d5
+PROMISE_FULFILL_REACTION_JOB_TASK_TYPE at 0x7ecf0010b8e9
+JS_PROMISE_TYPE at 0x7ecf0010b901
+FUNCTION_CONTEXT_TYPE at 0x7ecf0010b915
+JS_FUNCTION_TYPE at 0x7ecf0010b931
+JS_FUNCTION_TYPE at 0x7ecf0010b94d
+JS_PROMISE_TYPE at 0x7ecf0010b969
+PROMISE_REACTION_TYPE at 0x7ecf0010b97d
+====================================
+reject_handler: 0x7ecf0010b94d
+context: 0x7ecf0010b915
+foreign: 0x7ecf0010b995
+====================================
+FOREIGN_TYPE at 0x7ecf0010b995
+JS_FUNCTION_TYPE at 0x7ecf0010b99d
+JS_PROMISE_TYPE at 0x7ecf0010b9b9
+JS_PROMISE_TYPE at 0x7ecf0010b9cd
+PROMISE_FULFILL_REACTION_JOB_TASK_TYPE at 0x7ecf0010b9e1
+JS_PROMISE_TYPE at 0x7ecf0010b9f9
+FUNCTION_CONTEXT_TYPE at 0x7ecf0010ba0d
+JS_FUNCTION_TYPE at 0x7ecf0010ba29
+JS_FUNCTION_TYPE at 0x7ecf0010ba45
+JS_PROMISE_TYPE at 0x7ecf0010ba61
+PROMISE_REACTION_TYPE at 0x7ecf0010ba75
+====================================
+reject_handler: 0x7ecf0010ba45
+context: 0x7ecf0010ba0d
+foreign: 0x7ecf0010ba8d
+====================================
+FOREIGN_TYPE at 0x7ecf0010ba8d
+JS_ARRAY_TYPE at 0x7ecf0010ba95
+SEQ_ONE_BYTE_STRING_TYPE at 0x7ecf0010baa5
+CONS_ONE_BYTE_STRING_TYPE at 0x7ecf0010bac1
+HEAP_NUMBER_TYPE at 0x7ecf0010bad5
+HEAP_NUMBER_TYPE at 0x7ecf0010bae1
+SEQ_ONE_BYTE_STRING_TYPE at 0x7ecf0010baed
+=================================================================
+==10==ERROR: AddressSanitizer: heap-use-after-free on address 0x706e3c9e03b8 at pc 0x5fc3c92eb169 bp 0x7fff4d214060 sp 0x7fff4d214058
+READ of size 8 at 0x706e3c9e03b8 thread T0
+    #0 0x5fc3c92eb168 in RemoveFromAsyncWaiterQueueList src/objects/js-atomics-synchronization.cc:349:11
+    #1 0x5fc3c92eb168 in v8::internal::JSAtomicsMutex::UnlockAsyncLockedMutex(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Foreign>) src/objects/js-atomics-synchronization.cc:957:3
+    #2 0x5fc3c856e72f in v8::internal::(anonymous namespace)::UnlockAsyncLockedMutexFromPromiseHandler(v8::internal::Isolate*) src/builtins/builtins-atomics-synchronization.cc:40:13
+    #3 0x5fc3c8569eeb in v8::internal::Builtin_Impl_AtomicsMutexAsyncUnlockResolveHandler(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-atomics-synchronization.cc:237:7
+    #4 0x5fc3cc90cf75 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #5 0x5fc3cc98c0e9 in Builtins_PromiseFulfillReactionJob setup-isolate-deserialize.cc
+    #6 0x5fc3cc8902bb in Builtins_RunMicrotasks setup-isolate-deserialize.cc
+    #7 0x5fc3cc85c4aa in Builtins_JSRunMicrotasksEntry setup-isolate-deserialize.cc
+    #8 0x5fc3c885e9c3 in Call src/execution/simulator.h:212:12
+    #9 0x5fc3c885e9c3 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:460:41
+    #10 0x5fc3c8861c49 in v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:502:18
+    #11 0x5fc3c886205f in v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) src/execution/execution.cc:606:10
+    #12 0x5fc3c88e8289 in v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) src/execution/microtask-queue.cc:185:22
+    #13 0x5fc3c88e7c40 in v8::internal::MicrotaskQueue::PerformCheckpointInternal(v8::Isolate*) src/execution/microtask-queue.cc:129:3
+    #14 0x5fc3c88bc3c1 in PerformCheckpoint src/execution/microtask-queue.h:48:5
+    #15 0x5fc3c88bc3c1 in v8::internal::Isolate::FireCallCompletedCallbackInternal(v8::internal::MicrotaskQueue*) src/execution/isolate.cc:6533:44
+    #16 0x5fc3c8460c0f in FireCallCompletedCallback src/execution/isolate.h:1777:5
+    #17 0x5fc3c8460c0f in ~CallDepthScope src/api/api-inl.h:183:32
+    #18 0x5fc3c8460c0f in ~EnterV8InternalScope src/api/api-inl.h:259:20
+    #19 0x5fc3c8460c0f in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1938:1
+    #20 0x5fc3c818ad06 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #21 0x5fc3c81c0a1d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #22 0x5fc3c81cc8b3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #23 0x5fc3c81cbce5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #24 0x5fc3c81cf3fe in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #25 0x73be3da2f082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+0x706e3c9e03b8 is located 8 bytes inside of 104-byte region [0x706e3c9e03b0,0x706e3c9e0418)
+freed by thread T0 here:
+    #0 0x5fc3c81585c2 in operator delete(void*, unsigned long) (/src/v8/out/x64.asan/d8+0x135c5c2) (BuildId: 0ce13d0e81dbbd4d)
+    #1 0x5fc3c92f2b6c in operator() third_party/libc++/src/include/__memory/unique_ptr.h:77:5
+    #2 0x5fc3c92f2b6c in reset third_party/libc++/src/include/__memory/unique_ptr.h:290:7
+    #3 0x5fc3c92f2b6c in ~unique_ptr third_party/libc++/src/include/__memory/unique_ptr.h:259:71
+    #4 0x5fc3c92f2b6c in __destroy_at<std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode> >, 0> third_party/libc++/src/include/__memory/construct_at.h:61:11
+    #5 0x5fc3c92f2b6c in destroy<std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode> >, 0> third_party/libc++/src/include/__memory/allocator_traits.h:313:5
+    #6 0x5fc3c92f2b6c in __delete_node third_party/libc++/src/include/list:590:5
+    #7 0x5fc3c92f2b6c in clear third_party/libc++/src/include/list:655:7
+    #8 0x5fc3c92f2b6c in ~__list_imp third_party/libc++/src/include/list:642:3
+    #9 0x5fc3c92f2b6c in unsigned long std::__Cr::list<std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode>>, std::__Cr::allocator<std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode>>>>::remove_if<v8::internal::detail::AsyncWaiterQueueNode<v8::internal::JSAtomicsMutex>::RemoveFromAsyncWaiterQueueList(v8::internal::detail::AsyncWaiterQueueNode<v8::internal::JSAtomicsMutex>*)::'lambda'(std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode>>&)>(v8::internal::detail::AsyncWaiterQueueNode<v8::internal::JSAtomicsMutex>::RemoveFromAsyncWaiterQueueList(v8::internal::detail::AsyncWaiterQueueNode<v8::internal::JSAtomicsMutex>*)::'lambda'(std::__Cr::unique_ptr<v8::internal::detail::WaiterQueueNode, std::__Cr::default_delete<v8::internal::detail::WaiterQueueNode>>&)) third_party/libc++/src/include/list:1596:1
+    #10 0x5fc3c92eb027 in RemoveFromAsyncWaiterQueueList src/objects/js-atomics-synchronization.cc:349:50
+    #11 0x5fc3c92eb027 in v8::internal::JSAtomicsMutex::UnlockAsyncLockedMutex(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::Foreign>) src/objects/js-atomics-synchronization.cc:957:3
+    #12 0x5fc3c856e72f in v8::internal::(anonymous namespace)::UnlockAsyncLockedMutexFromPromiseHandler(v8::internal::Isolate*) src/builtins/builtins-atomics-synchronization.cc:40:13
+    #13 0x5fc3c8569eeb in v8::internal::Builtin_Impl_AtomicsMutexAsyncUnlockResolveHandler(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-atomics-synchronization.cc:237:7
+    #14 0x5fc3cc90cf75 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #15 0x5fc3cc98c0e9 in Builtins_PromiseFulfillReactionJob setup-isolate-deserialize.cc
+    #16 0x5fc3cc8902bb in Builtins_RunMicrotasks setup-isolate-deserialize.cc
+    #17 0x5fc3cc85c4aa in Builtins_JSRunMicrotasksEntry setup-isolate-deserialize.cc
+    #18 0x5fc3c885e9c3 in Call src/execution/simulator.h:212:12
+    #19 0x5fc3c885e9c3 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:460:41
+    #20 0x5fc3c8861c49 in v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:502:18
+    #21 0x5fc3c886205f in v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) src/execution/execution.cc:606:10
+    #22 0x5fc3c88e8289 in v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) src/execution/microtask-queue.cc:185:22
+    #23 0x5fc3c88e7c40 in v8::internal::MicrotaskQueue::PerformCheckpointInternal(v8::Isolate*) src/execution/microtask-queue.cc:129:3
+    #24 0x5fc3c88bc3c1 in PerformCheckpoint src/execution/microtask-queue.h:48:5
+    #25 0x5fc3c88bc3c1 in v8::internal::Isolate::FireCallCompletedCallbackInternal(v8::internal::MicrotaskQueue*) src/execution/isolate.cc:6533:44
+    #26 0x5fc3c8460c0f in FireCallCompletedCallback src/execution/isolate.h:1777:5
+    #27 0x5fc3c8460c0f in ~CallDepthScope src/api/api-inl.h:183:32
+    #28 0x5fc3c8460c0f in ~EnterV8InternalScope src/api/api-inl.h:259:20
+    #29 0x5fc3c8460c0f in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1938:1
+    #30 0x5fc3c818ad06 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #31 0x5fc3c81c0a1d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #32 0x5fc3c81cc8b3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #33 0x5fc3c81cbce5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #34 0x5fc3c81cf3fe in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #35 0x73be3da2f082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+previously allocated by thread T0 here:
+    #0 0x5fc3c815795d in operator new(unsigned long) (/src/v8/out/x64.asan/d8+0x135b95d) (BuildId: 0ce13d0e81dbbd4d)
+    #1 0x5fc3c92e9ee9 in v8::internal::detail::AsyncWaiterQueueNode<v8::internal::JSAtomicsMutex>::NewLockedAsyncWaiterStoredInIsolate(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSAtomicsMutex>) src/objects/js-atomics-synchronization.cc:291:9
+    #2 0x5fc3c92e98c7 in v8::internal::JSAtomicsMutex::LockOrEnqueuePromise(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSAtomicsMutex>, v8::internal::DirectHandle<v8::internal::Object>, std::__Cr::optional<v8::base::TimeDelta>) src/objects/js-atomics-synchronization.cc:847:19
+    #3 0x5fc3c8569573 in v8::internal::Builtin_Impl_AtomicsMutexLockAsync(v8::internal::BuiltinArguments, v8::internal::Isolate*) src/builtins/builtins-atomics-synchronization.cc:223:3
+    #4 0x5fc3cc90cf75 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #5 0x5fc3cc85f934 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #6 0x5fc3cc85f934 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #7 0x5fc3cc85c55b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #8 0x5fc3cc85c2aa in Builtins_JSEntry setup-isolate-deserialize.cc
+    #9 0x5fc3c885fd1b in Call src/execution/simulator.h:212:12
+    #10 0x5fc3c885fd1b in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:442:22
+    #11 0x5fc3c88612d8 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:542:10
+    #12 0x5fc3c8460983 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:1937:7
+    #13 0x5fc3c818ad06 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1033:44
+    #14 0x5fc3c81c0a1d in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:5351:10
+    #15 0x5fc3c81cc8b3 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:6307:37
+    #16 0x5fc3c81cbce5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:6215:18
+    #17 0x5fc3c81cf3fe in v8::Shell::Main(int, char**) src/d8/d8.cc:7100:18
+    #18 0x73be3da2f082 in __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:308:16
+
+SUMMARY: AddressSanitizer: heap-use-after-free src/objects/js-atomics-synchronization.cc:349:11 in RemoveFromAsyncWaiterQueueList
+Shadow bytes around the buggy address:
+  0x706e3c9e0100: 00 00 00 00 00 00 00 00 00 00 00 fa fa fa fa fa
+  0x706e3c9e0180: fa fa fa fa 00 00 00 00 00 00 00 00 00 00 00 00
+  0x706e3c9e0200: 00 fa fa fa fa fa fa fa fa fa 00 00 00 00 00 00
+  0x706e3c9e0280: 00 00 00 00 00 00 00 00 fa fa fa fa fa fa fa fa
+  0x706e3c9e0300: 00 00 00 00 00 00 00 00 00 00 00 00 00 fa fa fa
+=>0x706e3c9e0380: fa fa fa fa fa fa fd[fd]fd fd fd fd fd fd fd fd
+  0x706e3c9e0400: fd fd fd fa fa fa fa fa fa fa fa fa 00 00 00 00
+  0x706e3c9e0480: 00 00 00 00 00 00 00 00 00 fa fa fa fa fa fa fa
+  0x706e3c9e0500: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x706e3c9e0580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x706e3c9e0600: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==10==ABORTING
+
+## V8 sandbox violation detected!
+

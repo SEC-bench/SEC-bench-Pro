@@ -1,0 +1,4 @@
+VERIFIED at 2026-05-28T08:28:27Z — orchestrator end-to-end on bug 1934365 / CVE-pending
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash site: js::CreateSuppressedError @ js/src/vm/Interpreter.cpp:1758 (matches target_source_files)
+  - fixed image (apply patches/0001-fix-from-git-d25da0d2cf83.patch) blocks PoC 10/10

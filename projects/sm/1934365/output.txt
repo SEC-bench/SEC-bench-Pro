@@ -1,0 +1,45 @@
+[10] Assertion failure: isObject(), at /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:972
+#01: JS::Value::toObject() const[/out/js +0x2cee22b]
+#02: ???[/out/js +0x2e28188]
+#03: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55b5c62ad260 bp 0x7b2c40f7df50 sp 0x7b2c40f7df50 T10)
+==10==The signal is caused by a WRITE memory access.
+==10==Hint: address points to the zero page.
+    #0 0x55b5c62ad260 in JS::Value::toObject() const /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:972:5
+    #1 0x55b5c63e7187 in js::WrappedPtrOperations<JS::Value, JS::Rooted<JS::Value>, void>::toObject() const /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:1398:47
+    #2 0x55b5c63e7187 in js::CreateSuppressedError(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:1758:29
+    #3 0x2f3b31b223d6  (<unknown module>)
+
+==10==Register values:
+rax = 0x0000000000000000  rbx = 0xfff9800000000000  rcx = 0x000055b5c409e420  rdx = 0x0000000000000000  
+rdi = 0x000055b5ca53baf0  rsi = 0x00007b2c40f7df08  rbp = 0x00007b2c40f7df50  rsp = 0x00007b2c40f7df50  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000ab6b95d02c4  r13 = 0x00000f65881efbf0  r14 = 0x00007b2c40f7dfb0  r15 = 0x00007d1c42eefc80  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/js/Value.h:972:5 in JS::Value::toObject() const
+Thread T10 created by T0 here:
+    #0 0x55b5c619a5c1 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x55b5c65d4aed in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x55b5c62ec414 in bool js::Thread::init<void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>>(void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>&&) /src/gecko-dev/js/src/threading/Thread.h:90:16
+    #3 0x55b5c625658a in EvalInWorker(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:4638:29
+    #4 0x55b5c64295d2 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:532:13
+    #5 0x55b5c63db89e in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:628:12
+    #6 0x55b5c63fb296 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:700:10
+    #7 0x55b5c63fb296 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3329:16
+    #8 0x55b5c63d9cd0 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:502:13
+    #9 0x55b5c63e09e4 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:893:13
+    #10 0x55b5c63e1399 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:926:10
+    #11 0x55b5c66ddaca in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:496:10
+    #12 0x55b5c66ddf4f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:520:10
+    #13 0x55b5c62a851b in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1307:10
+    #14 0x55b5c62a6e32 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #15 0x55b5c6222b9e in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11724:10
+    #16 0x55b5c6222b9e in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11976:12
+    #17 0x55b5c621355e in main /src/gecko-dev/js/src/shell/js.cpp:12391:12
+    #18 0x7f2c43ac11c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #19 0x7f2c43ac128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x55b5c61131b4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b541b4) (BuildId: 7701a0eb5ef2c6918f063614f96b1634)
+
+==10==ABORTING

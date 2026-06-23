@@ -1,0 +1,41 @@
+From eb9b25970b0ad4a3f8ce23d8de3583c62e5d6b87 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Olivier=20Fl=C3=BCckiger?= <olivf@chromium.org>
+Date: Tue, 25 Feb 2025 13:14:53 +0100
+Subject: [PATCH] [maglev] Add missing ClearAllocationBlock
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixed: 398065918
+Change-Id: Ifc163b6633e55ca707815ef910a26dfb144a667b
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6297972
+Reviewed-by: Victor Gomes <victorgomes@chromium.org>
+Commit-Queue: Olivier Flückiger <olivf@chromium.org>
+Auto-Submit: Olivier Flückiger <olivf@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98917}
+---
+ src/maglev/maglev-graph-builder.cc | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/maglev/maglev-graph-builder.cc b/src/maglev/maglev-graph-builder.cc
+index e212f930edf..0046b794d95 100644
+--- a/src/maglev/maglev-graph-builder.cc
++++ b/src/maglev/maglev-graph-builder.cc
+@@ -13029,7 +13029,13 @@ ValueNode* MaglevGraphBuilder::BuildInlinedAllocation(
+                   CreateHeapNumber(node->Cast<Float64Constant>()->value()),
+                   allocation_type);
+             } else {
+-              node = GetTaggedValue(node);
++              ValueNode* new_node = GetTaggedValue(node);
++              if (new_node != node && new_node->properties().can_allocate()) {
++                // TODO(olivf): Remove this and instead always clear when we
++                // emit an allocating instruction.
++                ClearCurrentAllocationBlock();
++              }
++              node = new_node;
+             }
+             values.push_back(node);
+           });
+-- 
+2.43.0
+

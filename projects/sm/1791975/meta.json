@@ -1,0 +1,38 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1791975",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/gc/GC.cpp",
+        "js/src/vm/Realm-inl.h",
+        "js/src/vm/Realm.cpp",
+        "js/src/vm/Realm.h"
+    ],
+    "target_subdir": [
+        "js/src/gc",
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe --no-threads --no-baseline --no-ion",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Realm allocated during incremental GC swept as dead before it could be marked. CVE-2022-45406 (sec-high, MFSA 2022-47, Firefox 107). Compartment::sweepRealms in js/src/gc/GC.cpp assumed every realm in the compartment existed at the start of the current incremental collection. A newGlobal/Reflect.parse/OOM path can allocate and link a new JS::Realm in js/src/vm/Realm.cpp while the GC is already marking or sweeping; because the fresh realm has no marked global yet, sweepRealms destroys it. Later compaction still reaches BaseShape/shape metadata that references the freed Realm via BaseShape::realm(), and Realm::unsafeUnbarrieredMaybeGlobal() dereferences poisoned memory. The fix adds Realm::allocatedDuringIncrementalGC_ state, preserves realms allocated during an active GC in Realm::hasLiveGlobalPreserveColor, and clears the flag at collection boundaries so those realms are only eligible for sweeping in a later GC cycle.",
+    "fix_commits": [
+        "4cd3dc8813f171cb6a8cb41088fd97eaa5909249"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-don-t-sweep-realms-that-were-allocated-during.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1791975 - Don't sweep realms that were allocated during",
+            "source_commit": "4cd3dc8813f171cb6a8cb41088fd97eaa5909249",
+            "commit": "4cd3dc8813f171cb6a8cb41088fd97eaa5909249",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/4cd3dc8813f171cb6a8cb41088fd97eaa5909249",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/4cd3dc8813f171cb6a8cb41088fd97eaa5909249",
+            "phabricator": "D158022"
+        }
+    ],
+    "vrp": null
+}

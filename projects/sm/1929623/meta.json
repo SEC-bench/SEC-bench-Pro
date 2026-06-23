@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1929623",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/vm/Modules.cpp"
+    ],
+    "target_subdir": [
+        "js/src/vm"
+    ],
+    "command_options": "--fuzzing-safe",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Cross-compartment violation",
+    "error_type": "ASAN_CRASH",
+    "description": "SyntheticModuleEvaluate — Cross-Compartment JSON Module Passes Result MutableHandle<Value> to AsyncFunctionReturned Without AutoRealm (Compartment Mismatch → UAF). CVE-2025-0240 (sec-high). A use-after-free vulnerability exists in SpiderMonkey's synthetic (JSON) module evaluation in js/src/vm/Modules.cpp. In SyntheticModuleEvaluate, the result MutableHandle<Value> was passed to AsyncFunctionReturned, but when evaluating a JSON module across compartments (via newGlobal with newCompartment), the result value could contain a cross-compartment object reference. This causes a compartment mismatch assertion (MOZ_CRASH at JSContext-inl.h:56) in debug builds, and in release builds could lead to a use-after-free when the compartment holding the result is destroyed. The fix (changeset 62ea7950e926) passes UndefinedHandleValue instead of the result to AsyncFunctionReturned, since the only synthetic modules supported are JSON modules and the evaluation result should always be undefined per specification. Affected versions: Firefox 132-135, ESR 128.",
+    "fix_commits": [
+        "62ea7950e9268e5b58d1dc6e4de6016ab719e11f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-the-result-of-evaluating-a-json-module-should.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1929623 - The result of evaluating a JSON module should",
+            "source_commit": "62ea7950e9268e5b58d1dc6e4de6016ab719e11f",
+            "commit": "62ea7950e9268e5b58d1dc6e4de6016ab719e11f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/62ea7950e9268e5b58d1dc6e4de6016ab719e11f",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/62ea7950e9268e5b58d1dc6e4de6016ab719e11f",
+            "phabricator": "D228663"
+        }
+    ],
+    "vrp": null
+}

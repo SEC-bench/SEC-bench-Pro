@@ -1,0 +1,30 @@
+From fa7f622001a7afe1cd78a2dc4111eca29dd7e6fc Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Thu, 21 Mar 2024 15:52:27 +0000
+Subject: [PATCH] Bug 1884552: Refactor IsDiamondPattern r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D204546
+---
+ js/src/jit/IonAnalysis.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 3c3d4201ed71b..543ed0eb83728 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -747,13 +747,13 @@ static bool IsDiamondPattern(MBasicBlock* initialBlock) {
+   MTest* initialTest = ins->toTest();
+ 
+   MBasicBlock* trueBranch = initialTest->ifTrue();
+-  if (trueBranch->numPredecessors() != 1 || trueBranch->numSuccessors() != 1) {
++  if (trueBranch->numPredecessors() != 1 || !trueBranch->lastIns()->isGoto()) {
+     return false;
+   }
+ 
+   MBasicBlock* falseBranch = initialTest->ifFalse();
+   if (falseBranch->numPredecessors() != 1 ||
+-      falseBranch->numSuccessors() != 1) {
++      !falseBranch->lastIns()->isGoto()) {
+     return false;
+   }
+ 

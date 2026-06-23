@@ -1,0 +1,66 @@
+From 56674d4f9366deb8f542a16d1e5fdc0888563c72 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Fri, 1 Aug 2025 13:50:12 +0000
+Subject: [PATCH] Bug 1979359 - Add range check in
+ GCRuntime::isSymbolReferencedByUncollectedZone r=jandem
+
+Add a range check for atomsUsedByUncollectedZones since atoms allocated after
+the start of the collection will not be present in this bitmap.
+
+Differential Revision: https://phabricator.services.mozilla.com/D259106
+---
+ js/src/ds/Bitmap.h                      | 2 ++
+ js/src/gc/AtomMarking-inl.h             | 7 ++++++-
+ js/src/jit-test/tests/gc/bug-1979359.js | 9 +++++++++
+ 3 files changed, 17 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1979359.js
+
+diff --git a/js/src/ds/Bitmap.h b/js/src/ds/Bitmap.h
+index 055e73d9361f..dcfb7348f242 100644
+--- a/js/src/ds/Bitmap.h
++++ b/js/src/ds/Bitmap.h
+@@ -47,6 +47,8 @@ class DenseBitmap {
+     return data.appendN(0, numWords);
+   }
+ 
++  size_t count() const { return numWords() * JS_BITS_PER_WORD; }
++
+   size_t numWords() const { return data.length(); }
+   uintptr_t word(size_t i) const { return data[i]; }
+   uintptr_t& word(size_t i) { return data[i]; }
+diff --git a/js/src/gc/AtomMarking-inl.h b/js/src/gc/AtomMarking-inl.h
+index 6617c5f68f58..5930bff7c3e0 100644
+--- a/js/src/gc/AtomMarking-inl.h
++++ b/js/src/gc/AtomMarking-inl.h
+@@ -90,7 +90,12 @@ inline bool GCRuntime::isSymbolReferencedByUncollectedZone(JS::Symbol* sym) {
+   size_t bit = GetAtomBit(sym);
+   MOZ_ASSERT(bit / JS_BITS_PER_WORD < atomMarking.allocatedWords);
+ 
+-  return atomsUsedByUncollectedZones.ref()->getBit(bit);
++  const DenseBitmap& bitmap = *atomsUsedByUncollectedZones.ref();
++  if (bit >= bitmap.count()) {
++    return false;  // Atom created during collection.
++  }
++
++  return bitmap.getBit(bit);
+ }
+ 
+ void AtomMarkingRuntime::markChildren(JSContext* cx, JSAtom*) {}
+diff --git a/js/src/jit-test/tests/gc/bug-1979359.js b/js/src/jit-test/tests/gc/bug-1979359.js
+new file mode 100644
+index 000000000000..e7daf5558289
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1979359.js
+@@ -0,0 +1,9 @@
++// |jit-test| --enable-symbols-as-weakmap-keys; skip-if: getBuildConfiguration("release_or_beta")
++gcslice(0);
++newGlobal({newCompartment: true});
++var key = Symbol('foo');
++var map = new WeakMap();
++map.set(key, 2);
++gcslice(0);
++var key = Symbol('bar');
++map.set(key, 2);
+-- 
+2.43.0
+

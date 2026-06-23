@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:342602616",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--wasm-staging --no-wasm-lazy-compilation --no-liftoff --no-wasm-loop-peeling --no-wasm-loop-unrolling --turboshaft-wasm",
+  "target_source_files": [
+    "src/compiler/turboshaft/wasm-gc-type-reducer.cc"
+  ],
+  "target_subdir": [
+    "src/compiler/turboshaft"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "In WasmGCTypeAnalyzer::Run() (wasm-gc-type-reducer.cc), the loop-header revisit logic calls CreateMergeSnapshot with a hardcoded reachable = {true, true} for the pair of (old_snapshot, new_snapshot). However, after ProcessBlock(loop_header) re-processes the loop header using backedge type information, certain phi operations may resolve to uninhabited types (e.g., ref none, ref nofunc, ref noextern) because the fix in commit 3f2471d0abe changed ProcessPhi to explicitly skip uninhabited predecessor types instead of including them in the union. When all phi inputs are uninhabited, the phi type stays uninhabited, RefineTypeKnowledge marks the loop header unreachable and stores the uninhabited type in the snapshot. The subsequent CreateMergeSnapshot({old_snapshot, snapshot}, {true, true}) then violates DCHECK_IMPLIES(reachable[i], !predecessors[i].is_uninhabited()) because reachable[1]=true conflicts with the uninhabited types stored in snapshot. This is an incomplete fix from issue 324747822: that fix updated the check from kWasmBottom to is_uninhabited() (commit 3f2471d0abe), but did not account for the loop-revisit code path where the reachability vector is hardcoded rather than derived from the actual post-processing reachability state of the loop header. In release builds (where the DCHECK is disabled), this causes the optimizer to use incorrect type information, potentially eliminating necessary null checks or type casts, leading to type confusion and memory safety violations.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "target-image-cherry-pick-diff",
+      "evidence_lineno": 0,
+      "evidence_text": "3b037e1756d366e0a6aa8467da9af0d44af84ffb [turboshaft][wasm-gc] Unpack i8 and i16 to i32 in type optimizations",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5587860",
+      "cl": 5587860,
+      "source_commit": "3b037e1756d366e0a6aa8467da9af0d44af84ffb",
+      "commit": "3b037e1756d366e0a6aa8467da9af0d44af84ffb",
+      "description": "Target-image diff generated after cherry-picking the validated review CL into the vulnerable image checkout.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5587860",
+      "source_cl": 5587860,
+      "source_ref": "refs/changes/60/5587860/2",
+      "source_patchset": 2
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:2013560",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/debugger/Debugger.cpp"
+    ],
+    "target_subdir": [
+        "js/src/debugger"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Null pointer dereference",
+    "error_type": "ASAN_CRASH",
+    "description": "Debugger Force-Return at Generator Yield Opcode Null Generator Object Dereference. CVE-2026-4702 (sec-moderate, MFSA 2026-20). js::Completion::fromJSFramePop in js/src/debugger/Debugger.cpp builds a Completion from the current bytecode op of a popped frame. When the op is JSOp::InitialYield, JSOp::Yield, or JSOp::Await, the function calls GetGeneratorObjectForFrame and then dispatches a switch that asserts `!generatorObj->isClosed()` and constructs a Completion::InitialYield/Yield/Await using the generator object directly. The pre-fix logic relied on the comment that 'checking the opcode first eliminates' the case where GetGeneratorObjectForFrame can return nullptr, but that invariant breaks when the debugger's onStep handler returns `{return: ...}` (force-return) at a frame paused between the JSOp::Generator and JSOp::SetAliasedVar opcodes — at that point the generator object slot is still nullptr even though the surrounding op is JSOp::Yield/Await. Calling generatorObj->isClosed() / passing the null pointer into the Completion constructor produces a debug MOZ_ASSERT failure (or a segfault on a null this in release). The fix (commit 1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace by Iain Ireland, 2026-02-13, reviewed by mgaudet; Phabricator D283332) wraps the Yield/Await/InitialYield switch in `if (generatorObj && !generatorObj->isClosed()) { ... }`, falling through to a normal `Completion(Return(frame.returnValue()))` when the generator object isn't yet established. Trigger: create a Debugger on another global, install onEnterFrame that installs an onStep returning {return: 0xdead} after a target step count, and iterate a generator function — when the step lands on the InitialYield/Yield op before the generator object slot is assigned, the assertion fires. The committed regression test js/src/jit-test/tests/debug/Frame-onStep-generator-resumption-04.js is shipped as poc.js verbatim. Reported via Mozilla Foundation Security Advisory 2026-20; Bugzilla 2013560 remains sec-restricted.",
+    "fix_commits": [
+        "1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-handle-force-return-at-yield-opcodes.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 2013560: Handle force return at yield opcodes r=mgaudet",
+            "source_commit": "1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace",
+            "commit": "1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace",
+            "source_url": "https://github.com/mozilla-firefox/firefox/commit/1bd7ef2aa4bdb9e584d192049cf5cba23a1e8ace",
+            "phabricator": "D283332"
+        }
+    ],
+    "vrp": null
+}

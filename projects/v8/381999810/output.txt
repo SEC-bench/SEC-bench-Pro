@@ -1,0 +1,19 @@
+Sandbox fuzzing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 0005da94e153
+
+==== C stack trace ===============================
+
+ [0x5a7f0734ad97]
+ [0x7ae1996d7330]
+ [0x5a7f0689d0b4]
+ [0x5a7f0689c654]
+ [0x5a7f0689c4b2]
+ [0x5a7f0689c0a0]
+ [0x5a7f0693c0fb]
+ [0x5a7f06954725]
+ [0x5a7f0711a7de]
+[end of stack trace]
+Segmentation fault (core dumped)

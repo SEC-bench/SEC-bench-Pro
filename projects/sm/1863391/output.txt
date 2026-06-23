@@ -1,0 +1,84 @@
+Assertion failure: CurrentThreadCanAccessRuntime(cell->runtimeFromAnyThread()) || CurrentThreadIsPerformingGC(), at /src/gecko-dev/js/src/gc/StableCellHasher-inl.h:29
+#01: ???[/out/js +0x2f2b3bf]
+#02: ???[/out/js +0x374ebfe]
+#03: ???[/out/js +0x3712fc1]
+#04: ???[/out/js +0x374f01d]
+#05: ???[/out/js +0x36919dd]
+#06: ???[/out/js +0x2bd26e8]
+#07: ???[/out/js +0x2b88edc]
+#08: ???[/out/js +0x2ba6c07]
+#09: ???[/out/js +0x2b874aa]
+#10: ???[/out/js +0x2b8e0fe]
+#11: ???[/out/js +0x2b8eada]
+#12: ???[/out/js +0x2e6a4db]
+#13: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>)[/out/js +0x2e69fe2]
+#14: ???[/out/js +0x29e1c9d]
+#15: ???[/out/js +0x2a38d8e]
+#16: ???[/out/js +0x290ee77]
+#17: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x9caa4]
+#18: __clone[/lib/x86_64-linux-gnu/libc.so.6 +0x129a64]
+#19: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55b83e0313f4 bp 0x7bc25b6f0280 sp 0x7bc25b6f0240 T10)
+==10==The signal is caused by a WRITE memory access.
+==10==Hint: address points to the zero page.
+    #0 0x55b83e0313f4 in js::gc::MaybeGetUniqueId(js::gc::Cell*, unsigned long*) /src/gecko-dev/js/src/gc/StableCellHasher-inl.h:28:3
+    #1 0x55b83e854bfd in js::StableCellHasher<js::gc::Cell*>::maybeGetHash(js::gc::Cell* const&, unsigned int*) /src/gecko-dev/js/src/gc/StableCellHasher-inl.h:169:8
+    #2 0x55b83e854bfd in js::StableCellHasher<js::HeapPtr<JS::Value>>::maybeGetHash(JS::Value const&, unsigned int*) /src/gecko-dev/js/src/gc/Barrier.h:1163:12
+    #3 0x55b83e818fc0 in bool mozilla::FallibleHashMethods<js::StableCellHasher<js::HeapPtr<JS::Value>>>::maybeGetHash<JS::Value const&>(JS::Value const&, unsigned int*) /src/gecko-dev/obj-debug-asan/dist/include/js/RootingAPI.h:891:12
+    #4 0x55b83e818fc0 in bool mozilla::MaybeGetHash<mozilla::HashMap<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>, js::StableCellHasher<js::HeapPtr<JS::Value>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, JS::Value const&>(JS::Value const&, unsigned int*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:920:10
+    #5 0x55b83e818fc0 in mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>, js::StableCellHasher<js::HeapPtr<JS::Value>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::readonlyThreadsafeLookup(JS::Value const&) const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2094:10
+    #6 0x55b83e818fc0 in mozilla::detail::HashTable<mozilla::HashMapEntry<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>>, mozilla::HashMap<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>, js::StableCellHasher<js::HeapPtr<JS::Value>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::MapHashPolicy, js::TrackedAllocPolicy<(js::TrackingKind)1>>::lookup(JS::Value const&) const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2104:12
+    #7 0x55b83e818fc0 in mozilla::HashMap<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>, js::StableCellHasher<js::HeapPtr<JS::Value>>, js::TrackedAllocPolicy<(js::TrackingKind)1>>::lookup(JS::Value const&) const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:237:18
+    #8 0x55b83e818fc0 in js::WeakMap<js::HeapPtr<JS::Value>, js::HeapPtr<JS::Value>>::lookup(JS::Value const&) const /src/gecko-dev/js/src/gc/WeakMap.h:214:19
+    #9 0x55b83e85501c in js::WeakMapObject::get_impl(JSContext*, JS::CallArgs const&) /src/gecko-dev/js/src/builtin/WeakMapObject.cpp:70:43
+    #10 0x55b83e7979dc in bool JS::CallNonGenericMethod<&js::WeakMapObject::is(JS::Handle<JS::Value>), &js::WeakMapObject::get_impl(JSContext*, JS::CallArgs const&)>(JSContext*, JS::CallArgs const&) /src/gecko-dev/obj-debug-asan/dist/include/js/CallNonGenericMethod.h:103:12
+    #11 0x55b83e7979dc in js::WeakMapObject::get(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/WeakMapObject.cpp:83:10
+    #12 0x55b83dcd86e7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:472:13
+    #13 0x55b83dc8eedb in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:566:12
+    #14 0x55b83dcacc06 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:638:10
+    #15 0x55b83dcacc06 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3053:16
+    #16 0x55b83dc8d4a9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:444:13
+    #17 0x55b83dc940fd in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:831:13
+    #18 0x55b83dc94ad9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:863:10
+    #19 0x55b83df704da in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #20 0x55b83df6ffe1 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:511:10
+    #21 0x55b83dae7c9c in WorkerMain(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>) /src/gecko-dev/js/src/shell/js.cpp:4403:5
+    #22 0x55b83db3ed8d in void js::detail::ThreadTrampoline<void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>>::callMain<0ul>(std::integer_sequence<unsigned long, 0ul>) /src/gecko-dev/js/src/threading/Thread.h:219:5
+    #23 0x55b83db3ed8d in js::detail::ThreadTrampoline<void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>>::Start(void*) /src/gecko-dev/js/src/threading/Thread.h:208:11
+    #24 0x55b83da14e76 in asan_thread_start(void*) /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:239:28
+    #25 0x7fc25d58eaa3  (/lib/x86_64-linux-gnu/libc.so.6+0x9caa3) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x7fc25d61ba63 in clone (/lib/x86_64-linux-gnu/libc.so.6+0x129a63) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+
+==10==Register values:
+rax = 0x0000000000000000  rbx = 0x00007bc25b6f0290  rcx = 0x000055b83bc48480  rdx = 0x0000000000000000  
+rdi = 0x000055b8417e9870  rsi = 0x00007bc25b6f01f8  rbp = 0x00007bc25b6f0280  rsp = 0x00007bc25b6f0240  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007bc25b6f0340  r13 = 0x00007c725c9e6fa0  r14 = 0x00000f8e4b93ce00  r15 = 0x00007bc25b6f0320  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/StableCellHasher-inl.h:28:3 in js::gc::MaybeGetUniqueId(js::gc::Cell*, unsigned long*)
+Thread T10 created by T0 here:
+    #0 0x55b83d9fd021 in pthread_create /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:250:3
+    #1 0x55b83ea028bd in js::Thread::create(void* (*)(void*), void*) /src/gecko-dev/js/src/threading/posix/PosixThread.cpp:57:7
+    #2 0x55b83db3e0d4 in bool js::Thread::init<void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>>(void (&)(mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>), mozilla::UniquePtr<WorkerInput, JS::DeletePolicy<WorkerInput>>&&) /src/gecko-dev/js/src/threading/Thread.h:88:12
+    #3 0x55b83dab358a in EvalInWorker(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:4476:29
+    #4 0x55b83dcd86e7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:472:13
+    #5 0x55b83dc8eedb in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:566:12
+    #6 0x55b83dcacc06 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:638:10
+    #7 0x55b83dcacc06 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3053:16
+    #8 0x55b83dc8d4a9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:444:13
+    #9 0x55b83dc940fd in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:831:13
+    #10 0x55b83dc94ad9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:863:10
+    #11 0x55b83df704da in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #12 0x55b83df709bb in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #13 0x55b83daff65f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1218:10
+    #14 0x55b83dafdd63 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #15 0x55b83da7f634 in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10873:10
+    #16 0x55b83da7f634 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11135:12
+    #17 0x55b83da74d08 in main /src/gecko-dev/js/src/shell/js.cpp:11539:12
+    #18 0x7fc25d51c1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #19 0x7fc25d51c28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x55b83d975c18 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x286fc18) (BuildId: 9b54b76454be7c7876b7a6daf99d8b76)
+
+==10==ABORTING

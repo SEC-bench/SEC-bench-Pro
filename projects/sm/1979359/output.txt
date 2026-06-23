@@ -1,0 +1,60 @@
+[1] Assertion failure: aIndex < mLength, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:591
+#01: ???[/out/js +0x3b39027]
+#02: ???[/out/js +0x3b37b0f]
+#03: ???[/out/js +0x3b319fd]
+#04: ???[/out/js +0x4421023]
+#05: ???[/out/js +0x448b813]
+#06: ???[/out/js +0x448a26c]
+#07: ???[/out/js +0x44453ff]
+#08: ???[/out/js +0x43d0ccd]
+#09: ???[/out/js +0x43cedb2]
+#10: ???[/out/js +0x43d8bc0]
+#11: ???[/out/js +0x43e02ba]
+#12: ???[/out/js +0x43e3208]
+#13: ???[/out/js +0x43a677a]
+#14: JSRuntime::destroyRuntime()[/out/js +0x367f93c]
+#15: ???[/out/js +0x333bad3]
+#16: ???[/out/js +0x2d726b4]
+#17: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#18: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#19: _start[/out/js +0x2c75295]
+#20: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==1==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x555e3418704f bp 0x7fff586495c0 sp 0x7fff586495c0 T0)
+==1==The signal is caused by a WRITE memory access.
+==1==Hint: address points to the zero page.
+    #0 0x555e3418704f in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:248:3
+    #1 0x555e3418704f in mozilla::Vector<unsigned long, 0ul, js::SystemAllocPolicy>::operator[](unsigned long) const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:591:5
+    #2 0x555e3418704f in js::DenseBitmap::word(unsigned long) const /src/gecko-dev/js/src/ds/Bitmap.h:51:43
+    #3 0x555e3418704f in js::DenseBitmap::getBit(unsigned long) const /src/gecko-dev/js/src/ds/Bitmap.h:55:12
+    #4 0x555e34185b0e in js::WeakMap<JS::Value, JS::Value>::markEntry(js::GCMarker*, js::gc::CellColor, js::HeapPtr<JS::Value>&, js::HeapPtr<JS::Value>&, bool) /src/gecko-dev/js/src/gc/WeakMap-inl.h:186:31
+    #5 0x555e3417f9fc in js::WeakMap<JS::Value, JS::Value>::markEntries(js::GCMarker*) /src/gecko-dev/js/src/gc/WeakMap-inl.h:314:9
+    #6 0x555e34a6f022 in JSClass::doTrace(JSTracer*, JSObject*) const /src/gecko-dev/obj-debug-asan/dist/include/js/Class.h:667:5
+    #7 0x555e34a6f022 in CallTraceHook(JSTracer*, JSObject*) /src/gecko-dev/js/src/gc/Marking.cpp:1241:12
+    #8 0x555e34ad9812 in bool js::GCMarker::processMarkStackTop<0u>(JS::SliceBudget&) /src/gecko-dev/js/src/gc/Marking.cpp:1637:3
+    #9 0x555e34ad826b in bool js::GCMarker::markOneColor<0u, (js::gc::MarkColor)2>(JS::SliceBudget&) /src/gecko-dev/js/src/gc/Marking.cpp:1341:10
+    #10 0x555e34a933fe in bool js::GCMarker::doMarking<0u>(JS::SliceBudget&, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/Marking.cpp:1308:29
+    #11 0x555e34a1eccc in js::GCMarker::markUntilBudgetExhausted(JS::SliceBudget&, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/Marking.cpp:1299:10
+    #12 0x555e34a1cdb1 in js::gc::GCRuntime::markUntilBudgetExhausted(JS::SliceBudget&, js::gc::GCRuntime::ParallelMarking, js::gc::ShouldReportMarkTime) /src/gecko-dev/js/src/gc/GC.cpp:3326:19
+    #13 0x555e34a26bbf in js::gc::GCRuntime::incrementalSlice(JS::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:4012:13
+    #14 0x555e34a2e2b9 in js::gc::GCRuntime::gcCycle(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4607:3
+    #15 0x555e34a31207 in js::gc::GCRuntime::collect(bool, JS::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4789:9
+    #16 0x555e349f4779 in js::gc::GCRuntime::finishGC(JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4910:3
+    #17 0x555e33ccd93b in JSRuntime::destroyRuntime() /src/gecko-dev/js/src/vm/Runtime.cpp:224:7
+    #18 0x555e33989ad2 in js::DestroyContext(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:227:7
+    #19 0x555e333c06b3 in main::$_1::operator()() const /src/gecko-dev/js/src/shell/js.cpp:12568:41
+    #20 0x555e333c06b3 in mozilla::ScopeExit<main::$_1>::~ScopeExit() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/ScopeExit.h:106:7
+    #21 0x555e333c06b3 in main /src/gecko-dev/js/src/shell/js.cpp:12661:1
+    #22 0x7f81da1911c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #23 0x7f81da19128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #24 0x555e332c3294 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c75294) (BuildId: c9104c1bc426a43d996fa821241f4fab)
+
+==1==Register values:
+rax = 0x0000000000000000  rbx = 0x00007cb1d95e0201  rcx = 0x000000000000024f  rdx = 0x0000000000000000  
+rdi = 0x0000555e373856f0  rsi = 0x00007fff58649578  rbp = 0x00007fff586495c0  rsp = 0x00007fff586495c0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007ce1d95ea480  r13 = 0x00007ce1d95ea488  r14 = 0xfffb800000000000  r15 = 0x00000f9c3b2bd490  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:248:3 in MOZ_CrashSequence(void*, long)
+==1==ABORTING

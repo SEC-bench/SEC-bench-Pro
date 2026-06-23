@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:374790906",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--turboshaft-wasm --experimental-wasm-exnref --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/wasm/function-body-decoder-impl.h"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type nullability confusion vulnerability exists in V8's WebAssembly exception handling implementation. The root cause is in commit 7cb6188, which changed the type pushed onto the value stack for catch_ref/catch_all_ref operations from the nullable kWasmExnRef (ref null exn) to the non-nullable ValueType::Ref(HeapType::kExn) (ref exn) in function-body-decoder-impl.h. While this change aimed to align with a spec proposal, it is unsound because JavaScript can throw any value including null, which can be caught by these operations. This creates a type nullability confusion: the type system and Turboshaft optimizer treat the caught exception reference as non-nullable, but the actual runtime value can be null. The Turboshaft optimizer then performs optimizations based on the non-nullable assumption (e.g., eliding null checks), which can be exploited when a null JS exception is caught, leading to memory safety violations and arbitrary code execution. The bug requires the --experimental-wasm-exnref flag to be triggered.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit 9997fc01395257cffd7231f14bb4d9fa7eaa9665 for fixed-image builds.",
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[wasm][exnref] Use wasm_null for exnref",
+      "url": "https://crrev.com/c/5953226",
+      "cl": 5953226,
+      "source_commit": "9997fc01395257cffd7231f14bb4d9fa7eaa9665",
+      "commit": "9997fc01395257cffd7231f14bb4d9fa7eaa9665",
+      "patchset": 3,
+      "source_url": "https://crrev.com/c/5953226",
+      "source_cl": 5953226,
+      "source_ref": "refs/changes/26/5953226/3",
+      "source_patchset": 3
+    }
+  ]
+}

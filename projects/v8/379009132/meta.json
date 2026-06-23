@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:379009132",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--jit-fuzzing",
+  "target_source_files": [
+    "src/wasm/canonical-types.cc",
+    "src/wasm/canonical-types.h"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "A type confusion vulnerability exists in V8's compiled JS-to-Wasm wrapper when handling wasm functions with self-referential return types. When a wasm function's signature includes a return type that references its own type index (e.g., `ref type_N` within type `N`), V8's type canonicalization encodes that return type using a relative canonical index (CanonicalValueType::WithRelativeIndex). During tier-up of the generic Torque JS-to-Wasm wrapper (triggered aggressively with --jit-fuzzing, which sets wasm_wrapper_tiering_budget=1), a compiled TurboFan wrapper is generated via WasmWrapperGraphBuilder::ToJS in wasm-compiler.cc. The ToJS function checks whether a reference-typed return value is a function reference by calling GetTypeCanonicalizer()->IsFunctionSignature(type.ref_index()). However, for a canonical-relative type, type.ref_index() returns the relative index (e.g., 0) rather than the absolute canonical index. Since canonical_function_sigs_ is indexed by absolute canonical indices, looking up relative index 0 finds a predefined array type (kPredefinedArrayI8Index), causing IsFunctionSignature to return false. As a result, the compiled wrapper takes the else branch and returns the raw WasmFuncRef heap object directly, placing it into the JSArray returned to JavaScript. When JS code calls Array.prototype.toString() on this array, the Torque Array.prototype.join builtin performs an UnsafeCast on each element; the raw WasmFuncRef is not a valid JSAny, causing the Torque assert 'Is<A>(o)' failed assertion in cast.tq. The same flaw exists in the Turboshaft wrapper (src/wasm/wrappers.cc) but is not triggered without the --turboshaft-wasm-wrappers flag.",
+  "vrp": 8000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 435,
+      "evidence_text": "[https://crrev.com/c/6035175](<https://crrev.com/c/6035175>) approved for merge, please merge to 13.2 and 13.1 at your convenience (before EOD 29 November) so this fix can be included in the first updates following next week's release freeze",
+      "url": "https://crrev.com/c/6035175",
+      "cl": 6035175,
+      "commit": "20d9a7f760c018183c836283017a321638b66810",
+      "description": "Local patch exported from https://crrev.com/c/6035175 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6035175",
+      "source_cl": 6035175,
+      "source_commit": "20d9a7f760c018183c836283017a321638b66810",
+      "source_ref": "refs/changes/75/6035175/4",
+      "source_patchset": 4
+    }
+  ]
+}

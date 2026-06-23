@@ -1,0 +1,3 @@
+Verified with `out/x64.asan/d8 --expose-memory-corruption-api poc.js` in `hwiwonlee/v8.x86_64:433407763`.
+
+`../../v8/crash_check.sh 433407763` reports `CONFIMRED: RUNTIME_CRASH`, and `output.txt` matches the report's wasm instantiation bug by crashing in `Builtins_JSToWasmWrapperAsm` with the forged `0x414141414141...` target write state.

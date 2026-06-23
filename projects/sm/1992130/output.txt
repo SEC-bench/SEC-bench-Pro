@@ -1,0 +1,54 @@
+=================================================================
+==13==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7ffe46a500b8 at pc 0x62c44686aefd bp 0x7ffe46a4fed0 sp 0x7ffe46a4fec8
+WRITE of size 2 at 0x7ffe46a500b8 thread T0
+    #0 0x62c44686aefc in unsigned short* std::__copy_move<false, false, std::random_access_iterator_tag>::__copy_m<unsigned char*, unsigned short*>(unsigned char*, unsigned char*, unsigned short*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_algobase.h:388:18
+    #1 0x62c44686aefc in unsigned short* std::__copy_move_a2<false, unsigned char*, unsigned short*>(unsigned char*, unsigned char*, unsigned short*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_algobase.h:505:14
+    #2 0x62c44686aefc in unsigned short* std::__copy_move_a1<false, unsigned char*, unsigned short*>(unsigned char*, unsigned char*, unsigned short*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_algobase.h:533:14
+    #3 0x62c44686aefc in unsigned short* std::__copy_move_a<false, unsigned char*, unsigned short*>(unsigned char*, unsigned char*, unsigned short*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_algobase.h:541:3
+    #4 0x62c44686aefc in unsigned short* std::copy<unsigned char*, unsigned short*>(unsigned char*, unsigned char*, unsigned short*) /usr/lib/gcc/x86_64-linux-gnu/13/../../../../include/c++/13/bits/stl_algobase.h:632:14
+    #5 0x62c44686aefc in js::StableWasmArrayObjectElements<unsigned short>::StableWasmArrayObjectElements(JSContext*, JS::Handle<js::WasmArrayObject*>) /src/gecko-dev/js/src/wasm/WasmGcObject.h:510:7
+    #6 0x62c44675eda8 in js::wasm::Instance::stringFromCharCodeArray(js::wasm::Instance*, void*, unsigned int, unsigned int) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:2056:45
+    #7 0x1627b3b44d62  (<unknown module>)
+
+Address 0x7ffe46a500b8 is located in stack of thread T0 at offset 344 in frame
+    #0 0x62c44675e9cf in js::wasm::Instance::stringFromCharCodeArray(js::wasm::Instance*, void*, unsigned int, unsigned int) /src/gecko-dev/js/src/wasm/WasmInstance.cpp:2031
+
+  This frame has 3 object(s):
+    [32, 64) 'arrayRef' (line 2035)
+    [96, 120) 'array' (line 2040)
+    [160, 344) 'stableElements' (line 2056) <== Memory access at offset 344 overflows this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-buffer-overflow /src/gecko-dev/js/src/wasm/WasmGcObject.h:510:7 in js::StableWasmArrayObjectElements<unsigned short>::StableWasmArrayObjectElements(JSContext*, JS::Handle<js::WasmArrayObject*>)
+Shadow bytes around the buggy address:
+  0x7ffe46a4fe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a4fe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a4ff00: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+  0x7ffe46a4ff80: 00 00 00 00 f2 f2 f2 f2 00 00 00 f2 f2 f2 f2 f2
+  0x7ffe46a50000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7ffe46a50080: 00 00 00 00 00 00 00[f3]f3 f3 f3 f3 f3 f3 f3 f3
+  0x7ffe46a50100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a50180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a50200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a50280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7ffe46a50300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

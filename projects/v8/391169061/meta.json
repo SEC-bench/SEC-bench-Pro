@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:391169061",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/builtins/typed-array-set.tq",
+    "src/builtins/base.tq"
+  ],
+  "target_subdir": [
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Integer overflow",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "An integer overflow in the bounds check of `TypedArrayPrototypeSetArray` (in `src/builtins/typed-array-set.tq`) allows a V8 sandbox bypass via arbitrary address write. The vulnerability arises because `GetLengthProperty` on a corrupted JSArray can return a `Number` (HeapNumber) whose value exceeds `kMaxSafeInteger`. On 64-bit builds, `ChangeSafeIntegerNumberToUintPtr` and `CheckIntegerIndexAdditionOverflow` only enforce the safe-integer precondition via `dcheck` assertions, which are omitted in release builds. Consequently, if the corrupted source length exceeds `kMaxSafeInteger`, the addition `srcLength + targetOffset` wraps around on 64-bit, causing the bounds check to pass erroneously. Execution then falls through to `Runtime_TypedArraySet` \u2192 `CopyElementsHandleImpl` (`src/objects/elements.cc`), where a second integer overflow in `CHECK_LE(offset + length, ...)` can also be bypassed. By additionally performing a type confusion (corrupting a JSArray's map to appear as a JSTypedArray), an attacker can reach `CopyElementsFromTypedArray` with attacker-controlled destination address and content, achieving an arbitrary address wildcopy (out-of-bounds write) outside the V8 sandbox.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[sandbox] limit TryNumberToSize to kMaxSafeBufferSizeForSandbox",
+      "url": "https://crrev.com/c/6285402",
+      "cl": 6285402,
+      "source_commit": "ec48078aaeaef623314ed1dddc3a4b3967e8eb82",
+      "commit": "ec48078aaeaef623314ed1dddc3a4b3967e8eb82",
+      "description": "Local patch exported from https://crrev.com/c/6285402 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6285402",
+      "source_cl": 6285402,
+      "source_ref": "refs/changes/02/6285402/6",
+      "source_patchset": 6
+    }
+  ]
+}

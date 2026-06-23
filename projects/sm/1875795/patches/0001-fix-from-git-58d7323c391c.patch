@@ -1,0 +1,26 @@
+commit 58d7323c391c25fb7694128232b365297145a528
+Author: Jan de Mooij <jdemooij@mozilla.com>
+Date:   Wed Jan 24 13:24:17 2024 +0000
+
+    Bug 1875795 - Take scratch2 from register set before creating LiveRegisterSet. r=iain
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D199233
+
+diff --git a/js/src/jit/MacroAssembler.cpp b/js/src/jit/MacroAssembler.cpp
+index 2b5f71a033db..c7590b766efd 100644
+--- a/js/src/jit/MacroAssembler.cpp
++++ b/js/src/jit/MacroAssembler.cpp
+@@ -3145,11 +3145,11 @@ void MacroAssembler::emitMegamorphicCachedSetSlot(
+   branchTest32(Assembler::Zero, scratch2, scratch2, &doAddDynamic);
+ 
+   AllocatableRegisterSet regs(RegisterSet::Volatile());
+-  LiveRegisterSet save(regs.asLiveSet());
++  regs.takeUnchecked(scratch2);
+ 
++  LiveRegisterSet save(regs.asLiveSet());
+   PushRegsInMask(save);
+ 
+-  regs.takeUnchecked(scratch2);
+   Register tmp;
+   if (regs.has(obj)) {
+     regs.takeUnchecked(obj);

@@ -1,0 +1,118 @@
+From 1dc7af44dc9d04a81404d7f717d359642dd612c2 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 3 Feb 2025 21:49:54 +0000
+Subject: [PATCH] Bug 1942881: Remove RRegExpMatcher r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D236071
+---
+ js/src/jit/MIROps.yaml |  4 ----
+ js/src/jit/Recover.cpp | 25 -------------------------
+ js/src/jit/Recover.h   |  9 ---------
+ 3 files changed, 38 deletions(-)
+
+diff --git a/js/src/jit/MIROps.yaml b/js/src/jit/MIROps.yaml
+index f9414eab7494e..a156d535451cf 100644
+--- a/js/src/jit/MIROps.yaml
++++ b/js/src/jit/MIROps.yaml
+@@ -1413,7 +1413,6 @@
+     lastIndex: Int32
+   result_type: Value
+   possibly_calls: true
+-  can_recover: true
+ 
+ # Note: this instruction writes to cx->regExpSearcherLastLimit.
+ # See also MRegExpSearcherLastLimit.
+@@ -1424,7 +1423,6 @@
+     lastIndex: Int32
+   result_type: Int32
+   possibly_calls: true
+-  can_recover: false
+ 
+ # This instruction loads cx->regExpSearcherLastLimit. We don't have a
+ # specialized alias set for this so just use the default alias set similar to
+@@ -1439,7 +1437,6 @@
+     string: String
+   result_type: Value
+   possibly_calls: true
+-  can_recover: false
+ 
+ - name: RegExpExecTest
+   operands:
+@@ -1447,7 +1444,6 @@
+     string: String
+   result_type: Boolean
+   possibly_calls: true
+-  can_recover: false
+ 
+ - name: RegExpHasCaptureGroups
+   operands:
+diff --git a/js/src/jit/Recover.cpp b/js/src/jit/Recover.cpp
+index e70f5dd50c614..e8a1864ffeff4 100644
+--- a/js/src/jit/Recover.cpp
++++ b/js/src/jit/Recover.cpp
+@@ -11,7 +11,6 @@
+ #include "jsmath.h"
+ 
+ #include "builtin/Object.h"
+-#include "builtin/RegExp.h"
+ #include "builtin/String.h"
+ #include "jit/AtomicOperations.h"
+ #include "jit/Bailouts.h"
+@@ -1815,30 +1814,6 @@ bool RNaNToZero::recover(JSContext* cx, SnapshotIterator& iter) const {
+   return true;
+ }
+ 
+-bool MRegExpMatcher::writeRecoverData(CompactBufferWriter& writer) const {
+-  MOZ_ASSERT(canRecoverOnBailout());
+-  writer.writeUnsigned(uint32_t(RInstruction::Recover_RegExpMatcher));
+-  return true;
+-}
+-
+-RRegExpMatcher::RRegExpMatcher(CompactBufferReader& reader) {}
+-
+-bool RRegExpMatcher::recover(JSContext* cx, SnapshotIterator& iter) const {
+-  RootedObject regexp(cx, iter.readObject());
+-  RootedString input(cx, iter.readString());
+-
+-  // Int32 because |lastIndex| is computed from transpiled self-hosted call.
+-  int32_t lastIndex = iter.readInt32();
+-
+-  RootedValue result(cx);
+-  if (!RegExpMatcherRaw(cx, regexp, input, lastIndex, nullptr, &result)) {
+-    return false;
+-  }
+-
+-  iter.storeInstructionResult(result);
+-  return true;
+-}
+-
+ bool MTypeOf::writeRecoverData(CompactBufferWriter& writer) const {
+   MOZ_ASSERT(canRecoverOnBailout());
+   writer.writeUnsigned(uint32_t(RInstruction::Recover_TypeOf));
+diff --git a/js/src/jit/Recover.h b/js/src/jit/Recover.h
+index d73f0ffa9a7cd..f4622a97f262f 100644
+--- a/js/src/jit/Recover.h
++++ b/js/src/jit/Recover.h
+@@ -124,7 +124,6 @@ namespace jit {
+   _(Random)                       \
+   _(StringSplit)                  \
+   _(NaNToZero)                    \
+-  _(RegExpMatcher)                \
+   _(StringReplace)                \
+   _(Substr)                       \
+   _(TypeOf)                       \
+@@ -814,14 +813,6 @@ class RNaNToZero final : public RInstruction {
+   bool recover(JSContext* cx, SnapshotIterator& iter) const override;
+ };
+ 
+-class RRegExpMatcher final : public RInstruction {
+- public:
+-  RINSTRUCTION_HEADER_NUM_OP_(RegExpMatcher, 3)
+-
+-  [[nodiscard]] bool recover(JSContext* cx,
+-                             SnapshotIterator& iter) const override;
+-};
+-
+ class RStringReplace final : public RInstruction {
+  private:
+   bool isFlatReplacement_;

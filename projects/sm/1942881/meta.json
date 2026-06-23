@@ -1,0 +1,36 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1942881",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MIROps.yaml",
+        "js/src/jit/Recover.cpp",
+        "js/src/jit/Recover.h"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --fast-warmup",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion MRegExpMatcher recovery bug - MRegExpMatcher in js/src/jit/MIROps.yaml was marked can_recover even though bailout recovery invokes RRegExpMatcher::recover in js/src/jit/Recover.cpp, which calls RegExpMatcherRaw and can trigger GC while cx->suppressGC is set. The debug/ASAN crash is a suppressed-GC assertion during interpreter regexp matching; in release builds, running GC-triggering code during bailout recovery can corrupt memory. The PoC forces Ion compilation and bailout through regexp matching. The fix removes can_recover from MRegExpMatcher and deletes the RRegExpMatcher recovery instruction from Recover.cpp and Recover.h.",
+    "fix_commits": [
+        "1dc7af44dc9d04a81404d7f717d359642dd612c2"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-remove-rregexpmatcher.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1942881: Remove RRegExpMatcher r=jandem",
+            "source_commit": "1dc7af44dc9d04a81404d7f717d359642dd612c2",
+            "commit": "1dc7af44dc9d04a81404d7f717d359642dd612c2",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1dc7af44dc9d04a81404d7f717d359642dd612c2",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/1dc7af44dc9d04a81404d7f717d359642dd612c2",
+            "phabricator": "D236071"
+        }
+    ],
+    "vrp": null
+}

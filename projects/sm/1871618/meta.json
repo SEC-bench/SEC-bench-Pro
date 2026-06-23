@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1871618",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/JitScript.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fast-warmup --ion-gvn=off --gc-zeal=10,233 --blinterp-warmup-threshold=1 --baseline-warmup-threshold=0 --ion-licm=off --ion-warmup-threshold=100 --fuzzing-safe --ion-optimize-shapeguards=off --no-incremental-gc --disable-parser-deferred-alloc --differential-testing --ion-edgecase-analysis=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Heap-UAF in JitScript->ICScript machinery. csectype-uaf, sec-high. JitScript::purgeStubs read jemalloc-poison from a freed ICScript bytecode-size slot \u2014 the iteration over inactive ICScripts walked through a stale pointer because purgeInactiveICScripts did not use the forEachICScript helper that consults the up-to-date scope. Reported as duplicate of bug 1871947; jdemooij verified the bug 1871947 patch fixes this same reproducer. Fix: git d2fc02524025 'Bug 1871947 - Use forEachICScript in purgeInactiveICScripts' (Phabricator D197603). Single-file 1-line change in js/src/jit/JitScript.cpp. Reporter (nth10sd) attached repro + ASAN poison trace.",
+  "fix_commits": [
+    "d2fc02524025"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-d2fc02524025.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1871947 - Use forEachICScript in purgeInactiveICScripts. r=iain (covers 1871618, marked dup of 1871947)",
+      "source_commit": "d2fc02524025",
+      "commit": "d2fc02524025",
+      "url": "https://github.com/mozilla/gecko-dev/commit/d2fc02524025",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/d2fc02524025",
+      "phabricator": "D197603",
+      "covers_bug": "1871618 (filed before 1871947; canonical fix landed under sibling bug)"
+    }
+  ],
+  "vrp": null
+}

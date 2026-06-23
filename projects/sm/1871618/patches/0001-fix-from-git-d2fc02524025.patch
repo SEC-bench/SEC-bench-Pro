@@ -1,0 +1,38 @@
+From d2fc0252402503058c5afcb2251bb2e38c646469 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Thu, 4 Jan 2024 22:54:10 +0000
+Subject: [PATCH] Bug 1871947 - Use forEachICScript in purgeInactiveICScripts.
+ r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D197603
+---
+ js/src/jit/JitScript.cpp | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/js/src/jit/JitScript.cpp b/js/src/jit/JitScript.cpp
+index bd8f1dd7752a..a9b3c1e290fb 100644
+--- a/js/src/jit/JitScript.cpp
++++ b/js/src/jit/JitScript.cpp
+@@ -310,10 +310,6 @@ void ICScript::purgeInactiveICScripts() {
+   // We have an active callee ICScript. This means the current ICScript must be
+   // active too.
+   MOZ_ASSERT(active());
+-
+-  for (CallSite& callsite : *inlinedChildren_) {
+-    callsite.callee_->purgeInactiveICScripts();
+-  }
+ }
+ 
+ void JitScript::resetWarmUpCount(uint32_t count) {
+@@ -471,7 +467,7 @@ void JitScript::purgeInactiveICScripts() {
+     return;
+   }
+ 
+-  icScript()->purgeInactiveICScripts();
++  forEachICScript([](ICScript* script) { script->purgeInactiveICScripts(); });
+ 
+   inliningRoot()->purgeInactiveICScripts();
+   if (inliningRoot()->numInlinedScripts() == 0) {
+-- 
+2.43.0
+

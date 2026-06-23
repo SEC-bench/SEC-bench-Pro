@@ -1,0 +1,41 @@
+From 7860e1e15faf6f5dbe3388516d912e63a1afa189 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 28 May 2024 14:56:05 +0000
+Subject: [PATCH] Bug 1884552: Add testcase r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D204547
+---
+ js/src/jit-test/tests/ion/bug1884552.js | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+ create mode 100644 js/src/jit-test/tests/ion/bug1884552.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1884552.js b/js/src/jit-test/tests/ion/bug1884552.js
+new file mode 100644
+index 0000000000000..3ff6aad6ef490
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1884552.js
+@@ -0,0 +1,24 @@
++function inner(cond) {
++  var x;
++  if (cond) {
++    x = true;
++  } else {
++    x = false;
++   switch (this) {}
++  }
++  return x;
++}
++
++function outer(cond) {
++  if (inner(cond)) {
++    return 1;
++  } else {
++    return 2;
++  }
++}
++
++with ({}) {}
++for (var i = 0; i < 1000; i++) {
++  outer(true);
++  outer(false);
++}

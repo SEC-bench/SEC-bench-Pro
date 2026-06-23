@@ -1,0 +1,27 @@
+expect:  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+
+#
+# Fatal error in ../../src/objects/string-inl.h, line 1125
+# Debug check failed: flat.IsTwoByte().
+#
+#
+#
+#FailureMessage Object: 0x746c7edddc60
+==== C stack trace ===============================
+
+    out/x64.asan/d8(__interceptor_backtrace+0x46) [0x628776862df6]
+    out/x64.asan/d8(+0x9289133) [0x62877d877133]
+    out/x64.asan/d8(+0x928750a) [0x62877d87550a]
+    out/x64.asan/d8(+0x925e8a0) [0x62877d84c8a0]
+    out/x64.asan/d8(+0x925dd8f) [0x62877d84bd8f]
+    out/x64.asan/d8(+0x39ef913) [0x628777fdd913]
+    out/x64.asan/d8(+0x3a2b17d) [0x62877801917d]
+    out/x64.asan/d8(+0x39d9c69) [0x628777fc7c69]
+    out/x64.asan/d8(+0x39e248c) [0x628777fd048c]
+    out/x64.asan/d8(+0x39d1207) [0x628777fbf207]
+    out/x64.asan/d8(+0x39e03ba) [0x628777fce3ba]
+    out/x64.asan/d8(+0x299b0ac) [0x628776f890ac]
+    out/x64.asan/d8(+0x299a660) [0x628776f88660]
+    out/x64.asan/d8(+0x888907d) [0x62877ce7707d]
+Trace/breakpoint trap

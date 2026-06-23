@@ -1,0 +1,10 @@
+#!/bin/bash
+
+rm -rf out/x64.debug
+
+gn gen out/x64.debug --args='is_debug=true symbol_level=2 v8_optimized_debug=false target_cpu="x64" v8_target_cpu="x64" use_sysroot=true v8_enable_sandbox=true v8_enable_pointer_compression=true v8_enable_memory_corruption_api=true is_component_build=true'
+ninja -C out/x64.debug d8
+
+mkdir -p /out
+ln -sf /src/v8/out/x64.debug/d8 /out/d8
+ln -sf /src/v8/out/x64.debug/snapshot_blob.bin /out/snapshot_blob.bin

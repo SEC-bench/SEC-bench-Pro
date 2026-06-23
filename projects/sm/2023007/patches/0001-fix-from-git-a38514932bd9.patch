@@ -1,0 +1,26 @@
+From a38514932bd9f02172864a03605d03612cb91cd4 Mon Sep 17 00:00:00 2001
+From: Yury Delendik <ydelendik@mozilla.com>
+Date: Wed, 25 Mar 2026 13:43:03 +0000
+Subject: [PATCH] Bug 2023007 - Enter the correct realm in
+ writeSharedWasmMemory. r=sfink
+
+Differential Revision: https://phabricator.services.mozilla.com/D287697
+---
+ js/src/vm/StructuredClone.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/js/src/vm/StructuredClone.cpp b/js/src/vm/StructuredClone.cpp
+index 2e35ed32bd04..ce3e1a26d2cf 100644
+--- a/js/src/vm/StructuredClone.cpp
++++ b/js/src/vm/StructuredClone.cpp
+@@ -1594,6 +1594,7 @@ bool JSStructuredCloneWriter::writeSharedWasmMemory(HandleObject obj) {
+ 
+   Rooted<WasmMemoryObject*> memoryObj(context(),
+                                       &obj->unwrapAs<WasmMemoryObject>());
++  JSAutoRealm ar(context(), memoryObj);
+ 
+   if (!out.writePair(SCTAG_SHARED_WASM_MEMORY_OBJECT, 0) ||
+       !out.writePair(SCTAG_BOOLEAN, memoryObj->isHuge())) {
+-- 
+2.43.0
+

@@ -1,0 +1,60 @@
+From 5e55c7effe8cd125c0404ed9b00193de388eee3e Mon Sep 17 00:00:00 2001
+From: Yury Delendik <ydelendik@mozilla.com>
+Date: Wed, 8 Nov 2023 16:56:44 +0000
+Subject: [PATCH] Bug 1862473 - Align local slots for wasm tail calls. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D192895
+---
+ .../tests/wasm/tail-calls/bug1862473.js       | 24 +++++++++++++++++++
+ js/src/jit/shared/CodeGenerator-shared.cpp    |  7 ++++++
+ 2 files changed, 31 insertions(+)
+ create mode 100644 js/src/jit-test/tests/wasm/tail-calls/bug1862473.js
+
+diff --git a/js/src/jit-test/tests/wasm/tail-calls/bug1862473.js b/js/src/jit-test/tests/wasm/tail-calls/bug1862473.js
+new file mode 100644
+index 0000000000000..57e5ea211810c
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/tail-calls/bug1862473.js
+@@ -0,0 +1,24 @@
++// |jit-test| --wasm-gc; skip-if: !wasmGcEnabled()
++
++var ins = wasmEvalText(`(module
++  (func $func1)
++  (func $func2 (param i32 arrayref arrayref i32 i32 i32 i32)
++    return_call $func1
++  )
++  (func (export "test")
++    i32.const 1
++    ref.null array
++    ref.null array
++    i32.const -2
++    i32.const -3
++    i32.const -4
++    i32.const -5
++    call $func2
++
++    ref.null array
++    ref.cast (ref array)
++    drop
++  )
++)`);
++
++assertErrorMessage(() => ins.exports.test(), WebAssembly.RuntimeError, /bad cast/);
+diff --git a/js/src/jit/shared/CodeGenerator-shared.cpp b/js/src/jit/shared/CodeGenerator-shared.cpp
+index c1e062af0386e..1752e1ab1372b 100644
+--- a/js/src/jit/shared/CodeGenerator-shared.cpp
++++ b/js/src/jit/shared/CodeGenerator-shared.cpp
+@@ -93,6 +93,13 @@ CodeGeneratorShared::CodeGeneratorShared(MIRGenerator* gen, LIRGraph* graph,
+ #endif
+ 
+     if (gen->needsStaticStackAlignment()) {
++#ifdef ENABLE_WASM_TAIL_CALLS
++      // Tail calls expect stack arguments to be aligned when collapsing frames.
++      // Insert padding to align the stack arguments so that a future tail call
++      // doesn't overwrite a local.
++      frameDepth_ = AlignBytes(frameDepth_, WasmStackAlignment);
++#endif
++
+       // Since wasm uses the system ABI which does not necessarily use a
+       // regular array where all slots are sizeof(Value), it maintains the max
+       // argument stack depth separately.

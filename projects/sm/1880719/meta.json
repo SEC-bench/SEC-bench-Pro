@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1880719",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/CodeGenerator.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--wasm-memory-control --wasm-compiler=optimizing --wasm-exnref",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Integer overflow",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm-GC array allocation integer overflow - Ion code generation used a wrapped element-storage byte count for wasm array allocation. In js/src/jit/CodeGenerator.cpp, visitWasmNewArrayObject computed numElements * elementSize for inline allocation and did not correctly reject overflowing products before allocation. A non-debug build could under-allocate the array backing store while preserving the large logical length, so later array.get/array.set operations access past the allocation. The fix uses CheckedUint32 overflow handling in CodeGenerator.cpp before emitting the allocation path.",
+    "fix_commits": [
+        "cd226ea7e9d033ff1fb50bbfe82eefcea9d2f239"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-incorrect-array-size-calculation.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1880719: Fix incorrect array size calculation. r=rhunt",
+            "source_commit": "cd226ea7e9d033ff1fb50bbfe82eefcea9d2f239",
+            "commit": "cd226ea7e9d033ff1fb50bbfe82eefcea9d2f239",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/cd226ea7e9d033ff1fb50bbfe82eefcea9d2f239",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/cd226ea7e9d033ff1fb50bbfe82eefcea9d2f239",
+            "phabricator": "D202466"
+        }
+    ],
+    "vrp": null
+}

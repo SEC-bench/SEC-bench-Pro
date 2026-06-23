@@ -1,0 +1,48 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1946004",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/x64/MacroAssembler-x64.cpp",
+        "js/src/wasm/WasmStubs.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit/x64",
+        "js/src/wasm"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Uninitialized memory read",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm GenerateJitEntry x64 \u2014 i32 Return From Ion-Compiled Wasm Boxed via boxNonDouble Without Upper-32-Bit Zero-Extension \u2192 Stale rax Bits Leak Into JS::Value Tag (CVE-2025-1933). CVE-2025-1933 (sec-high). When a WebAssembly Ion-compiled function stores an i32 stack result value and returns to a Wasm-Baseline caller, only the lower 32 bits are written but the full 64-bit register is later popped. The GenerateJitEntry stub then boxes this value via boxNonDouble without first widening (zeroing the upper 32 bits). The garbage in the upper 32 bits corrupts JS::Value type tags, potentially allowing construction of arbitrary SymbolValue or BigIntValue objects via stack spraying to control the garbage bits. This can lead to type confusion and arbitrary memory access. The fix widens i32 return values in GenerateJitEntry.",
+    "fix_commits": [
+        "7a1bf5ae72cd",
+        "b99d0f2e83d3"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-widen-i32-return-values-in-generatejitentry.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1946004 fix part 1",
+            "source_commit": "7a1bf5ae72cd",
+            "commit": "7a1bf5ae72cd",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/7a1bf5ae72cd",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/7a1bf5ae72cd"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test-and-comment.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1946004 fix part 2",
+            "source_commit": "b99d0f2e83d3",
+            "commit": "b99d0f2e83d3",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/b99d0f2e83d3",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/b99d0f2e83d3"
+        }
+    ],
+    "vrp": null
+}

@@ -1,0 +1,46 @@
+[13] Assertion failure: framePtr->hasCachedSavedFrame() || hasGoodExcuse, at /src/gecko-dev/js/src/vm/SavedStacks.cpp:1483
+#01: ???[/out/js +0x36fc9a3]
+#02: ???[/out/js +0x36f9f8d]
+#03: JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&)[/out/js +0x3c81722]
+#04: ???[/out/js +0x3cb4dc1]
+#05: ???[/out/js +0x32823e2]
+#06: JS_ReportErrorNumberASCII(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, ...)[/out/js +0x3c296a3]
+#07: ???[/out/js +0x33f7213]
+#08: JS::BigInt::lshByAbsolute(JSContext*, JS::Handle<JS::BigInt*>, JS::Handle<JS::BigInt*>)[/out/js +0x3132f68]
+#09: ???[/out/js +0x4a51d62]
+#10: ???[/out/js +0x55188ae]
+#11: ???[/out/js +0x5516300]
+#12: ???[/out/js +0x4991890]
+#13: ???[/out/js +0x499341d]
+#14: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x591a9c6aa9d8 bp 0x7ffc458d1db0 sp 0x7ffc458d0da0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x591a9c6aa9d8 in js::SavedStacks::insertFrames(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1482:7
+    #1 0x591a9c6a7f8c in js::SavedStacks::saveCurrentStack(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1326:10
+    #2 0x591a9cc2f721 in JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&) /src/gecko-dev/js/src/jsapi.cpp:4927:29
+    #3 0x591a9cc62dc0 in js::CaptureStack(JSContext*, JS::MutableHandle<JSObject*>) /src/gecko-dev/js/src/jsexn.cpp:229:10
+    #4 0x591a9cc62dc0 in js::ErrorToException(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/jsexn.cpp:346:8
+    #5 0x591a9c2303e1 in ReportError(JSContext*, JSErrorReport*, JSErrorFormatString const* (*)(void*, unsigned int), void*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:173:10
+    #6 0x591a9c2303e1 in js::ReportErrorNumberVA(JSContext*, js::IsWarning, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, js::ErrorArgumentsType, __va_list_tag*) /src/gecko-dev/js/src/vm/ErrorReporting.cpp:487:8
+    #7 0x591a9cbd76a2 in JS_ReportErrorNumberASCIIVA(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, __va_list_tag*) /src/gecko-dev/js/src/jsapi.cpp:3794:3
+    #8 0x591a9cbd76a2 in JS_ReportErrorNumberASCII(JSContext*, JSErrorFormatString const* (*)(void*, unsigned int), void*, unsigned int, ...) /src/gecko-dev/js/src/jsapi.cpp:3784:3
+    #9 0x591a9c3a5212 in js::ReportOversizedAllocation(JSContext*, unsigned int) /src/gecko-dev/js/src/vm/JSContext.cpp:364:3
+    #10 0x591a9c0e0f67 in JS::BigInt::lshByAbsolute(JSContext*, JS::Handle<JS::BigInt*>, JS::Handle<JS::BigInt*>) /src/gecko-dev/js/src/vm/BigIntType.cpp:2255:5
+    #11 0x591a9d9ffd61 in js::jit::RBigIntRsh::recover(JSContext*, js::jit::SnapshotIterator&) const /src/gecko-dev/js/src/jit/Recover.cpp:720:20
+    #12 0x591a9e4c68ad in js::jit::SnapshotIterator::computeInstructionResults(JSContext*, js::jit::RInstructionResults*) const /src/gecko-dev/js/src/jit/JitFrames.cpp:2088:29
+    #13 0x591a9e4c42ff in js::jit::SnapshotIterator::initInstructionResults(js::jit::MaybeReadFallback&) /src/gecko-dev/js/src/jit/JitFrames.cpp:2041:12
+    #14 0x591a9d93f88f in js::jit::BailoutIonToBaseline(JSContext*, js::jit::JitActivation*, js::jit::JSJitFrameIter const&, js::jit::BaselineBailoutInfo**, js::jit::ExceptionBailoutInfo const*, js::jit::BailoutReason) /src/gecko-dev/js/src/jit/BaselineBailouts.cpp:1635:17
+    #15 0x591a9d94141c in js::jit::InvalidationBailout(js::jit::InvalidationBailoutStack*, js::jit::BaselineBailoutInfo**) /src/gecko-dev/js/src/jit/Bailouts.cpp:222:18
+    #16 0x1215e9ad75e1  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x0000100008b121dc  rcx = 0x0000591a99cb2260  rdx = 0x0000000000000000  
+rdi = 0x0000591a9fcc6850  rsi = 0x00007ffc458d0d58  rbp = 0x00007ffc458d1db0  rsp = 0x00007ffc458d0da0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007614ef9e0080  r13 = 0x00007ffc458d1810  r14 = 0x00007ffc458d2038  r15 = 0x00007ffc458d1b80  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/vm/SavedStacks.cpp:1482:7 in js::SavedStacks::insertFrames(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&)
+==13==ABORTING

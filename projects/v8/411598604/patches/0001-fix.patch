@@ -1,0 +1,103 @@
+From 41614e86a3e9f3b94f7bb36d83cd9f0fb1c52a17 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Dominik=20Inf=C3=BChr?= <dinfuehr@chromium.org>
+Date: Tue, 6 May 2025 18:43:56 +0200
+Subject: [PATCH] [heap] Avoid page flag check for large page detection
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This CL improves performance of Scavenger::HandleLargeObject by
+delaying the page flag checks for each and every object. Instead
+of page flags the method now simply checks the offset on the page
+first. This should filter out most objects already. In order to
+filter out regular objects at the start of a page, we still need to
+perform page flag checks but this should be quite unlikely.
+
+In addition this CL ensures that promoted large pages are proper
+large pages by checking that PageMetadata::IsLargePage() holds. This
+is necessary because HandleLargeObject() only checks the untrusted
+page flags.
+
+Bug: 411598604
+Change-Id: I03390950abf1e482d2be2b7df72834693ee29115
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6513778
+Commit-Queue: Dominik Inführ <dinfuehr@chromium.org>
+Reviewed-by: Michael Lippautz <mlippautz@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#100102}
+---
+ src/heap/scavenger-inl.h | 36 ++++++++++++++++++++++++------------
+ src/heap/scavenger.cc    |  2 ++
+ 2 files changed, 26 insertions(+), 12 deletions(-)
+
+diff --git a/src/heap/scavenger-inl.h b/src/heap/scavenger-inl.h
+index 536304e0c7a..6fdd5923c97 100644
+--- a/src/heap/scavenger-inl.h
++++ b/src/heap/scavenger-inl.h
+@@ -22,6 +22,7 @@
+ #include "src/objects/objects-body-descriptors-inl.h"
+ #include "src/objects/objects-inl.h"
+ #include "src/objects/slots-inl.h"
++#include "src/roots/roots-inl.h"
+ 
+ namespace v8 {
+ namespace internal {
+@@ -168,20 +169,31 @@ SlotCallbackResult Scavenger::RememberedSetEntryNeeded(
+ 
+ bool Scavenger::HandleLargeObject(Tagged<Map> map, Tagged<HeapObject> object,
+                                   int object_size, ObjectFields object_fields) {
+-  if (MemoryChunk::FromHeapObject(object)->InNewLargeObjectSpace()) {
+-    DCHECK_EQ(NEW_LO_SPACE,
+-              MutablePageMetadata::FromHeapObject(object)->owner_identity());
+-    if (object->relaxed_compare_and_swap_map_word_forwarded(
+-            MapWord::FromMap(map), object)) {
+-      local_surviving_new_large_objects_.insert({object, map});
+-      promoted_size_ += object_size;
+-      if (object_fields == ObjectFields::kMaybePointers) {
+-        local_promoted_list_.Push({object, map, object_size});
+-      }
++  // Quick check first: A large object is the first (and only) object on a data
++  // page (code pages have a different offset but are never young). This check
++  // avoids the page flag access.
++  if (MemoryChunk::AddressToOffset(object.address()) !=
++      MemoryChunkLayout::ObjectStartOffsetInDataPage()) {
++    return false;
++  }
++
++  // Most objects are already filtered out. Use page flags to filter out regular
++  // objects at the beginning of a page.
++  if (!MemoryChunk::FromHeapObject(object)->InNewLargeObjectSpace()) {
++    return false;
++  }
++
++  DCHECK_EQ(NEW_LO_SPACE,
++            MutablePageMetadata::FromHeapObject(object)->owner_identity());
++  if (object->relaxed_compare_and_swap_map_word_forwarded(MapWord::FromMap(map),
++                                                          object)) {
++    local_surviving_new_large_objects_.insert({object, map});
++    promoted_size_ += object_size;
++    if (object_fields == ObjectFields::kMaybePointers) {
++      local_promoted_list_.Push({object, map, object_size});
+     }
+-    return true;
+   }
+-  return false;
++  return true;
+ }
+ 
+ template <typename THeapObjectSlot,
+diff --git a/src/heap/scavenger.cc b/src/heap/scavenger.cc
+index 99af4aa60a2..9c97c239535 100644
+--- a/src/heap/scavenger.cc
++++ b/src/heap/scavenger.cc
+@@ -1077,6 +1077,8 @@ void ScavengerCollector::HandleSurvivingNewLargeObjects() {
+     object->set_map_word(map, kRelaxedStore);
+ 
+     LargePageMetadata* page = LargePageMetadata::FromHeapObject(object);
++    SBXCHECK(page->IsLargePage());
++    SBXCHECK_EQ(page->owner_identity(), NEW_LO_SPACE);
+     heap_->lo_space()->PromoteNewLargeObject(page);
+   }
+   surviving_new_large_objects_.clear();
+-- 
+2.43.0
+

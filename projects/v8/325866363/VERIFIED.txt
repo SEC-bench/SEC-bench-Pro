@@ -1,0 +1,4 @@
+Verified on 2026-04-11.
+Checked original collector report/artifacts under ../../collector/output/general/Blink/JavaScript/WebAssembly/325866363.
+Reproduced with ../../v8/crash_check.sh using dataset poc.js and meta.json command flags.
+Result: CONFIMRED: RUNTIME_CRASH.

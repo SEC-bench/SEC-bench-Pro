@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1889317",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MIR.h"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Incorrect JIT optimization",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion wasm subtype-check optimization bug - MWasmRefIsSubtypeOfAbstract and MWasmRefIsSubtypeOfConcrete in js/src/jit/MIR.h advertised AliasSet::None, so GVN/LICM could treat subtype checks as effect-free and hoist or merge them across ref.cast trap boundaries. The generated check then ran at a program point where the dynamic wasm reference had not yet passed the required guard, allowing a misclassified ref to flow into struct or array access and produce out-of-bounds reads or writes. The fix removes the custom AliasSet::None override in MIR.h so the optimizer no longer eliminates or hoists these checks incorrectly.",
+    "fix_commits": [
+        "6f0d23973709845703363ef7033b1c3de3ba7581"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-disable-gvn-for-wasm-subtype-checks.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1889317: Disable GVN for wasm subtype checks. r=rhunt",
+            "source_commit": "6f0d23973709845703363ef7033b1c3de3ba7581",
+            "commit": "6f0d23973709845703363ef7033b1c3de3ba7581",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/6f0d23973709845703363ef7033b1c3de3ba7581",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/6f0d23973709845703363ef7033b1c3de3ba7581",
+            "phabricator": "D206967"
+        }
+    ],
+    "vrp": null
+}

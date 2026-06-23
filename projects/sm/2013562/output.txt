@@ -1,0 +1,63 @@
+[13] Hit MOZ_CRASH(*** Compartment mismatch 79fc3ebe09a0 vs. 79fc3ebe1120 at argument 0) at /src/gecko-dev/js/src/vm/JSContext-inl.h:56
+#01: ???[/out/js +0x3088bb3]
+#02: ???[/out/js +0x308acf5]
+#03: ???[/out/js +0x32cfd95]
+#04: ???[/out/js +0x32e9ec3]
+#05: ???[/out/js +0x30f436f]
+#06: ???[/out/js +0x312a99e]
+#07: ???[/out/js +0x4f706e3]
+#08: ???[/out/js +0x4f35876]
+#09: ???[/out/js +0x4f50f5e]
+#10: ???[/out/js +0x4f342a4]
+#11: ???[/out/js +0x4f39f8d]
+#12: ???[/out/js +0x4f3a7c7]
+#13: ???[/out/js +0x544f865]
+#14: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x544fbb3]
+#15: ???[/out/js +0x2f5c250]
+#16: ???[/out/js +0x2f5af2d]
+#17: ???[/out/js +0x2ee9c30]
+#18: ???[/out/js +0x2ed9c26]
+#19: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#20: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#21: _start[/out/js +0x2ddd975]
+#22: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x60091d528bd4 bp 0x7ffde04262a0 sp 0x7ffde0426290 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x60091d528bd4 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x60091d528bd4 in MOZ_Crash(char const*, int, char const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:375:3
+    #2 0x60091d528bd4 in js::ContextChecks::fail(JS::Compartment*, JS::Compartment*, int) /src/gecko-dev/js/src/vm/JSContext-inl.h:55:5
+    #3 0x60091d52acf4 in void JSContext::checkImpl<JS::Handle<JSObject*>, JS::Handle<JS::Value>>(JS::Handle<JSObject*> const&, JS::Handle<JS::Value> const&) /src/gecko-dev/js/src/vm/JSContext-inl.h:216:33
+    #4 0x60091d76fd94 in void JSContext::check<JS::Handle<JSObject*>, JS::Handle<JS::Value>>(JS::Handle<JSObject*> const&, JS::Handle<JS::Value> const&) /src/gecko-dev/js/src/vm/JSContext-inl.h:223:5
+    #5 0x60091d76fd94 in js::ResolvePromiseInternal(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/builtin/Promise.cpp:1487:7
+    #6 0x60091d789ec2 in js::PromiseObject::resolve(JSContext*, JS::Handle<js::PromiseObject*>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/builtin/Promise.cpp:6948:12
+    #7 0x60091d59436e in js::atomics_notify_impl(JSContext*, js::SharedArrayRawBuffer*, unsigned long, long, long*) /src/gecko-dev/js/src/builtin/AtomicsObject.cpp:1524:10
+    #8 0x60091d5ca99d in atomics_notify(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/AtomicsObject.cpp:1598:8
+    #9 0x60091f4106e2 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #10 0x60091f3d5875 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #11 0x60091f3f0f5d in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #12 0x60091f3f0f5d in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #13 0x60091f3d42a3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #14 0x60091f3d9f8c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #15 0x60091f3da7c6 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #16 0x60091f8ef864 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #17 0x60091f8efbb2 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #18 0x60091d3fc24f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1388:10
+    #19 0x60091d3faf2c in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #20 0x60091d389c2f in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12094:10
+    #21 0x60091d389c2f in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12347:12
+    #22 0x60091d379c25 in main /src/gecko-dev/js/src/shell/js.cpp:12753:12
+    #23 0x7d0c3f7291c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #24 0x7d0c3f72928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #25 0x60091d27d974 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2ddd974) (BuildId: 1563cab9789d150685b12212c3de802a)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x0000600921de8dc0  rcx = 0x0000000000000038  rdx = 0x0000000000000000  
+rdi = 0x00006009214a4bd0  rsi = 0x00007ffde0426248  rbp = 0x00007ffde04262a0  rsp = 0x00007ffde0426290  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007ffde0426330  r13 = 0x0000247ac2a39030  r14 = 0x00000f6187d7c026  r15 = 0x00007b0c3ebe0080  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

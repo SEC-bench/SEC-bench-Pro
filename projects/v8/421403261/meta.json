@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:421403261",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/wasm/baseline/liftoff-compiler.cc"
+  ],
+  "target_subdir": [
+    "src/wasm/baseline"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "Liftoff, V8's baseline WebAssembly compiler, maintains an invariant that registers holding i32 values have their upper 32 bits zeroed on x86-64. BoundsCheckArray() enforces the array index bound using a 32-bit comparison (kI32), which is correct under normal operation. However, in array element access operations (e.g., ArraySet, ArrayGet) where the element size is 1 byte (i8 arrays, elem_size_shift == 0), the emit_i32_shli shift is skipped, so the index register is passed directly to StoreObjectField()/LoadObjectField() without being zero-extended first. The underlying x64 Store()/Load() assembler functions then use the full 64-bit register to compute the memory operand via GetMemOp(), relying only on AssertZeroExtended() which is a no-op in non-debug builds. An attacker can exploit Wasm indirect call signature confusion (confusing an i64->i64 function as i64->i32) to clobber the upper 32 bits of what Liftoff considers an i32 return value. The bounds check passes because it examines only the lower 32 bits, while the actual memory access uses the full attacker-controlled 64-bit value as the array index offset, enabling arbitrary address read/write and a full V8 sandbox bypass.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[liftoff] Ensure zero-extension of returned i32 values",
+      "url": "https://crrev.com/c/6611066",
+      "cl": 6611066,
+      "source_commit": "df3874776c396ba7ddc6ca7894a1e09937bc3d04",
+      "commit": "df3874776c396ba7ddc6ca7894a1e09937bc3d04",
+      "description": "Local patch exported from https://crrev.com/c/6611066 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6611066",
+      "source_cl": 6611066,
+      "source_ref": "refs/changes/66/6611066/3",
+      "source_patchset": 3
+    }
+  ]
+}

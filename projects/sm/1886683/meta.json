@@ -1,0 +1,46 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1886683",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/JitFrames.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fast-warmup --ion-check-range-analysis --ion-extra-checks --fuzzing-safe --disable-oom-functions",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "JitFrames TraceThisAndArguments \u2014 Truncates Trace Range to nactuals, Missing WasmValueBox Tracing for Rectifier-Padded Formal externref Slots. CVE-2024-3857 (sec-high). js::jit::TraceThisAndArguments in js/src/jit/JitFrames.cpp is the JSJitToWasm frame tracer used during minor/compacting GC to mark the arguments live for the duration of a JS\u2192wasm call. It iterates over `[0, nactuals)` \u2014 the number of *actual* arguments passed by the caller \u2014 rather than `[0, nformals)` \u2014 the number of declared wasm formal parameters. When a JS caller invokes a wasm export with fewer arguments than the wasm function declares (e.g. calling a `(param externref externref externref)` export with a single argument), the wasm JIT entry stub's arguments rectifier pushes `undefined` JS values for each missing slot and the wasm-side thunk boxes each of those `undefined`s into a freshly nursery-allocated `WasmValueBox` written into the formal argument slot. The trailing `WasmValueBox` objects live in the JIT frame starting at offset `nactuals` and past, and the JSJitToWasm frame keeps them live via those slot writes \u2014 but `TraceThisAndArguments` stops its trace loop at `nactuals`, so those boxes are never reported to the tracer. A minor GC sweeps the unmarked nursery `WasmValueBox`es while the wasm frame is still on the call stack holding their pointers; when the wasm function subsequently reads one of its formal parameters (or when the post-call cleanup unboxes them) the dereference lands in freed nursery storage \u2014 use-after-free, ASAN reports `heap-use-after-free` on `WasmValueBox::value`. Reachable from any JS caller that can make `Function.prototype.apply`/`.call` pass mismatched arities to a wasm export with externref/anyref/eqref formals. The fix (changeset 7c9c4691c2a3) simplifies TraceThisAndArguments to iterate over all `nformals` slots and trace each one unconditionally, eliminating the truncated-trace window.",
+    "fix_commits": [
+        "d4b2ea13efeb",
+        "1941c91cd18b"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-simplify-tracing-of-arguments-in-tracethisandarguments.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1886683 fix part 1",
+            "source_commit": "d4b2ea13efeb",
+            "commit": "d4b2ea13efeb",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/d4b2ea13efeb",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/d4b2ea13efeb"
+        },
+        {
+            "kind": "patch_file",
+            "path": "patches/0002-add-test.patch",
+            "apply_in_gecko_repo": true,
+            "role": "supplemental",
+            "sequence": 2,
+            "description": "Bug 1886683 fix part 2",
+            "source_commit": "1941c91cd18b",
+            "commit": "1941c91cd18b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/1941c91cd18b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/1941c91cd18b"
+        }
+    ],
+    "vrp": null
+}

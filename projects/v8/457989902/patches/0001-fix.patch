@@ -1,0 +1,59 @@
+From a972bc44e32acb2ed019326a15df10013c1038dd Mon Sep 17 00:00:00 2001
+From: Jakob Linke <jgruber@chromium.org>
+Date: Mon, 10 Nov 2025 10:26:57 +0100
+Subject: [PATCH] [maglev] Temporarily disable double array ctor optimization
+
+Fixed: 457866804
+Change-Id: I6c7a9330a5af5a9958ef4c0fc8b3e3e32d168921
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/7137281
+Auto-Submit: Jakob Linke <jgruber@chromium.org>
+Reviewed-by: Victor Gomes <victorgomes@chromium.org>
+Commit-Queue: Jakob Linke <jgruber@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#103619}
+---
+ src/maglev/maglev-graph-builder.cc | 7 +++++++
+ test/mjsunit/mjsunit.status        | 3 +++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/src/maglev/maglev-graph-builder.cc b/src/maglev/maglev-graph-builder.cc
+index 6cfe938ae94..1e958e83805 100644
+--- a/src/maglev/maglev-graph-builder.cc
++++ b/src/maglev/maglev-graph-builder.cc
+@@ -12412,6 +12412,10 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceConstructArrayConstructor(
+       maybe_allocation_site.has_value()
+           ? maybe_allocation_site->GetElementsKind()
+           : array_function.initial_map(broker()).elements_kind();
++
++  // TODO(457866804): Re-enable once this bug is fixed.
++  if (IsDoubleElementsKind(elements_kind)) return {};
++
+   DCHECK(IsFastElementsKind(elements_kind));
+   const int arity = static_cast<int>(args.count());
+ 
+@@ -12550,6 +12554,9 @@ MaybeReduceResult MaglevGraphBuilder::TryReduceConstructArrayConstructor(
+     return {};
+   }
+ 
++  // TODO(457866804): Re-enable once this bug is fixed.
++  if (IsDoubleElementsKind(elements_kind)) return {};
++
+   // Update the initial map based on our potentially changed elements_kind.
+   {
+     compiler::OptionalMapRef maybe_updated_map =
+diff --git a/test/mjsunit/mjsunit.status b/test/mjsunit/mjsunit.status
+index 0745ecf8f8a..6852b870c3e 100644
+--- a/test/mjsunit/mjsunit.status
++++ b/test/mjsunit/mjsunit.status
+@@ -269,6 +269,9 @@
+ 
+   # BUG(https://crbug.com/420932895): Very slow in many configurations.
+   'random-bit-correlations': [PASS, ['mode == debug or simulator_run', SKIP]],
++
++  # TODO(457866804): Re-enable once this bug is fixed.
++  'compiler/array-constructor2': [SKIP],
+ }],  # ALWAYS
+ 
+ ################################################################################
+-- 
+2.43.0
+

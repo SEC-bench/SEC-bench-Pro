@@ -1,0 +1,65 @@
+From 3a8fb49d343b7fb6cf9e1654e6c767b1d53e3bee Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Thu, 4 Sep 2025 07:10:16 +0000
+Subject: [PATCH] Bug 1985765 - Fix bitmask calculation when checking dense
+ bitmap bit r=sfink
+
+Differential Revision: https://phabricator.services.mozilla.com/D263252
+---
+ js/src/ds/Bitmap.h                      |  3 ++-
+ js/src/jit-test/tests/gc/bug-1985765.js | 29 +++++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1985765.js
+
+diff --git a/js/src/ds/Bitmap.h b/js/src/ds/Bitmap.h
+index dcfb7348f242..5a653af39f5f 100644
+--- a/js/src/ds/Bitmap.h
++++ b/js/src/ds/Bitmap.h
+@@ -54,7 +54,8 @@ class DenseBitmap {
+   uintptr_t& word(size_t i) { return data[i]; }
+ 
+   bool getBit(size_t bit) const {
+-    return word(bit / JS_BITS_PER_WORD) & (1 << (bit % JS_BITS_PER_WORD));
++    return word(bit / JS_BITS_PER_WORD) &
++           (uintptr_t(1) << (bit % JS_BITS_PER_WORD));
+   }
+ 
+   template <typename T>
+diff --git a/js/src/jit-test/tests/gc/bug-1985765.js b/js/src/jit-test/tests/gc/bug-1985765.js
+new file mode 100644
+index 000000000000..1517aa5bb7e4
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1985765.js
+@@ -0,0 +1,29 @@
++// |jit-test| --enable-symbols-as-weakmap-keys; skip-if: getBuildConfiguration("release_or_beta")
++
++class b {
++  #c;
++  #$; 
++  #n; 
++  #m; 
++  #e; 
++  #f; 
++  #g;
++};
++class h {
++  #$;
++  #n;
++  #m;
++  #e;
++  #f;
++  #g;
++};
++let keyZone = newGlobal({newCompartment: true});
++let i = newGlobal({newCompartment: true});
++keyZone.eval('var key = Symbol()');
++i.eval('map = new WeakMap');
++i.keyZone = keyZone;
++i.eval('map.set(keyZone.key, {})');
++schedulezone(i);
++schedulezone('atoms');
++gc('zone');
++
+-- 
+2.43.0
+

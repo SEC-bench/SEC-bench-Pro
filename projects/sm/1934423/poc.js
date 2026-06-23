@@ -1,0 +1,16 @@
+gczeal(8,18);
+{
+  const values = [];
+  async function* gen() {
+    await using a65 = {
+      [Symbol.asyncDispose]() {}
+    }
+    await using b61 = {}
+  }
+  async function testDisposalDuringForcedThrowInGenerator() {
+    let x91 = gen();
+    values.push((await x91.next()).value);
+    try {} catch (e6) {}
+  }
+  testDisposalDuringForcedThrowInGenerator();
+}

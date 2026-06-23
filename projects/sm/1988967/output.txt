@@ -1,0 +1,38 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x55791a181ad5 bp 0x7ffdfd9fc250 sp 0x7ffdfd9fc1b0 T0)
+==11==The signal is caused by a READ memory access.
+==11==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x55791a181ad5 in IsWriteableAddress(void*) /src/gecko-dev/js/src/gc/Nursery.cpp:1013:11
+    #1 0x55791a181ad5 in js::Nursery::forwardBufferPointer(unsigned long*) /src/gecko-dev/js/src/gc/Nursery.cpp:1042:5
+    #2 0x55791b08c6c9 in js::jit::UpdateIonJSFrameForMinorGC(JSRuntime*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:1171:13
+    #3 0x55791b08c6c9 in js::jit::UpdateJitActivationsForMinorGC(JSRuntime*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1528:11
+    #4 0x55791a186bad in js::Nursery::doCollection(js::gc::AutoGCSession&, JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1745:3
+    #5 0x55791a184dd4 in js::Nursery::collect(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1462:31
+    #6 0x55791a0af292 in js::gc::GCRuntime::collectNursery(JS::GCOptions, JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:5055:13
+    #7 0x55791a08467f in js::gc::GCRuntime::minorGC(JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:5026:3
+    #8 0x55791a04278d in void* js::gc::CellAllocator::RetryNurseryAlloc<(js::AllowGC)1>(JSContext*, JS::TraceKind, js::gc::AllocKind, unsigned long, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator.cpp:107:23
+    #9 0x557918bb894c in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:217:12
+    #10 0x557918bb827d in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:112:16
+    #11 0x557918bb704b in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #12 0x557918bb704b in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:359:10
+    #13 0x557918bb704b in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:482:28
+    #14 0x5579190d9ce7 in NewObject(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/JSObject.cpp:764:23
+    #15 0x5579190da1d1 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::gc::AllocKind, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject.cpp:809:10
+    #16 0x5579191e0776 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::NewObjectKind, js::EnumFlags<js::ObjectFlag>) /src/gecko-dev/js/src/vm/JSObject-inl.h:433:10
+    #17 0x5579191e0776 in js::PromiseObject* js::NewObjectWithClassProto<js::PromiseObject>(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/JSObject-inl.h:439:19
+    #18 0x5579191e0776 in CreatePromiseObjectInternal(JSContext*, JS::Handle<JSObject*>, bool, bool) /src/gecko-dev/js/src/builtin/Promise.cpp:2828:28
+    #19 0x5579191e383a in js::CreatePromiseObjectWithoutResolutionFunctions(JSContext*) /src/gecko-dev/js/src/builtin/Promise.cpp:1880:28
+    #20 0x5579191e383a in js::PromiseObject::createSkippingExecutor(JSContext*) /src/gecko-dev/js/src/builtin/Promise.cpp:3096:10
+    #21 0x5579198f11e8 in JS::NewPromiseObject(JSContext*, JS::Handle<JSObject*>) /src/gecko-dev/js/src/jsapi.cpp:2849:12
+    #22 0x557919283a25 in js::StartDynamicModuleImport(JSContext*, JS::Handle<JSScript*>, JS::Handle<JS::Value>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Modules.cpp:2690:28
+    #23 0x7b13f09f49dd  (<unknown module>)
+
+==11==Register values:
+rax = 0x1fffc5a5a5a5a5a5  rbx = 0x00000fbe8e57c5e0  rcx = 0x000010003fb3783e  rdx = 0x0000000000000020  
+rdi = 0xfffe2d2d2d2d2d2d  rsi = 0x0000000000000000  rbp = 0x00007ffdfd9fc250  rsp = 0x00007ffdfd9fc1b0  
+ r8 = 0x00000fffbfb3f83b   r9 = 0x00007ffdfd9fc1f7  r10 = 0x00000fffbfb3f83e  r11 = 0x000010003fb37838  
+r12 = 0x00007ffdfd9fd878  r13 = 0x00003eab52bbffb8  r14 = 0x00007df472be2ef0  r15 = 0x00ffffffffffffff  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Nursery.cpp:1013:11 in IsWriteableAddress(void*)
+==11==ABORTING

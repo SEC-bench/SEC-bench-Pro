@@ -1,0 +1,26 @@
+diff --git a/src/execution/isolate.cc b/src/execution/isolate.cc
+index a6ebcf9..01f3c70 100644
+--- a/src/execution/isolate.cc
++++ b/src/execution/isolate.cc
+@@ -3897,7 +3897,10 @@ void Isolate::UpdateCentralStackInfo() {
+       Cast<WasmContinuationObject>(current)->stack());
+   current = Cast<WasmContinuationObject>(current)->parent();
+   thread_local_top()->is_on_central_stack_flag_ =
+       IsOnCentralStack(wasm_stack->jmpbuf()->sp);
++#if V8_ENABLE_SANDBOX
++  wasm::JumpBuffer* caller = wasm_stack->jmpbuf()->caller;
++#endif
+   // Update the central stack info on switch. Only consider the innermost stack
+   bool updated_central_stack = false;
+   // We don't need to add all inactive stacks. Only the ones in the active chain
+@@ -3908,6 +3911,10 @@ void Isolate::UpdateCentralStackInfo() {
+     // conservative stack scanning. We switch to the central stack for foreign
+     // calls, so secondary stacks only contain wasm frames which use the precise
+     // GC.
++#if V8_ENABLE_SANDBOX
++    SBXCHECK_EQ(caller, wasm_stack->jmpbuf());
++    caller = wasm_stack->jmpbuf()->caller;
++#endif
+     current = cont->parent();
+     if (!updated_central_stack && IsOnCentralStack(wasm_stack->jmpbuf()->sp)) {
+       // This is the most recent use of the central stack in the call chain.

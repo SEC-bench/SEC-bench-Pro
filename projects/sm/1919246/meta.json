@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1919246",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/IonAnalysis.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Incorrect JIT optimization",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion OSR-loop optimization graph corruption - an optional optimization for loops containing OSR loops produced inconsistent predecessor/backedge structure. In js/src/jit/IonAnalysis.cpp, the pass could drop or mismatch phi inputs for inner-loop predecessors; debug builds hit AssertGraphCoherency/pred->isLoopBackedge assertions, and optimized builds could continue with a malformed graph and crash in generated code. The fix backs out the unsafe D221953 optimization and keeps the graph structure conservative.",
+    "fix_commits": [
+        "3b81464999d7697966fcd3807dd2ebd89f30339b"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-back-out-d221953-and-add-tests.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1919246 - Back out D221953 and add tests. r=mgaudet",
+            "source_commit": "3b81464999d7697966fcd3807dd2ebd89f30339b",
+            "commit": "3b81464999d7697966fcd3807dd2ebd89f30339b",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/3b81464999d7697966fcd3807dd2ebd89f30339b",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/3b81464999d7697966fcd3807dd2ebd89f30339b",
+            "phabricator": "D222486"
+        }
+    ],
+    "vrp": null
+}

@@ -1,0 +1,15 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11==ERROR: AddressSanitizer: SEGV on unknown address 0x7d18859f2380 (pc 0x7d18859f2380 bp 0x7bb804332214 sp 0x7fffc7703588 T0)
+==11==The signal is caused by a READ memory access.
+==11==Hint: PC is at a non-executable region. Maybe a wild jump?
+    #0 0x7d18859f2380  (<unknown module>)
+
+==11==Register values:
+rax = 0x00001f4375d64078  rbx = 0x0000000000000000  rcx = 0x00001f4375d6a088  rdx = 0x00007d18859f23b0  
+rdi = 0x0000000000000000  rsi = 0x0000000000000000  rbp = 0x00007bb804332214  rsp = 0x00007fffc7703588  
+ r8 = 0x0000000000000000   r9 = 0x0000000000000000  r10 = 0x00007bb804332184  r11 = 0x00007dc8859fe110  
+r12 = 0x0000000000000000  r13 = 0x0000000000000000  r14 = 0x00007d18859f2380  r15 = 0x0000000000000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==11==ABORTING

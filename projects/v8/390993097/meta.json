@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:390993097",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/interpreter/bytecode-generator.cc"
+  ],
+  "target_subdir": [
+    "src/interpreter"
+  ],
+  "target_vulnerability_type": "Out-of-bounds memory access",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability caused by an asyncness inconsistency in BytecodeGenerator. The root cause is in BytecodeGenerator::BuildAsyncReturn(), which unconditionally calls generator_object() (returning the incoming_new_target_or_generator_ register) without verifying that the function is actually a resumable/async function. This register is only initialized in AllocateTopLevelRegisters() when IsResumableFunction(function_kind()) is true. The inconsistency is triggered by a race condition: an attacker corrupts Script::flags to set is_repl_mode=1 while Compiler::CollectSourcePositions() is re-parsing the function (e.g., triggered via RenderCallSite() during exception handling). With is_repl_mode=1, the parser takes the ParseREPLProgram() path, which unconditionally appends a NewAsyncReturnStatement() to the script body. However, the bytecode generator uses function_kind() from the FunctionLiteral (which reflects the original non-async kind) to decide control flow structure, so incoming_new_target_or_generator_ is never allocated and remains at its default-constructed invalid state (kInvalidIndex = kMaxInt). When VisitReturnStatement() processes the async return, it calls BuildAsyncReturn(), which invokes BytecodeArrayBuilder::MoveRegister() with generator_object() holding kInvalidIndex. BytecodeRegisterOptimizer::GetRegisterInfoTableIndex() then computes an index of approximately 0x80000008, causing GetRegisterInfo() to access register_info_table_ at a ~-16 GiB offset, resulting in an out-of-bounds read/write that can be leveraged for controlled address write and V8 sandbox escape.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6192621 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "20265548229c22a8795a563dac2629c6ddfc10f0 [bytecode-generator] Harden usages of static registers",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6192621",
+      "source_cl": 6192621,
+      "source_commit": "20265548229c22a8795a563dac2629c6ddfc10f0"
+    }
+  ]
+}

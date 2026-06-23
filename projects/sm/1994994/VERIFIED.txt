@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-30T05:50:00Z — 2025-Q4 batch on bug 1994994 (sec-high, 2025-Oct)
+  - CONFIMRED: RUNTIME_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: (kMinCPOffset) <= (cp_offset), at /src/gecko-dev/js/src/irregexp/imported/regexp-bytecode-generator.cc:194`
+  - exact line + assertion match against report
+  - root cause: irregexp bytecode generator computed a `cp_offset` (character-position offset) more negative than `kMinCPOffset` for certain quantified loop shapes — the upstream optimizer didn't bail out when the offset went out of range, hitting the bytecode assert.
+  - PoC: 4-line extracted inline from Report.md.
+  - flags: `--fuzzing-safe --ion-offthread-compile=off` (default debug repro).
+  - fixed image (git 866e7aa6a080 "Bug 1994994: Apply upstream irregexp patch r=dminor", multi-file: regexp-compiler.cc/h + regexp-macro-assembler.cc) blocks PoC 5/5.

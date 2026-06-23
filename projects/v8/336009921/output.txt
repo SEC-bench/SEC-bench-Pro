@@ -1,0 +1,13 @@
+Sandbox testing mode is enabled. Write to the page starting at 0x1a371a353000 (available from JavaScript as `Sandbox.targetPage`) to demonstrate a sandbox bypass.
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_ACCERR 1a371a353000
+
+==== C stack trace ===============================
+
+ [0x5f5a82ad6077]
+ [0x74c35b5b1330]
+ [0x1a371a353000]
+[end of stack trace]
+Segmentation fault (core dumped)

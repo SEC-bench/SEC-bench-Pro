@@ -1,0 +1,65 @@
+From 76e93f9f269b630644e307f38512659d5b7d2a9a Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Tue, 9 Nov 2021 10:20:09 +0000
+Subject: [PATCH] Bug 1739972 - Switch realm if necessary when creathing |this|
+ in the NewPlainObject fallback functions r=jandem
+
+When creating the |this| object for a scripted constructor, the shape's realm
+may not match that of the context. The patch swiches realms when necessary.
+
+This is not a problem for the inline JIT code generated as that uses the
+shape's realm and ignores the context.
+
+Differential Revision: https://phabricator.services.mozilla.com/D130643
+---
+ js/src/jit-test/tests/gc/bug-1739972.js |  5 +++++
+ js/src/vm/Interpreter.cpp               | 14 ++++++++++++++
+ 2 files changed, 19 insertions(+)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1739972.js
+
+diff --git a/js/src/jit-test/tests/gc/bug-1739972.js b/js/src/jit-test/tests/gc/bug-1739972.js
+new file mode 100644
+index 000000000000..7094635c8d6c
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1739972.js
+@@ -0,0 +1,5 @@
++enableShellAllocationMetadataBuilder();
++a = newGlobal();
++a.evaluate("function x() {}");
++for (i = 0; i < 20; ++i)
++  new a.x;
+diff --git a/js/src/vm/Interpreter.cpp b/js/src/vm/Interpreter.cpp
+index bbe5b8210fff..65e11dd921aa 100644
+--- a/js/src/vm/Interpreter.cpp
++++ b/js/src/vm/Interpreter.cpp
+@@ -5034,6 +5034,13 @@ JSObject* js::NewPlainObjectBaselineFallback(JSContext* cx, HandleShape shape,
+                                              gc::AllocKind allocKind,
+                                              gc::AllocSite* site) {
+   MOZ_ASSERT(shape->getObjectClass() == &PlainObject::class_);
++
++  mozilla::Maybe<AutoRealm> ar;
++  if (cx->realm() != shape->realm()) {
++    MOZ_ASSERT(cx->compartment() == shape->compartment());
++    ar.emplace(cx, shape);
++  }
++
+   gc::InitialHeap initialHeap = site->initialHeap();
+   return NativeObject::create(cx, allocKind, initialHeap, shape, site);
+ }
+@@ -5042,6 +5049,13 @@ JSObject* js::NewPlainObjectOptimizedFallback(JSContext* cx, HandleShape shape,
+                                               gc::AllocKind allocKind,
+                                               gc::InitialHeap initialHeap) {
+   MOZ_ASSERT(shape->getObjectClass() == &PlainObject::class_);
++
++  mozilla::Maybe<AutoRealm> ar;
++  if (cx->realm() != shape->realm()) {
++    MOZ_ASSERT(cx->compartment() == shape->compartment());
++    ar.emplace(cx, shape);
++  }
++
+   gc::AllocSite* site = cx->zone()->optimizedAllocSite();
+   return NativeObject::create(cx, allocKind, initialHeap, shape, site);
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:324596281",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "--allow-natives-syntax --experimental-wasm-imported-strings",
+  "target_source_files": [
+    "src/runtime/runtime-wasm.cc",
+    "src/wasm/canonical-types.cc"
+  ],
+  "target_subdir": [
+    "src/runtime",
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "A type confusion vulnerability exists in V8's WebAssembly tier-up mechanism within Runtime_TierUpWasmToJSWrapper (src/runtime/runtime-wasm.cc). The bug was introduced by commit 08170169a305fab1dca42bc11d86d7400f25421e, which added support for the text-encoder:encodeStringToUTF8Array well-known import (WellKnownImport::kStringToUtf8Array). Unlike all other well-known imports that use abstract heap types (e.g., externref), this new import's function signature contains a module-specific indexed i8 array reference type as the return value (ref $i8array). During module instantiation, when the import is handled via the generic Wasm-to-JS wrapper (kWasmToJsWrapperAsm), the full module-specific signature including the indexed return type is serialized into WasmApiFunctionRef::sig via SerializedSignatureHelper::SerializeSignature. When the generic wrapper's call budget is exhausted and tier-up is triggered, Runtime_TierUpWasmToJSWrapper deserializes the signature and calls TypeCanonicalizer::AddRecursiveGroup(const FunctionSig*), which strictly requires module-independent signatures with no indexed types (enforced by DCHECK(!type.has_index()) at src/wasm/canonical-types.cc:131). In debug builds, this causes a fatal assertion failure crash. In release builds, the module-specific index is silently accepted as a canonical type index, corrupting the type canonicalization table and potentially enabling type confusion in the Wasm type system.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "2109613ad4622028778a38fb418956fab8b478b6 [wasm] Use correct signature index for tier-up of wasm-to-js wrapper",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5291374",
+      "cl": 5291374,
+      "commit": "2109613ad4622028778a38fb418956fab8b478b6",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/5291374 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5291374",
+      "source_cl": 5291374,
+      "source_commit": "2109613ad4622028778a38fb418956fab8b478b6",
+      "source_ref": "refs/changes/74/5291374/2",
+      "source_patchset": 2
+    }
+  ]
+}

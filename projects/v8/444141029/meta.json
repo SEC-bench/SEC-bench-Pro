@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:444141029",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/maglev/maglev-ir.h"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "command_options": "--allow-natives-syntax",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Integer truncation",
+  "error_type": "ASAN_CRASH",
+  "description": "An integer truncation vulnerability exists in the Maglev JIT compiler's node representation. The `NodeBase` class in `maglev-ir.h` stores the number of inputs for each IR node in a 16-bit bitfield (`InputCountField`). When allocating a node via `NodeBase::Allocate`, the provided `input_count` is encoded into this 16-bit field using `InputCountField::encode(input_count)`, which has no runtime overflow check in release builds (only a DCHECK). The `GeneratorStore` node, built in `VisitSuspendGenerator` in `maglev-graph-builder.cc`, requires one input per function parameter and one per live local variable in a generator function. When a generator function contains a sufficiently large number of local variables (>= 65536), the computed `input_count` overflows the 16-bit field upon encoding, resulting in a truncated value stored in the bitfield. This creates a mismatch between the actual number of `ValueNode*` inputs physically allocated (and thus the memory layout of the node) and the `input_count` returned by `NodeBase::input_count()`. During register allocation, `GeneratorStore::SetValueLocationConstraints` iterates over `num_parameters_and_registers()` inputs (derived from the truncated count), accessing locations beyond the legitimately allocated input array, causing memory corruption (use-after-poison as reported by ASan).",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "release-hardening",
+      "evidence_lineno": 0,
+      "evidence_text": "84c0b167d973cdeba2f57004fd4d500e70a8b992 [maglev] SBXCHECK input count is less than max allowed",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6939005",
+      "cl": 6939005,
+      "source_commit": "84c0b167d973cdeba2f57004fd4d500e70a8b992",
+      "commit": "84c0b167d973cdeba2f57004fd4d500e70a8b992",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6939005 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6939005",
+      "source_cl": 6939005,
+      "source_ref": "refs/changes/05/6939005/2",
+      "source_patchset": 2
+    }
+  ]
+}

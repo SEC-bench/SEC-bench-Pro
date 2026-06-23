@@ -1,0 +1,10 @@
+VERIFIED at 2026-05-28T21:12:30Z — orchestrator end-to-end on bug 1675905 / CVE-2020-26950
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash trace: ASAN SEGV with rax=0x1a1be5e5e5e5e5e5 (ASAN free-memory poison)
+                 PC in JIT-emitted code — classic type-confusion symptom of
+                 MCallGetProperty Ion cache dereferencing a slot pointer
+                 after fun_resolve relocated storage (matches description)
+  - fixed image (apply patches/0001-fix-from-git-38358a9bcbf4.patch) blocks PoC 10/10
+  - 2020-era compat stack: collections.abc shim + open mode'rU' shim +
+                            no --disable-bootstrap + flags.configure sed +
+                            Cargo.toml branch= strip

@@ -1,0 +1,38 @@
+From ec48078aaeaef623314ed1dddc3a4b3967e8eb82 Mon Sep 17 00:00:00 2001
+From: Stephen Roettger <sroettger@google.com>
+Date: Fri, 21 Feb 2025 12:04:58 +0100
+Subject: [PATCH] [sandbox] limit TryNumberToSize to
+ kMaxSafeBufferSizeForSandbox
+
+Bug: 391169061, 397187119
+Change-Id: I399e34589f726b7949045c3efba7695b8eae8e78
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6285402
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Commit-Queue: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98920}
+---
+ src/numbers/conversions-inl.h | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/numbers/conversions-inl.h b/src/numbers/conversions-inl.h
+index a5b4ebf7862..ea7f26082fd 100644
+--- a/src/numbers/conversions-inl.h
++++ b/src/numbers/conversions-inl.h
+@@ -310,7 +310,13 @@ bool TryNumberToSize(Tagged<Object> number, size_t* result) {
+     // So we might as well cast the limit first, and use < instead of <=.
+     double maxSize = static_cast<double>(std::numeric_limits<size_t>::max());
+     if (value >= 0 && value < maxSize) {
+-      *result = static_cast<size_t>(value);
++      size_t size = static_cast<size_t>(value);
++#ifdef V8_ENABLE_SANDBOX
++      if (size > kMaxSafeBufferSizeForSandbox) {
++        return false;
++      }
++#endif
++      *result = size;
+       return true;
+     } else {
+       return false;
+-- 
+2.43.0
+

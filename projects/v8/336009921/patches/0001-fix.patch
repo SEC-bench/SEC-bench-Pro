@@ -1,0 +1,183 @@
+From e25efe6cf28b8a7dfc6de89ac16fd2a77f5e281d Mon Sep 17 00:00:00 2001
+From: Jakob Kummerow <jkummerow@chromium.org>
+Date: Tue, 11 Jun 2024 19:32:24 +0200
+Subject: [PATCH] [wasm][sandbox] Verify signatures in js-to-wasm wrappers
+
+This ports the recently introduced signature verification from
+call_ref to compiled (i.e. non-generic) js-to-wasm wrappers, to
+prevent escaping from a corrupted sandbox by calling broken Wasm
+functions from JS.
+
+Bug: 336507783
+Change-Id: I2946424b39ca345ab6f6d31ad8308327cd5be1e5
+Fixed: 336009921
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5622490
+Commit-Queue: Jakob Kummerow <jkummerow@chromium.org>
+Reviewed-by: Thibaud Michaud <thibaudm@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#94382}
+---
+ src/wasm/turboshaft-graph-interface.cc | 54 ++++++++++++++------------
+ src/wasm/turboshaft-graph-interface.h  |  5 +++
+ src/wasm/wrappers.cc                   | 25 +++++-------
+ 3 files changed, 44 insertions(+), 40 deletions(-)
+
+diff --git a/src/wasm/turboshaft-graph-interface.cc b/src/wasm/turboshaft-graph-interface.cc
+index e702b92eacd..5dc3947e0b2 100644
+--- a/src/wasm/turboshaft-graph-interface.cc
++++ b/src/wasm/turboshaft-graph-interface.cc
+@@ -225,6 +225,35 @@ WasmGraphBuilderBase::BuildImportedFunctionTargetAndRef(
+   return {target, ref};
+ }
+ 
++std::pair<V<WordPtr>, V<ExposedTrustedObject>>
++WasmGraphBuilderBase::BuildFunctionTargetAndRef(
++    V<WasmInternalFunction> internal_function, uint64_t expected_sig_hash) {
++  V<ExposedTrustedObject> ref =
++      V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
++          internal_function, LoadOp::Kind::TaggedBase().Immutable(),
++          WasmInternalFunction::kProtectedRefOffset));
++
++#if V8_ENABLE_SANDBOX
++  V<Word64> actual_sig_hash =
++      __ Load(internal_function, LoadOp::Kind::TaggedBase(),
++              MemoryRepresentation::Uint64(),
++              WasmInternalFunction::kSignatureHashOffset);
++  IF_NOT (LIKELY(__ Word64Equal(actual_sig_hash, expected_sig_hash))) {
++    auto sig = FixedSizeSignature<MachineType>::Params(MachineType::AnyTagged(),
++                                                       MachineType::Uint64());
++    CallC(&sig, ExternalReference::wasm_signature_check_fail(),
++          {internal_function, __ Word64Constant(expected_sig_hash)});
++    __ Unreachable();
++  }
++#endif
++
++  V<WordPtr> target = __ Load(internal_function, LoadOp::Kind::TaggedBase(),
++                              MemoryRepresentation::UintPtr(),
++                              WasmInternalFunction::kCallTargetOffset);
++
++  return {target, ref};
++}
++
+ RegisterRepresentation WasmGraphBuilderBase::RepresentationFor(ValueType type) {
+   switch (type.kind()) {
+     case kI8:
+@@ -7077,30 +7106,7 @@ class TurboshaftGraphBuildingInterface : public WasmGraphBuilderBase {
+             func_ref, load_kind, kWasmInternalFunctionIndirectPointerTag,
+             WasmFuncRef::kTrustedInternalOffset));
+ 
+-    V<ExposedTrustedObject> ref =
+-        V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
+-            internal_function, LoadOp::Kind::TaggedBase().Immutable(),
+-            WasmInternalFunction::kProtectedRefOffset));
+-
+-#if V8_ENABLE_SANDBOX
+-    V<Word64> actual_sig_hash =
+-        __ Load(internal_function, LoadOp::Kind::TaggedBase(),
+-                MemoryRepresentation::Uint64(),
+-                WasmInternalFunction::kSignatureHashOffset);
+-    IF_NOT (LIKELY(__ Word64Equal(actual_sig_hash, expected_sig_hash))) {
+-      auto sig = FixedSizeSignature<MachineType>::Params(
+-          MachineType::AnyTagged(), MachineType::Uint64());
+-      CallC(&sig, ExternalReference::wasm_signature_check_fail(),
+-            {internal_function, __ Word64Constant(expected_sig_hash)});
+-      __ Unreachable();
+-    }
+-#endif
+-
+-    V<WordPtr> target = __ Load(internal_function, LoadOp::Kind::TaggedBase(),
+-                                MemoryRepresentation::UintPtr(),
+-                                WasmInternalFunction::kCallTargetOffset);
+-
+-    return {target, ref};
++    return BuildFunctionTargetAndRef(internal_function, expected_sig_hash);
+   }
+ 
+   OpIndex AnnotateResultIfReference(OpIndex result, wasm::ValueType type) {
+diff --git a/src/wasm/turboshaft-graph-interface.h b/src/wasm/turboshaft-graph-interface.h
+index dbfcde56c50..536529e3db0 100644
+--- a/src/wasm/turboshaft-graph-interface.h
++++ b/src/wasm/turboshaft-graph-interface.h
+@@ -101,9 +101,14 @@ class V8_EXPORT_PRIVATE WasmGraphBuilderBase {
+   OpIndex GetBuiltinPointerTarget(Builtin builtin);
+   V<WordPtr> GetTargetForBuiltinCall(Builtin builtin, StubCallMode stub_mode);
+   V<BigInt> BuildChangeInt64ToBigInt(V<Word64> input, StubCallMode stub_mode);
++
+   std::pair<V<WordPtr>, V<HeapObject>> BuildImportedFunctionTargetAndRef(
+       ConstOrV<Word32> func_index,
+       V<WasmTrustedInstanceData> trusted_instance_data);
++
++  std::pair<V<WordPtr>, V<ExposedTrustedObject>> BuildFunctionTargetAndRef(
++      V<WasmInternalFunction> internal_function, uint64_t expected_sig_hash);
++
+   RegisterRepresentation RepresentationFor(ValueType type);
+   V<WasmTrustedInstanceData> LoadTrustedDataFromInstanceObject(
+       V<HeapObject> instance_object);
+diff --git a/src/wasm/wrappers.cc b/src/wasm/wrappers.cc
+index eb3ee9dc75e..b65caa62247 100644
+--- a/src/wasm/wrappers.cc
++++ b/src/wasm/wrappers.cc
+@@ -361,7 +361,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ 
+   OpIndex BuildCallAndReturn(V<Context> js_context, V<HeapObject> function_data,
+                              base::SmallVector<OpIndex, 16> args,
+-                             bool do_conversion, bool set_in_wasm_flag) {
++                             bool do_conversion, bool set_in_wasm_flag,
++                             uint64_t expected_sig_hash) {
+     const int rets_count = static_cast<int>(sig_->return_count());
+     base::SmallVector<OpIndex, 1> rets(rets_count);
+ 
+@@ -377,19 +378,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+           V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
+               function_data, LoadOp::Kind::TaggedBase().Immutable(),
+               WasmExportedFunctionData::kProtectedInternalOffset));
+-      V<ExposedTrustedObject> ref =
+-          V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
+-              internal, LoadOp::Kind::TaggedBase().Immutable(),
+-              WasmInternalFunction::kProtectedRefOffset));
+-
+-      // Call to an import or a wasm function defined in this module.
+-      // The (cached) call target is the jump table slot for that function.
+-      // We do not use the imports dispatch table here so that the wrapper is
+-      // target independent, in particular for tier-up.
+-      V<WordPtr> callee = __ Load(internal, LoadOp::Kind::TaggedBase(),
+-                                  MemoryRepresentation::UintPtr(),
+-                                  WasmInternalFunction::kCallTargetOffset);
+-      BuildCallWasmFromWrapper(__ phase_zone(), sig_, callee, ref, args, rets);
++      auto [target, ref] =
++          BuildFunctionTargetAndRef(internal, expected_sig_hash);
++      BuildCallWasmFromWrapper(__ phase_zone(), sig_, target, ref, args, rets);
+     }
+ 
+     V<Object> jsval;
+@@ -440,8 +431,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+ #if V8_ENABLE_SANDBOX
+     static constexpr int kOffset =
+         SharedFunctionInfo::kTrustedFunctionDataOffset;
++    uint64_t signature_hash = SignatureHasher::Hash(sig_);
+ #else
+     static constexpr int kOffset = SharedFunctionInfo::kFunctionDataOffset;
++    uint64_t signature_hash = 0;
+ #endif
+     V<WasmFunctionData> function_data =
+         V<WasmFunctionData>::Cast(__ LoadTrustedPointerField(
+@@ -492,7 +485,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+         args[i + 1] = wasm_param;
+       }
+       jsval = BuildCallAndReturn(js_context, function_data, args, do_conversion,
+-                                 set_in_wasm_flag);
++                                 set_in_wasm_flag, signature_hash);
+       GOTO(done, jsval);
+       __ Bind(slow_path);
+     }
+@@ -518,7 +511,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
+     }
+ 
+     jsval = BuildCallAndReturn(js_context, function_data, args, do_conversion,
+-                               set_in_wasm_flag);
++                               set_in_wasm_flag, signature_hash);
+     // If both the default and a fast transformation paths are present,
+     // get the return value based on the path used.
+     if (include_fast_path) {
+-- 
+2.43.0
+

@@ -1,0 +1,35 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1886849",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/RangeAnalysis.cpp",
+        "js/src/jit/MIROps.yaml"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--no-threads --spectre-mitigations=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Incorrect JIT optimization",
+    "error_type": "ASAN_CRASH",
+    "description": "Ion RangeAnalysis MObjectKeysLength::computeRange — Upper Bound Fixed at NativeObject::MAX_SLOTS_COUNT Ignores TypedArray Indexed-Property Keys (CVE-2024-29943, Pwn2Own 2024). CVE-2024-29943 (Pwn2Own 2024). MObjectKeysLength::computeRange in js/src/jit/RangeAnalysis.cpp:1824 incorrectly computes the range of Object.keys(x).length as [0, NativeObject::MAX_SLOTS_COUNT]. This range is too narrow: when x is a large TypedArray with named properties (e.g., Uint8Array(2**28-4) with .a through .f set), the actual keys count can exceed MAX_SLOTS_COUNT. The JIT's IonMonkey range analysis trusts this overly narrow range and uses it to eliminate bounds checks and optimize loop iteration. An attacker can train the JIT with a small object (few keys), then call the JIT-compiled code with a large TypedArray that has many more keys than the range claims. The incorrect range leads to out-of-bounds memory access. The fix (changeset 45d29e78c0d8) removes MObjectKeysLength::computeRange entirely and deletes the `compute_range: custom` declaration from MIROps.yaml, falling back to the default unconstrained range. Exploited at Pwn2Own 2024 by Manfred Paul for Firefox RCE.",
+    "fix_commits": [
+        "81806e7ccec7dde41e37c9891592a6e39ce46380"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-remove-mobjectkeyslength-computerange.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1886849: Remove MObjectKeysLength::computeRange r=jandem",
+            "source_commit": "81806e7ccec7dde41e37c9891592a6e39ce46380",
+            "commit": "81806e7ccec7dde41e37c9891592a6e39ce46380",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/81806e7ccec7dde41e37c9891592a6e39ce46380",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/81806e7ccec7dde41e37c9891592a6e39ce46380",
+            "phabricator": "D205375"
+        }
+    ],
+    "vrp": null
+}

@@ -1,0 +1,40 @@
+From 11a4da715e43daf8839a8220d1097fc489075f6f Mon Sep 17 00:00:00 2001
+From: Doug Thayer <dothayer@mozilla.com>
+Date: Thu, 8 Dec 2022 22:07:54 +0000
+Subject: [PATCH] Bug 1804626 - Backed out changeset 77591550134c r=iain
+
+It looks like shapes are not being traced through MIR ops, instead relying on
+the fact that shapes must always be tenured, and thus can only go away during
+a compacting GC which will throw away Ion code anyway. Accordingly our
+assumptions for why this optimization was okay were skewed.
+
+Differential Revision: https://phabricator.services.mozilla.com/D164261
+---
+ js/src/jit/CodeGenerator.cpp | 14 +++-----------
+ 1 file changed, 3 insertions(+), 11 deletions(-)
+
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index e60f7e33f27bc..2d2918775caec 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -13675,17 +13675,9 @@ void CodeGenerator::visitAddAndStoreSlot(LAddAndStoreSlot* ins) {
+   const Register maybeTemp = ToTempRegisterOrInvalid(ins->temp0());
+ 
+   Shape* shape = ins->mir()->shape();
+-  // NOTE: we specifically elide an EmitPreBarrier for this shape change
+-  // because we know it's redundant. If we are here, we must have been
+-  // preceded by a MGuardShape which holds a reference to the old shape. The
+-  // one exception to this would be if we determined we could elide the
+-  // MGuardShape via the EliminateRedundantShapeGuards pass. However, in that
+-  // case we only elided it because we saw an MAddAndStoreSlot or similar
+-  // instruction which must hold a reference to the old shape. Thus, the
+-  // reference inside this object to the shape cannot be the last remaining
+-  // reference, and we do not need to have a pre barrier to remove it.
+-  masm.storeObjShape(shape, obj,
+-                     [](MacroAssembler& masm, const Address& addr) {});
++  masm.storeObjShape(shape, obj, [](MacroAssembler& masm, const Address& addr) {
++    EmitPreBarrier(masm, addr, MIRType::Shape);
++  });
+ 
+   // Perform the store. No pre-barrier required since this is a new
+   // initialization.

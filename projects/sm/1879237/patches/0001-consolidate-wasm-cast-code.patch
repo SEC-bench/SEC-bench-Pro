@@ -1,0 +1,824 @@
+From 9a3cef41437423bf9e833e1e127349080e27945c Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Tue, 27 Feb 2024 15:54:19 +0000
+Subject: [PATCH] Bug 1879237: Consolidate wasm cast code. r=rhunt
+
+The code for tracking register allocation in wasm casts was getting very
+unwieldy. This patch replaces several switches with a single function
+that checks which registers are necessary, and simplifies the allocation
+logic in both baseline and ion to use this result.
+
+Differential Revision: https://phabricator.services.mozilla.com/D201734
+---
+ js/src/jit/CodeGenerator.cpp        |  50 ++------
+ js/src/jit/LIR.h                    |   6 +
+ js/src/jit/Lowering.cpp             | 155 ++++--------------------
+ js/src/jit/Lowering.h               |   3 +
+ js/src/jit/MacroAssembler.cpp       | 104 +++++++++-------
+ js/src/jit/MacroAssembler.h         |  33 ++++--
+ js/src/wasm/WasmBCClass.h           |  19 +--
+ js/src/wasm/WasmBaselineCompile.cpp | 177 +++++++++++-----------------
+ 8 files changed, 216 insertions(+), 331 deletions(-)
+
+diff --git a/js/src/jit/CodeGenerator.cpp b/js/src/jit/CodeGenerator.cpp
+index 4a87e9f1efaf8..ddafe94d7f1c8 100644
+--- a/js/src/jit/CodeGenerator.cpp
++++ b/js/src/jit/CodeGenerator.cpp
+@@ -18886,35 +18886,6 @@ void CodeGenerator::visitWasmTrapIfNull(LWasmTrapIfNull* lir) {
+   masm.bind(&nonNull);
+ }
+ 
+-static void BranchWasmRefIsSubtype(MacroAssembler& masm, Register ref,
+-                                   const wasm::RefType& sourceType,
+-                                   const wasm::RefType& destType, Label* label,
+-                                   Register superSTV, Register scratch1,
+-                                   Register scratch2) {
+-  switch (destType.hierarchy()) {
+-    case wasm::RefTypeHierarchy::Any: {
+-      masm.branchWasmRefIsSubtypeAny(ref, sourceType, destType, label,
+-                                     /*onSuccess=*/true, superSTV, scratch1,
+-                                     scratch2);
+-    } break;
+-    case wasm::RefTypeHierarchy::Func: {
+-      masm.branchWasmRefIsSubtypeFunc(ref, sourceType, destType, label,
+-                                      /*onSuccess=*/true, superSTV, scratch1,
+-                                      scratch2);
+-    } break;
+-    case wasm::RefTypeHierarchy::Extern: {
+-      masm.branchWasmRefIsSubtypeExtern(ref, sourceType, destType, label,
+-                                        /*onSuccess=*/true);
+-    } break;
+-    case wasm::RefTypeHierarchy::Exn: {
+-      masm.branchWasmRefIsSubtypeExn(ref, sourceType, destType, label,
+-                                     /*onSuccess=*/true);
+-    } break;
+-    default:
+-      MOZ_CRASH("could not generate casting code for unknown type hierarchy");
+-  }
+-}
+-
+ void CodeGenerator::visitWasmRefIsSubtypeOfAbstract(
+     LWasmRefIsSubtypeOfAbstract* ins) {
+   MOZ_ASSERT(gen->compilingWasm());
+@@ -18930,8 +18901,9 @@ void CodeGenerator::visitWasmRefIsSubtypeOfAbstract(
+   Label onSuccess;
+   Label onFail;
+   Label join;
+-  BranchWasmRefIsSubtype(masm, ref, mir->sourceType(), mir->destType(),
+-                         &onSuccess, superSTV, scratch1, scratch2);
++  masm.branchWasmRefIsSubtype(ref, mir->sourceType(), mir->destType(),
++                              &onSuccess, /*onSuccess=*/true, superSTV,
++                              scratch1, scratch2);
+   masm.bind(&onFail);
+   masm.xor32(result, result);
+   masm.jump(&join);
+@@ -18954,8 +18926,9 @@ void CodeGenerator::visitWasmRefIsSubtypeOfConcrete(
+   Register result = ToRegister(ins->output());
+   Label onSuccess;
+   Label join;
+-  BranchWasmRefIsSubtype(masm, ref, mir->sourceType(), mir->destType(),
+-                         &onSuccess, superSTV, scratch1, scratch2);
++  masm.branchWasmRefIsSubtype(ref, mir->sourceType(), mir->destType(),
++                              &onSuccess, /*onSuccess=*/true, superSTV,
++                              scratch1, scratch2);
+   masm.move32(Imm32(0), result);
+   masm.jump(&join);
+   masm.bind(&onSuccess);
+@@ -18970,9 +18943,9 @@ void CodeGenerator::visitWasmRefIsSubtypeOfAbstractAndBranch(
+   Register scratch1 = ToTempRegisterOrInvalid(ins->temp0());
+   Label* onSuccess = getJumpLabelForBranch(ins->ifTrue());
+   Label* onFail = getJumpLabelForBranch(ins->ifFalse());
+-  BranchWasmRefIsSubtype(masm, ref, ins->sourceType(), ins->destType(),
+-                         onSuccess, Register::Invalid(), scratch1,
+-                         Register::Invalid());
++  masm.branchWasmRefIsSubtype(
++      ref, ins->sourceType(), ins->destType(), onSuccess, /*onSuccess=*/true,
++      Register::Invalid(), scratch1, Register::Invalid());
+   masm.jump(onFail);
+ }
+ 
+@@ -18985,8 +18958,9 @@ void CodeGenerator::visitWasmRefIsSubtypeOfConcreteAndBranch(
+   Register scratch2 = ToTempRegisterOrInvalid(ins->temp1());
+   Label* onSuccess = getJumpLabelForBranch(ins->ifTrue());
+   Label* onFail = getJumpLabelForBranch(ins->ifFalse());
+-  BranchWasmRefIsSubtype(masm, ref, ins->sourceType(), ins->destType(),
+-                         onSuccess, superSTV, scratch1, scratch2);
++  masm.branchWasmRefIsSubtype(ref, ins->sourceType(), ins->destType(),
++                              onSuccess, /*onSuccess=*/true, superSTV, scratch1,
++                              scratch2);
+   masm.jump(onFail);
+ }
+ 
+diff --git a/js/src/jit/LIR.h b/js/src/jit/LIR.h
+index 553e1d82b0275..30a35b0deadbf 100644
+--- a/js/src/jit/LIR.h
++++ b/js/src/jit/LIR.h
+@@ -1833,6 +1833,12 @@ class LSafepoint : public TempObject {
+   }
+ };
+ 
++struct WasmRefIsSubtypeDefs {
++  LAllocation superSTV;
++  LDefinition scratch1;
++  LDefinition scratch2;
++};
++
+ class LInstruction::InputIterator {
+  private:
+   LInstruction& ins_;
+diff --git a/js/src/jit/Lowering.cpp b/js/src/jit/Lowering.cpp
+index 9ff81528b126a..b0007a114db23 100644
+--- a/js/src/jit/Lowering.cpp
++++ b/js/src/jit/Lowering.cpp
+@@ -1071,30 +1071,13 @@ void LIRGenerator::visitTest(MTest* test) {
+   if (opd->isWasmRefIsSubtypeOfAbstract() && opd->isEmittedAtUses()) {
+     MWasmRefIsSubtypeOfAbstract* isSubTypeOf =
+         opd->toWasmRefIsSubtypeOfAbstract();
+-    LAllocation ref = useRegister(isSubTypeOf->ref());
+-    LDefinition scratch1 = LDefinition();
+-    switch (isSubTypeOf->destType().hierarchy()) {
+-      case wasm::RefTypeHierarchy::Any: {
+-        // As in visitWasmRefIsSubtypeOfAbstract, we know we do not need
+-        // scratch2 and superSTV because we know this is not a
+-        // concrete type.
+-        scratch1 = MacroAssembler::needScratch1ForBranchWasmRefIsSubtypeAny(
+-                       isSubTypeOf->destType())
+-                       ? temp()
+-                       : LDefinition();
+-      } break;
+-      case wasm::RefTypeHierarchy::Func:
+-      case wasm::RefTypeHierarchy::Extern:
+-      case wasm::RefTypeHierarchy::Exn:
+-        // scratch1 is not necessary for abstract casts in other hierarchies
+-        break;
+-      default:
+-        MOZ_CRASH("unknown type hierarchy when folding abstract casts");
+-    }
+ 
++    LAllocation ref = useRegister(isSubTypeOf->ref());
++    WasmRefIsSubtypeDefs regs =
++        useWasmRefIsSubtype(isSubTypeOf->destType(), /*superSTV=*/nullptr);
+     add(new (alloc()) LWasmRefIsSubtypeOfAbstractAndBranch(
+             ifTrue, ifFalse, isSubTypeOf->sourceType(), isSubTypeOf->destType(),
+-            ref, scratch1),
++            ref, regs.scratch1),
+         test);
+     return;
+   }
+@@ -1102,39 +1085,13 @@ void LIRGenerator::visitTest(MTest* test) {
+   if (opd->isWasmRefIsSubtypeOfConcrete() && opd->isEmittedAtUses()) {
+     MWasmRefIsSubtypeOfConcrete* isSubTypeOf =
+         opd->toWasmRefIsSubtypeOfConcrete();
+-    LAllocation ref = useRegister(isSubTypeOf->ref());
+-    LAllocation superSTV = useRegister(isSubTypeOf->superSTV());
+-    LDefinition scratch1 = LDefinition();
+-    LDefinition scratch2 = LDefinition();
+-    switch (isSubTypeOf->destType().hierarchy()) {
+-      case wasm::RefTypeHierarchy::Any: {
+-        // As in visitWasmRefIsSubtypeOfConcrete, we know we need scratch1
+-        // because we know this is a concrete type.
+-        scratch1 = temp();
+-        scratch2 = MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeAny(
+-                       isSubTypeOf->destType())
+-                       ? temp()
+-                       : LDefinition();
+-      } break;
+-      case wasm::RefTypeHierarchy::Func: {
+-        // As in visitWasmRefIsSubtypeOfConcrete again...
+-        scratch1 = temp();
+-        scratch2 = MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeFunc(
+-                       isSubTypeOf->destType())
+-                       ? temp()
+-                       : LDefinition();
+-      } break;
+-      case wasm::RefTypeHierarchy::Extern:
+-      case wasm::RefTypeHierarchy::Exn:
+-        MOZ_CRASH(
+-            "concrete casts are not possible in the extern or exn hierarchies");
+-      default:
+-        MOZ_CRASH("unknown type hierarchy when folding abstract casts");
+-    }
+ 
++    LAllocation ref = useRegister(isSubTypeOf->ref());
++    WasmRefIsSubtypeDefs regs =
++        useWasmRefIsSubtype(isSubTypeOf->destType(), isSubTypeOf->superSTV());
+     add(new (alloc()) LWasmRefIsSubtypeOfConcreteAndBranch(
+             ifTrue, ifFalse, isSubTypeOf->sourceType(), isSubTypeOf->destType(),
+-            ref, superSTV, scratch1, scratch2),
++            ref, regs.superSTV, regs.scratch1, regs.scratch2),
+         test);
+     return;
+   }
+@@ -7685,6 +7642,17 @@ void LIRGenerator::visitWasmStoreElementRefKA(MWasmStoreElementRefKA* ins) {
+   add(new (alloc()) LKeepAliveObject(useKeepalive(ins->ka())), ins);
+ }
+ 
++WasmRefIsSubtypeDefs LIRGenerator::useWasmRefIsSubtype(wasm::RefType destType,
++                                                       MDefinition* superSTV) {
++  BranchWasmRefIsSubtypeRegisters needs =
++      MacroAssembler::regsForBranchWasmRefIsSubtype(destType);
++  return WasmRefIsSubtypeDefs{
++      .superSTV = needs.needSuperSTV ? useRegister(superSTV) : LAllocation(),
++      .scratch1 = needs.needScratch1 ? temp() : LDefinition(),
++      .scratch2 = needs.needScratch2 ? temp() : LDefinition(),
++  };
++}
++
+ void LIRGenerator::visitWasmRefIsSubtypeOfAbstract(
+     MWasmRefIsSubtypeOfAbstract* ins) {
+   if (CanEmitAtUseForSingleTest(ins)) {
+@@ -7693,41 +7661,9 @@ void LIRGenerator::visitWasmRefIsSubtypeOfAbstract(
+   }
+ 
+   LAllocation ref = useRegister(ins->ref());
+-  LDefinition scratch1 = LDefinition();
+-  switch (ins->destType().hierarchy()) {
+-    case wasm::RefTypeHierarchy::Any: {
+-      // See comment on MacroAssembler::branchWasmRefIsSubtypeAny.
+-      // We know we do not need scratch2 and superSTV because we know
+-      // this is not a concrete type.
+-      MOZ_ASSERT(!MacroAssembler::needSuperSTVForBranchWasmRefIsSubtypeAny(
+-          ins->destType()));
+-      MOZ_ASSERT(!MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeAny(
+-          ins->destType()));
+-
+-      scratch1 = MacroAssembler::needScratch1ForBranchWasmRefIsSubtypeAny(
+-                     ins->destType())
+-                     ? temp()
+-                     : LDefinition();
+-    } break;
+-    case wasm::RefTypeHierarchy::Func: {
+-      // See comment on MacroAssembler::branchWasmRefIsSubtypeFunc.
+-      // We know we do not need any supertype vectors or scratch registers
+-      // because this is not a concrete cast.
+-      MOZ_ASSERT(
+-          !MacroAssembler::needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(
+-              ins->destType()));
+-      MOZ_ASSERT(!MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeFunc(
+-          ins->destType()));
+-    } break;
+-    case wasm::RefTypeHierarchy::Extern:
+-    case wasm::RefTypeHierarchy::Exn: {
+-      // no scratch registers needed for casts in the extern or exn hierarchies
+-    } break;
+-    default:
+-      MOZ_CRASH("unknown type hierarchy for abstract cast");
+-  }
+-
+-  define(new (alloc()) LWasmRefIsSubtypeOfAbstract(ref, scratch1), ins);
++  WasmRefIsSubtypeDefs regs =
++      useWasmRefIsSubtype(ins->destType(), /*superSTV=*/nullptr);
++  define(new (alloc()) LWasmRefIsSubtypeOfAbstract(ref, regs.scratch1), ins);
+ }
+ 
+ void LIRGenerator::visitWasmRefIsSubtypeOfConcrete(
+@@ -7737,50 +7673,11 @@ void LIRGenerator::visitWasmRefIsSubtypeOfConcrete(
+     return;
+   }
+ 
+-  // This gets a bit wild because it needs to handle concrete casts in all
+-  // hierarchies. Supertype vectors are always required (that's what concrete
+-  // means) but the scratch registers can vary.
+-
+   LAllocation ref = useRegister(ins->ref());
+-  LAllocation superSTV = useRegister(ins->superSTV());
+-  LDefinition scratch1 = LDefinition();
+-  LDefinition scratch2 = LDefinition();
+-  switch (ins->destType().hierarchy()) {
+-    case wasm::RefTypeHierarchy::Any: {
+-      // See comment on MacroAssembler::branchWasmRefIsSubtypeAny.
+-      // We know we need scratch1 because we know this is a concrete type.
+-      MOZ_ASSERT(MacroAssembler::needSuperSTVForBranchWasmRefIsSubtypeAny(
+-          ins->destType()));
+-      MOZ_ASSERT(MacroAssembler::needScratch1ForBranchWasmRefIsSubtypeAny(
+-          ins->destType()));
+-      scratch1 = temp();
+-      scratch2 = MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeAny(
+-                     ins->destType())
+-                     ? temp()
+-                     : LDefinition();
+-    } break;
+-    case wasm::RefTypeHierarchy::Func: {
+-      // See comment on MacroAssembler::branchWasmRefIsSubtypeFunc.
+-      // We know we need scratch1 because we know this is a concrete type.
+-      MOZ_ASSERT(
+-          MacroAssembler::needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(
+-              ins->destType()));
+-      scratch1 = temp();
+-      scratch2 = MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeFunc(
+-                     ins->destType())
+-                     ? temp()
+-                     : LDefinition();
+-    } break;
+-    case wasm::RefTypeHierarchy::Extern:
+-    case wasm::RefTypeHierarchy::Exn:
+-      MOZ_CRASH(
+-          "concrete casts are impossible in the extern and exn hierarchies");
+-    default:
+-      MOZ_CRASH("unknown type hierarchy for concrete cast");
+-  }
+-
+-  define(new (alloc())
+-             LWasmRefIsSubtypeOfConcrete(ref, superSTV, scratch1, scratch2),
++  WasmRefIsSubtypeDefs regs =
++      useWasmRefIsSubtype(ins->destType(), ins->superSTV());
++  define(new (alloc()) LWasmRefIsSubtypeOfConcrete(
++             ref, regs.superSTV, regs.scratch1, regs.scratch2),
+          ins);
+ }
+ 
+diff --git a/js/src/jit/Lowering.h b/js/src/jit/Lowering.h
+index 4031424c377f2..d47f6e634520d 100644
+--- a/js/src/jit/Lowering.h
++++ b/js/src/jit/Lowering.h
+@@ -83,6 +83,9 @@ class LIRGenerator final : public LIRGeneratorSpecific {
+ 
+   template <class MWasmCallT>
+   void visitWasmCall(MWasmCallT ins);
++
++  WasmRefIsSubtypeDefs useWasmRefIsSubtype(wasm::RefType destType,
++                                           MDefinition* superSTV);
+ };
+ 
+ }  // namespace jit
+diff --git a/js/src/jit/MacroAssembler.cpp b/js/src/jit/MacroAssembler.cpp
+index bd0d9b97bd11e..d23c17e827a78 100644
+--- a/js/src/jit/MacroAssembler.cpp
++++ b/js/src/jit/MacroAssembler.cpp
+@@ -6285,26 +6285,60 @@ void MacroAssembler::wasmBoundsCheckRange32(
+   bind(&ok);
+ }
+ 
+-bool MacroAssembler::needScratch1ForBranchWasmRefIsSubtypeAny(
++BranchWasmRefIsSubtypeRegisters MacroAssembler::regsForBranchWasmRefIsSubtype(
+     wasm::RefType type) {
+   MOZ_ASSERT(type.isValid());
+-  MOZ_ASSERT(type.isAnyHierarchy());
+-  return !type.isNone() && !type.isAny();
+-}
+-
+-bool MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeAny(
+-    wasm::RefType type) {
+-  MOZ_ASSERT(type.isValid());
+-  MOZ_ASSERT(type.isAnyHierarchy());
+-  return type.isTypeRef() &&
+-         type.typeDef()->subTypingDepth() >= wasm::MinSuperTypeVectorLength;
++  switch (type.hierarchy()) {
++    case wasm::RefTypeHierarchy::Any:
++      return BranchWasmRefIsSubtypeRegisters{
++          .needSuperSTV = type.isTypeRef(),
++          .needScratch1 = !type.isNone() && !type.isAny(),
++          .needScratch2 =
++              type.isTypeRef() && type.typeDef()->subTypingDepth() >=
++                                      wasm::MinSuperTypeVectorLength,
++      };
++    case wasm::RefTypeHierarchy::Func:
++      return BranchWasmRefIsSubtypeRegisters{
++          .needSuperSTV = type.isTypeRef(),
++          .needScratch1 = type.isTypeRef(),
++          .needScratch2 =
++              type.isTypeRef() && type.typeDef()->subTypingDepth() >=
++                                      wasm::MinSuperTypeVectorLength,
++      };
++    case wasm::RefTypeHierarchy::Extern:
++    case wasm::RefTypeHierarchy::Exn:
++      return BranchWasmRefIsSubtypeRegisters{
++          .needSuperSTV = false,
++          .needScratch1 = false,
++          .needScratch2 = false,
++      };
++    default:
++      MOZ_CRASH("unknown type hierarchy for cast");
++  }
+ }
+ 
+-bool MacroAssembler::needSuperSTVForBranchWasmRefIsSubtypeAny(
+-    wasm::RefType type) {
+-  MOZ_ASSERT(type.isValid());
+-  MOZ_ASSERT(type.isAnyHierarchy());
+-  return type.isTypeRef();
++void MacroAssembler::branchWasmRefIsSubtype(
++    Register ref, wasm::RefType sourceType, wasm::RefType destType,
++    Label* label, bool onSuccess, Register superSTV, Register scratch1,
++    Register scratch2) {
++  switch (destType.hierarchy()) {
++    case wasm::RefTypeHierarchy::Any: {
++      branchWasmRefIsSubtypeAny(ref, sourceType, destType, label, onSuccess,
++                                superSTV, scratch1, scratch2);
++    } break;
++    case wasm::RefTypeHierarchy::Func: {
++      branchWasmRefIsSubtypeFunc(ref, sourceType, destType, label, onSuccess,
++                                 superSTV, scratch1, scratch2);
++    } break;
++    case wasm::RefTypeHierarchy::Extern: {
++      branchWasmRefIsSubtypeExtern(ref, sourceType, destType, label, onSuccess);
++    } break;
++    case wasm::RefTypeHierarchy::Exn: {
++      branchWasmRefIsSubtypeExn(ref, sourceType, destType, label, onSuccess);
++    } break;
++    default:
++      MOZ_CRASH("unknown type hierarchy for wasm cast");
++  }
+ }
+ 
+ void MacroAssembler::branchWasmRefIsSubtypeAny(
+@@ -6315,12 +6349,12 @@ void MacroAssembler::branchWasmRefIsSubtypeAny(
+   MOZ_ASSERT(destType.isValid());
+   MOZ_ASSERT(sourceType.isAnyHierarchy());
+   MOZ_ASSERT(destType.isAnyHierarchy());
+-  MOZ_ASSERT_IF(needScratch1ForBranchWasmRefIsSubtypeAny(destType),
+-                scratch1 != Register::Invalid());
+-  MOZ_ASSERT_IF(needScratch2ForBranchWasmRefIsSubtypeAny(destType),
+-                scratch2 != Register::Invalid());
+-  MOZ_ASSERT_IF(needSuperSTVForBranchWasmRefIsSubtypeAny(destType),
+-                superSTV != Register::Invalid());
++
++  mozilla::DebugOnly<BranchWasmRefIsSubtypeRegisters> needs =
++      regsForBranchWasmRefIsSubtype(destType);
++  MOZ_ASSERT_IF(needs.value.needSuperSTV, superSTV != Register::Invalid());
++  MOZ_ASSERT_IF(needs.value.needScratch1, scratch1 != Register::Invalid());
++  MOZ_ASSERT_IF(needs.value.needScratch2, scratch2 != Register::Invalid());
+ 
+   Label fallthrough;
+   Label* successLabel = onSuccess ? label : &fallthrough;
+@@ -6409,21 +6443,6 @@ void MacroAssembler::branchWasmRefIsSubtypeAny(
+   bind(&fallthrough);
+ }
+ 
+-bool MacroAssembler::needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(
+-    wasm::RefType type) {
+-  MOZ_ASSERT(type.isValid());
+-  MOZ_ASSERT(type.isFuncHierarchy());
+-  return type.isTypeRef();
+-}
+-
+-bool MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeFunc(
+-    wasm::RefType type) {
+-  MOZ_ASSERT(type.isValid());
+-  MOZ_ASSERT(type.isFuncHierarchy());
+-  return type.isTypeRef() &&
+-         type.typeDef()->subTypingDepth() >= wasm::MinSuperTypeVectorLength;
+-}
+-
+ void MacroAssembler::branchWasmRefIsSubtypeFunc(
+     Register ref, wasm::RefType sourceType, wasm::RefType destType,
+     Label* label, bool onSuccess, Register superSTV, Register scratch1,
+@@ -6432,11 +6451,12 @@ void MacroAssembler::branchWasmRefIsSubtypeFunc(
+   MOZ_ASSERT(destType.isValid());
+   MOZ_ASSERT(sourceType.isFuncHierarchy());
+   MOZ_ASSERT(destType.isFuncHierarchy());
+-  MOZ_ASSERT_IF(
+-      needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(destType),
+-      superSTV != Register::Invalid() && scratch1 != Register::Invalid());
+-  MOZ_ASSERT_IF(needScratch2ForBranchWasmRefIsSubtypeFunc(destType),
+-                scratch2 != Register::Invalid());
++
++  mozilla::DebugOnly<BranchWasmRefIsSubtypeRegisters> needs =
++      regsForBranchWasmRefIsSubtype(destType);
++  MOZ_ASSERT_IF(needs.value.needSuperSTV, superSTV != Register::Invalid());
++  MOZ_ASSERT_IF(needs.value.needScratch1, scratch1 != Register::Invalid());
++  MOZ_ASSERT_IF(needs.value.needScratch2, scratch2 != Register::Invalid());
+ 
+   Label fallthrough;
+   Label* successLabel = onSuccess ? label : &fallthrough;
+diff --git a/js/src/jit/MacroAssembler.h b/js/src/jit/MacroAssembler.h
+index f0d41a8ba2df1..6b9896e1fdb73 100644
+--- a/js/src/jit/MacroAssembler.h
++++ b/js/src/jit/MacroAssembler.h
+@@ -314,6 +314,12 @@ struct ReturnCallAdjustmentInfo {
+ };
+ #endif  // ENABLE_WASM_TAIL_CALLS
+ 
++struct BranchWasmRefIsSubtypeRegisters {
++  bool needSuperSTV;
++  bool needScratch1;
++  bool needScratch2;
++};
++
+ // [SMDOC] Code generation invariants (incomplete)
+ //
+ // ## 64-bit GPRs carrying 32-bit values
+@@ -3969,13 +3975,30 @@ class MacroAssembler : public MacroAssemblerSpecific {
+                               Register tmp,
+                               wasm::BytecodeOffset bytecodeOffset);
+ 
++  // Returns information about which registers are necessary for a
++  // branchWasmRefIsSubtype call.
++  static BranchWasmRefIsSubtypeRegisters regsForBranchWasmRefIsSubtype(
++      wasm::RefType type);
++
++  // Perform a subtype check that `ref` is a subtype of `type`, branching to
++  // `label` depending on `onSuccess`.
++  //
++  // Will select one of the other branchWasmRefIsSubtype* functions depending on
++  // destType. See each function for the register allocation requirements, as
++  // well as which registers will be preserved.
++  void branchWasmRefIsSubtype(Register ref, wasm::RefType sourceType,
++                              wasm::RefType destType, Label* label,
++                              bool onSuccess, Register superSTV,
++                              Register scratch1, Register scratch2);
++
+   // Perform a subtype check that `ref` is a subtype of `type`, branching to
+   // `label` depending on `onSuccess`. `type` must be in the `any` hierarchy.
+   //
+   // `superSTV` is required iff the destination type is a concrete
+   // type. `scratch1` is required iff the destination type is eq or lower and
+   // not none. `scratch2` is required iff the destination type is a concrete
+-  // type and its `subTypingDepth` is >= wasm::MinSuperTypeVectorLength.
++  // type and its `subTypingDepth` is >= wasm::MinSuperTypeVectorLength. See
++  // regsForBranchWasmRefIsSubtype.
+   //
+   // `ref` and `superSTV` are preserved. Scratch registers are
+   // clobbered.
+@@ -3983,9 +4006,6 @@ class MacroAssembler : public MacroAssemblerSpecific {
+                                  wasm::RefType destType, Label* label,
+                                  bool onSuccess, Register superSTV,
+                                  Register scratch1, Register scratch2);
+-  static bool needScratch1ForBranchWasmRefIsSubtypeAny(wasm::RefType type);
+-  static bool needScratch2ForBranchWasmRefIsSubtypeAny(wasm::RefType type);
+-  static bool needSuperSTVForBranchWasmRefIsSubtypeAny(wasm::RefType type);
+ 
+   // Perform a subtype check that `ref` is a subtype of `type`, branching to
+   // `label` depending on `onSuccess`. `type` must be in the `func` hierarchy.
+@@ -3993,7 +4013,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
+   // `superSTV` and `scratch1` are required iff the destination type
+   // is a concrete type (not func and not nofunc). `scratch2` is required iff
+   // the destination type is a concrete type and its `subTypingDepth` is >=
+-  // wasm::MinSuperTypeVectorLength.
++  // wasm::MinSuperTypeVectorLength. See regsForBranchWasmRefIsSubtype.
+   //
+   // `ref` and `superSTV` are preserved. Scratch registers are
+   // clobbered.
+@@ -4001,9 +4021,6 @@ class MacroAssembler : public MacroAssemblerSpecific {
+                                   wasm::RefType destType, Label* label,
+                                   bool onSuccess, Register superSTV,
+                                   Register scratch1, Register scratch2);
+-  static bool needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(
+-      wasm::RefType type);
+-  static bool needScratch2ForBranchWasmRefIsSubtypeFunc(wasm::RefType type);
+ 
+   // Perform a subtype check that `ref` is a subtype of `destType`, branching to
+   // `label` depending on `onSuccess`. `type` must be in the `extern` hierarchy.
+diff --git a/js/src/wasm/WasmBCClass.h b/js/src/wasm/WasmBCClass.h
+index ee9cb4ce30fb2..c216d0ffd5067 100644
+--- a/js/src/wasm/WasmBCClass.h
++++ b/js/src/wasm/WasmBCClass.h
+@@ -174,6 +174,12 @@ enum class PostBarrierKind {
+   Imprecise,
+ };
+ 
++struct BranchIfRefSubtypeRegisters {
++  RegPtr superSTV;
++  RegI32 scratch1;
++  RegI32 scratch2;
++};
++
+ //////////////////////////////////////////////////////////////////////////////
+ //
+ // Wasm baseline compiler proper.
+@@ -1747,15 +1753,10 @@ struct BaseCompiler final {
+   template <typename T, typename NullCheckPolicy>
+   void emitGcSetScalar(const T& dst, StorageType type, AnyReg value);
+ 
+-  // Common code for both old and new ref.test instructions.
+-  void emitRefTestCommon(RefType sourceType, RefType destType);
+-  // Common code for both old and new ref.cast instructions.
+-  void emitRefCastCommon(RefType sourceType, RefType destType);
+-
+-  // Allocate registers and branch if the given wasm ref is a subtype of the
+-  // given heap type.
+-  void branchIfRefSubtype(RegRef ref, RefType sourceType, RefType destType,
+-                          Label* label, bool onSuccess);
++  BranchIfRefSubtypeRegisters allocRegistersForBranchIfRefSubtype(
++      RefType destType);
++  void freeRegistersForBranchIfRefSubtype(
++      const BranchIfRefSubtypeRegisters& regs);
+ 
+   // Write `value` to wasm struct `object`, at `areaBase + areaOffset`.  The
+   // caller must decide on the in- vs out-of-lineness before the call and set
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index 89b46c0588f1f..196e49f76e001 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -3226,6 +3226,13 @@ bool BaseCompiler::jumpConditionalWithResults(BranchState* b, RegRef object,
+                                               RefType sourceType,
+                                               RefType destType,
+                                               bool onSuccess) {
++  // Temporarily take the result registers so that branchIfRefSubtype
++  // doesn't use them.
++  needIntegerResultRegisters(b->resultType);
++  BranchIfRefSubtypeRegisters regs =
++      allocRegistersForBranchIfRefSubtype(destType);
++  freeIntegerResultRegisters(b->resultType);
++
+   if (b->hasBlockResults()) {
+     StackHeight resultsBase(0);
+     if (!topBranchParams(b->resultType, &resultsBase)) {
+@@ -3233,13 +3240,12 @@ bool BaseCompiler::jumpConditionalWithResults(BranchState* b, RegRef object,
+     }
+     if (b->stackHeight != resultsBase) {
+       Label notTaken;
+-      // Temporarily take the result registers so that branchIfRefSubtype
+-      // doesn't use them.
+-      needIntegerResultRegisters(b->resultType);
+-      branchIfRefSubtype(
++
++      masm.branchWasmRefIsSubtype(
+           object, sourceType, destType, &notTaken,
+-          /*onSuccess=*/b->invertBranch ? onSuccess : !onSuccess);
+-      freeIntegerResultRegisters(b->resultType);
++          /*onSuccess=*/b->invertBranch ? onSuccess : !onSuccess, regs.superSTV,
++          regs.scratch1, regs.scratch2);
++      freeRegistersForBranchIfRefSubtype(regs);
+ 
+       // Shuffle stack args.
+       shuffleStackResultsBeforeBranch(resultsBase, b->stackHeight,
+@@ -3250,8 +3256,11 @@ bool BaseCompiler::jumpConditionalWithResults(BranchState* b, RegRef object,
+     }
+   }
+ 
+-  branchIfRefSubtype(object, sourceType, destType, b->label,
+-                     /*onSuccess=*/b->invertBranch ? !onSuccess : onSuccess);
++  masm.branchWasmRefIsSubtype(
++      object, sourceType, destType, b->label,
++      /*onSuccess=*/b->invertBranch ? !onSuccess : onSuccess, regs.superSTV,
++      regs.scratch1, regs.scratch2);
++  freeRegistersForBranchIfRefSubtype(regs);
+   return true;
+ }
+ #endif
+@@ -8341,103 +8350,30 @@ bool BaseCompiler::emitI31Get(FieldWideningOp wideningOp) {
+   return true;
+ }
+ 
+-void BaseCompiler::emitRefTestCommon(RefType sourceType, RefType destType) {
+-  Label success;
+-  Label join;
+-  RegRef ref = popRef();
+-  RegI32 result = needI32();
+-
+-  branchIfRefSubtype(ref, sourceType, destType, &success,
+-                     /*onSuccess=*/true);
+-  masm.xor32(result, result);
+-  masm.jump(&join);
+-  masm.bind(&success);
+-  masm.move32(Imm32(1), result);
+-  masm.bind(&join);
+-
+-  pushI32(result);
+-  freeRef(ref);
+-}
+-
+-void BaseCompiler::emitRefCastCommon(RefType sourceType, RefType destType) {
+-  RegRef ref = popRef();
+-
+-  Label success;
+-  branchIfRefSubtype(ref, sourceType, destType, &success, /*onSuccess=*/true);
+-  masm.wasmTrap(Trap::BadCast, bytecodeOffset());
+-  masm.bind(&success);
+-  pushRef(ref);
++BranchIfRefSubtypeRegisters BaseCompiler::allocRegistersForBranchIfRefSubtype(
++    RefType destType) {
++  BranchWasmRefIsSubtypeRegisters needs =
++      MacroAssembler::regsForBranchWasmRefIsSubtype(destType);
++  return BranchIfRefSubtypeRegisters{
++      .superSTV = needs.needSuperSTV
++                      ? loadSuperTypeVector(
++                            moduleEnv_.types->indexOf(*destType.typeDef()))
++                      : RegPtr::Invalid(),
++      .scratch1 = needs.needScratch1 ? needI32() : RegI32::Invalid(),
++      .scratch2 = needs.needScratch2 ? needI32() : RegI32::Invalid(),
++  };
+ }
+ 
+-void BaseCompiler::branchIfRefSubtype(RegRef ref, RefType sourceType,
+-                                      RefType destType, Label* label,
+-                                      bool onSuccess) {
+-  switch (destType.hierarchy()) {
+-    case wasm::RefTypeHierarchy::Any: {
+-      RegPtr superSTV;
+-      if (MacroAssembler::needSuperSTVForBranchWasmRefIsSubtypeAny(destType)) {
+-        uint32_t typeIndex = moduleEnv_.types->indexOf(*destType.typeDef());
+-        superSTV = loadSuperTypeVector(typeIndex);
+-      }
+-      RegI32 scratch1 =
+-          MacroAssembler::needScratch1ForBranchWasmRefIsSubtypeAny(destType)
+-              ? needI32()
+-              : RegI32::Invalid();
+-      RegI32 scratch2 =
+-          MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeAny(destType)
+-              ? needI32()
+-              : RegI32::Invalid();
+-
+-      masm.branchWasmRefIsSubtypeAny(ref, sourceType, destType, label,
+-                                     onSuccess, superSTV, scratch1, scratch2);
+-
+-      if (scratch2.isValid()) {
+-        freeI32(scratch2);
+-      }
+-      if (scratch1.isValid()) {
+-        freeI32(scratch1);
+-      }
+-      if (superSTV.isValid()) {
+-        freePtr(superSTV);
+-      }
+-    } break;
+-    case wasm::RefTypeHierarchy::Func: {
+-      RegPtr superSTV;
+-      RegI32 scratch1;
+-      if (MacroAssembler::needSuperSTVAndScratch1ForBranchWasmRefIsSubtypeFunc(
+-              destType)) {
+-        uint32_t typeIndex = moduleEnv_.types->indexOf(*destType.typeDef());
+-        superSTV = loadSuperTypeVector(typeIndex);
+-        scratch1 = needI32();
+-      }
+-      RegI32 scratch2 =
+-          MacroAssembler::needScratch2ForBranchWasmRefIsSubtypeFunc(destType)
+-              ? needI32()
+-              : RegI32::Invalid();
+-
+-      masm.branchWasmRefIsSubtypeFunc(ref, sourceType, destType, label,
+-                                      onSuccess, superSTV, scratch1, scratch2);
+-
+-      if (scratch2.isValid()) {
+-        freeI32(scratch2);
+-      }
+-      if (scratch1.isValid()) {
+-        freeI32(scratch1);
+-      }
+-      if (superSTV.isValid()) {
+-        freePtr(superSTV);
+-      }
+-    } break;
+-    case wasm::RefTypeHierarchy::Extern: {
+-      masm.branchWasmRefIsSubtypeExtern(ref, sourceType, destType, label,
+-                                        onSuccess);
+-    } break;
+-    case wasm::RefTypeHierarchy::Exn: {
+-      masm.branchWasmRefIsSubtypeExn(ref, sourceType, destType, label,
+-                                     onSuccess);
+-    } break;
+-    default:
+-      MOZ_CRASH("unknown type hierarchy in cast");
++void BaseCompiler::freeRegistersForBranchIfRefSubtype(
++    const BranchIfRefSubtypeRegisters& regs) {
++  if (regs.superSTV.isValid()) {
++    freePtr(regs.superSTV);
++  }
++  if (regs.scratch1.isValid()) {
++    freeI32(regs.scratch1);
++  }
++  if (regs.scratch2.isValid()) {
++    freeI32(regs.scratch2);
+   }
+ }
+ 
+@@ -8453,7 +8389,26 @@ bool BaseCompiler::emitRefTest(bool nullable) {
+     return true;
+   }
+ 
+-  emitRefTestCommon(sourceType, destType);
++  Label success;
++  Label join;
++  RegRef ref = popRef();
++  RegI32 result = needI32();
++
++  BranchIfRefSubtypeRegisters regs =
++      allocRegistersForBranchIfRefSubtype(destType);
++  masm.branchWasmRefIsSubtype(ref, sourceType, destType, &success,
++                              /*onSuccess=*/true, regs.superSTV, regs.scratch1,
++                              regs.scratch2);
++  freeRegistersForBranchIfRefSubtype(regs);
++
++  masm.xor32(result, result);
++  masm.jump(&join);
++  masm.bind(&success);
++  masm.move32(Imm32(1), result);
++  masm.bind(&join);
++
++  pushI32(result);
++  freeRef(ref);
+ 
+   return true;
+ }
+@@ -8470,7 +8425,19 @@ bool BaseCompiler::emitRefCast(bool nullable) {
+     return true;
+   }
+ 
+-  emitRefCastCommon(sourceType, destType);
++  RegRef ref = popRef();
++
++  Label success;
++  BranchIfRefSubtypeRegisters regs =
++      allocRegistersForBranchIfRefSubtype(destType);
++  masm.branchWasmRefIsSubtype(ref, sourceType, destType, &success,
++                              /*onSuccess=*/true, regs.superSTV, regs.scratch1,
++                              regs.scratch2);
++  freeRegistersForBranchIfRefSubtype(regs);
++
++  masm.wasmTrap(Trap::BadCast, bytecodeOffset());
++  masm.bind(&success);
++  pushRef(ref);
+ 
+   return true;
+ }

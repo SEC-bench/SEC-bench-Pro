@@ -1,0 +1,26 @@
+
+
+#
+# Fatal error in ../../src/base/small-vector.h, line 140
+# Debug check failed: size() > index (7 vs. 7).
+#
+#
+#
+#FailureMessage Object: 0x7fff6c72e160
+==== C stack trace ===============================
+
+    out/x64.debug/d8(+0x39d7583) [0x560298be7583]
+    out/x64.debug/d8(+0x39d69bd) [0x560298be69bd]
+    out/x64.debug/d8(+0x39bb49e) [0x560298bcb49e]
+    out/x64.debug/d8(+0x39baef5) [0x560298bcaef5]
+    out/x64.debug/d8(+0x271a4f3) [0x56029792a4f3]
+    out/x64.debug/d8(+0x2718872) [0x560297928872]
+    out/x64.debug/d8(+0x27149dc) [0x5602979249dc]
+    out/x64.debug/d8(+0x1fa9e08) [0x5602971b9e08]
+    out/x64.debug/d8(+0x1f76e08) [0x560297186e08]
+    out/x64.debug/d8(+0x9a9c8c) [0x560295bb9c8c]
+    out/x64.debug/d8(+0x9a84b9) [0x560295bb84b9]
+    out/x64.debug/d8(+0x9a6ed4) [0x560295bb6ed4]
+    out/x64.debug/d8(+0x9a672d) [0x560295bb672d]
+    out/x64.debug/d8(+0x30d91bd) [0x5602982e91bd]
+Trace/breakpoint trap (core dumped)

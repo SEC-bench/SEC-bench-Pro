@@ -1,0 +1,267 @@
+# Crash [@ js::jit::GetPropIRGenerator::tryAttachProxyElement] with use-after-free
+
+Bug URL: https://bugzilla.mozilla.org/show_bug.cgi?id=1934423
+Component: JavaScript Engine: JIT
+Bounty: (unknown)
+Date: 2024-12-01T08:48:32Z
+Keywords: crash, csectype-uaf, regression, sec-high, testcase
+
+The following testcase crashes on mozilla-central revision 20241129-ed73389dc144 (debug build, run with --fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --enable-explicit-resource-management --baseline-eager):
+
+    gczeal(8,18);
+    {
+      const values = [];
+      async function* gen() {
+        await using a65 = {
+          [Symbol.asyncDispose]() {}
+        }
+        await using b61 = {}
+      }
+      async function testDisposalDuringForcedThrowInGenerator() {
+        let x91 = gen();
+        values.push((await x91.next()).value);
+        try {} catch (e6) {}
+      }
+      testDisposalDuringForcedThrowInGenerator();
+    }
+
+
+Backtrace:
+
+    received signal SIGSEGV, Segmentation fault.
+    #0  0x0000555557d957a5 in js::jit::GetPropIRGenerator::tryAttachProxyElement(JS::Handle<JSObject*>, js::jit::ObjOperandId) ()
+    #1  0x0000555557d8fe1e in js::jit::GetPropIRGenerator::tryAttachStub() ()
+    #2  0x0000555557a9cd7a in void js::jit::TryAttachStub<js::jit::GetPropIRGenerator, js::jit::CacheKind, JS::Handle<JS::Value>&, JS::Handle<JS::Value>&>(char const*, JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, js::jit::CacheKind&&, JS::Handle<JS::Value>&, JS::Handle<JS::Value>&) ()
+    #3  0x0000555557a9c2f6 in js::jit::DoGetElemFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>) ()
+    #4  0x00003b41f38365ff in ?? ()
+    [...]
+    #26 0x0000000000000000 in ?? ()
+    rax	0x0	0
+    rbx	0x7ffff463c400	140737293566976
+    rcx	0x2ab469f6e030	46954360266800
+    rdx	0xfffe4b4b4b4b4b4b	-480163195565237
+    rsi	0x7fffffffb040	140737488334912
+    rdi	0x7fffffffb0c8	140737488335048
+    rbp	0x7fffffffaff0	140737488334832
+    rsp	0x7fffffffafb0	140737488334768
+    r8	0x1	1
+    r9	0x0	0
+    r10	0x0	0
+    r11	0x7fffffffb220	140737488335392
+    r12	0x7fffffffb040	140737488334912
+    r13	0x7fffffffb040	140737488334912
+    r14	0x0	0
+    r15	0xffff800000000000	-140737488355328
+    rip	0x555557d957a5 <js::jit::GetPropIRGenerator::tryAttachProxyElement(JS::Handle<JSObject*>, js::jit::ObjOperandId)+37>
+    => 0x555557d957a5 <_ZN2js3jit18GetPropIRGenerator21tryAttachProxyElementEN2JS6HandleIP8JSObjectEENS0_12ObjOperandIdE+37>:	testb  $0x30,0x8(%rdx)
+       0x555557d957a9 <_ZN2js3jit18GetPropIRGenerator21tryAttachProxyElementEN2JS6HandleIP8JSObjectEENS0_12ObjOperandIdE+41>:	jne    0x555557d95918 <_ZN2js3jit18GetPropIRGenerator21tryAttachProxyElementEN2JS6HandleIP8JSObjectEENS0_12ObjOperandIdE+408>
+
+
+This is a use-after-free, the pointer being used here has been tenured. The test is sensitive to build type and requires precise gczeal settings.
+
+---
+
+**Comment 1 — choller@mozilla.com — 2024-12-01T08:48:36Z**
+
+Created attachment 9440894
+Detailed Crash Information
+
+---
+
+**Comment 2 — choller@mozilla.com — 2024-12-01T08:48:38Z**
+
+Created attachment 9440895
+Testcase
+
+---
+
+**Comment 3 — bugmon@mozilla.com — 2024-12-02T00:28:59Z**
+
+Verified bug as reproducible on mozilla-central 20241201095257-4df19decbcec.
+The bug appears to have been introduced in the following build range:
+> Start: 869539e91cc942b970142892fd238aa466e9d7bf (20241114154504)
+> End: ba3859a214ba0e4123c0cb6af41f675abb616b15 (20241114161313)
+> Pushlog: https://hg.mozilla.org/integration/autoland/pushloghtml?fromchange=869539e91cc942b970142892fd238aa466e9d7bf&tochange=ba3859a214ba0e4123c0cb6af41f675abb616b15
+
+---
+
+**Comment 4 — release-mgmt-account-bot@mozilla.tld — 2024-12-02T12:26:06Z**
+
+Based on comment #3, this bug contains a bisection range found by bugmon. However, the `Regressed by` field is still not filled.
+
+:debadree333, if possible, could you fill the `Regressed by` field and investigate this regression?
+
+For more information, please visit [BugBot documentation](https://wiki.mozilla.org/BugBot#bisection_without_regressed_by.py).
+
+---
+
+**Comment 5 — continuation@gmail.com — 2024-12-02T15:45:34Z**
+
+I'll mark this sec-high due to it being a UAF, although it could end up being some kind of test function problem.
+
+I looked at the regression range in comment 3 and nothing is obviously related to this test case, although bug 1917879 at least involves the JS engine.
+
+---
+
+**Comment 6 — iireland@mozilla.com — 2024-12-02T18:08:53Z**
+
+This is another explicit resource management bug. I assume the regression range is wrong because it depends on sensitive gczeal timing.
+
+---
+
+**Comment 7 — release-mgmt-account-bot@mozilla.tld — 2024-12-02T18:43:08Z**
+
+Set release status flags based on info from the regressing bug 1927195
+
+---
+
+**Comment 8 — debadree333@gmail.com — 2024-12-04T19:27:27Z**
+
+Created attachment 9441752
+Bytecode generated by the gen fn
+
+Bytecode of the gen fn
+
+---
+
+**Comment 9 — debadree333@gmail.com — 2024-12-04T19:38:29Z**
+
+Hmm this seems quite tricky still investigating just putting my findings here:
+
+disassembling the function gen() of the provided testcase we get (a lot of bytecode) (provided as an attachment above)
+
+Now we see the bt of the crash in lldb with a non-optimize debug build to be something like this:
+
+```
+Process 10145 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0xfffe4b4b4b4b4b53)
+    frame #0: 0x00000001000ac93c js`JS::shadow::Shape::isProxy(this=0xfffe4b4b4b4b4b4b) const at Shape.h:57:18
+   54     static constexpr uint32_t FIXED_SLOTS_MASK = 0x1f << FIXED_SLOTS_SHIFT;
+   55  
+   56     bool isProxy() const {
+-> 57       return Kind((immutableFlags >> KIND_SHIFT) & KIND_MASK) == Kind::Proxy;
+   58     }
+   59   };
+   60  
+(lldb) bt
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0xfffe4b4b4b4b4b53)
+  * frame #0: 0x00000001000ac93c js`JS::shadow::Shape::isProxy(this=0xfffe4b4b4b4b4b4b) const at Shape.h:57:18
+    frame #1: 0x00000001000ac8e4 js`js::IsProxy(obj=0x00001ae98056e030) at Proxy.h:399:67
+    frame #2: 0x00000001000ba05c js`bool JSObject::is<js::ProxyObject>(this=0x00001ae98056e030) const at ProxyObject.h:156:10
+    frame #3: 0x000000010162bb00 js`js::jit::GetPropIRGenerator::tryAttachProxyElement(this=0x000000016fdfa990, obj=JS::HandleObject @ 0x000000016fdfa440, objId=ObjOperandId @ 0x000000016fdfa43e) at CacheIR.cpp:3310:13
+    frame #4: 0x0000000101626ac8 js`js::jit::GetPropIRGenerator::tryAttachStub(this=0x000000016fdfa990) at CacheIR.cpp:481:5
+    frame #5: 0x00000001012af864 js`void js::jit::TryAttachStub<js::jit::GetPropIRGenerator, js::jit::CacheKind, JS::Handle<JS::Value>&, JS::Handle<JS::Value>&>(name="GetElem", cx=0x0000000107450200, frame=0x000000016fdfacc8, stub=0x00000001074cf9f8, args=0x000000016fdfabef, args=0x000000016fdfac00, args=0x000000016fdfabf8) at BaselineIC.cpp:513:17
+    frame #6: 0x00000001012af64c js`js::jit::DoGetElemFallback(cx=0x0000000107450200, frame=0x000000016fdfacc8, stub=0x00000001074cf9f8, lhs=JS::HandleValue @ 0x000000016fdfac00, rhs=JS::HandleValue @ 0x000000016fdfabf8, res=JS::MutableHandleValue @ 0x000000016fdfabf0) at BaselineIC.cpp:726:3
+    frame #7: 0x00001fed1016c5f4
+    frame #8: 0x00001fed101c22a4
+    frame #9: 0x00001fed101c42c8
+    frame #10: 0x00001fed1015d288
+    frame #11: 0x00000001018be334 js`EnterJit(cx=<unavailable>, state=<unavailable>, code=<unavailable>) at Jit.cpp:114:5
+    frame #12: 0x00000001018bdd50 js`js::jit::MaybeEnterJit(cx=0x0000000107450200, state=0x000000016fdfb718) at Jit.cpp:260:10
+    frame #13: 0x000000010013f764 js`js::RunScript(cx=0x0000000107450200, state=0x000000016fdfb718) at Interpreter.cpp:492:32
+    frame #14: 0x00000001001406dc js`js::InternalCallOrConstruct(cx=0x0000000107450200, args=0x000000016fdfba38, construct=NO_CONSTRUCT, reason=Call) at Interpreter.cpp:660:13
+    frame #15: 0x000000010014145c js`InternalCall(cx=0x0000000107450200, args=0x000000016fdfba38, reason=Call) at Interpreter.cpp:695:10
+    frame #16: 0x00000001001415f8 js`js::Call(cx=0x0000000107450200, fval=JS::HandleValue @ 0x000000016fdfb850, thisv=JS::HandleValue @ 0x000000016fdfb848, args=0x000000016fdfba38, rval=JS::MutableHandleValue @ 0x000000016fdfb840, reason=Call) at Interpreter.cpp:727:8
+    frame #17: 0x00000001006c5d70 js`js::CallSelfHostedFunction(cx=0x0000000107450200, name=Handle<js::PropertyName *> @ 0x000000016fdfb910, thisv=JS::HandleValue @ 0x000000016fdfb908, args=0x000000016fdfba38, rval=JS::MutableHandleValue @ 0x000000016fdfb900) at SelfHosting.cpp:1578:10
+    frame #18: 0x00000001002c849c js`AsyncGeneratorResume(cx=0x0000000107450200, generator=Handle<js::AsyncGeneratorObject *> @ 0x000000016fdfba30, completionKind=Normal, argument=JS::HandleValue @ 0x000000016fdfba28) at AsyncIteration.cpp:967:8
+    frame #19: 0x00000001002a77a8 js`AsyncGeneratorDrainQueue(cx=0x0000000107450200, generator=Handle<js::AsyncGeneratorObject *> @ 0x000000016fdfbc00) at AsyncIteration.cpp:596:14
+    frame #20: 0x00000001002a6aec js`js::AsyncGeneratorNext(cx=0x0000000107450200, argc=0, vp=0x000000016fdfc658) at AsyncIteration.cpp:804:10
+    frame #21: 0x0000000100140af0 js`CallJSNative(cx=0x0000000107450200, native=(js`js::AsyncGeneratorNext(JSContext*, unsigned int, JS::Value*) at AsyncIteration.cpp:765), reason=Call, args=0x000000016fdfc3d0) at Interpreter.cpp:532:13
+    frame #22: 0x00000001001404fc js`js::InternalCallOrConstruct(cx=0x0000000107450200, args=0x000000016fdfc3d0, construct=NO_CONSTRUCT, reason=Call) at Interpreter.cpp:628:12
+    frame #23: 0x000000010014145c js`InternalCall(cx=0x0000000107450200, args=0x000000016fdfc3d0, reason=Call) at Interpreter.cpp:695:10
+    frame #24: 0x00000001001412b0 js`js::CallFromStack(cx=0x0000000107450200, args=0x000000016fdfc3d0, reason=Call) at Interpreter.cpp:700:10
+    frame #25: 0x00000001012b715c js`js::jit::DoCallFallback(cx=0x0000000107450200, frame=0x000000016fdfc6b8, stub=0x00000001077c32b0, argc=0, vp=0x000000016fdfc658, res=JS::MutableHandleValue @ 0x000000016fdfc3c8) at BaselineIC.cpp:1701:10
+    frame #26: 0x00001fed1016bb84
+    frame #27: 0x00001fed1018c954
+    frame #28: 0x00001fed101be80c
+    frame #29: 0x00001fed1015d288
+    frame #30: 0x00000001018be334 js`EnterJit(cx=<unavailable>, state=<unavailable>, code=<unavailable>) at Jit.cpp:114:5
+    frame #31: 0x00000001018bdd50 js`js::jit::MaybeEnterJit(cx=0x0000000107450200, state=0x000000016fdfd068) at Jit.cpp:260:10
+    frame #32: 0x000000010013f764 js`js::RunScript(cx=0x0000000107450200, state=0x000000016fdfd068) at Interpreter.cpp:492:32
+    frame #33: 0x00000001001406dc js`js::InternalCallOrConstruct(cx=0x0000000107450200, args=0x000000016fdfd410, construct=NO_CONSTRUCT, reason=Call) at Interpreter.cpp:660:13
+    frame #34: 0x000000010014145c js`InternalCall(cx=0x0000000107450200, args=0x000000016fdfd410, reason=Call) at Interpreter.cpp:695:10
+    frame #35: 0x00000001001412b0 js`js::CallFromStack(cx=0x0000000107450200, args=0x000000016fdfd410, reason=Call) at Interpreter.cpp:700:10
+    frame #36: 0x00000001012b715c js`js::jit::DoCallFallback(cx=0x0000000107450200, frame=0x000000016fdfd6e8, stub=0x00000001079eced8, argc=0, vp=0x000000016fdfd6a0, res=JS::MutableHandleValue @ 0x000000016fdfd408) at BaselineIC.cpp:1701:10
+    frame #37: 0x00001fed1016bb84
+    frame #38: 0x00001fed1018c954
+    frame #39: 0x00001fed101bc5f4
+    frame #40: 0x00001fed1015d288
+    frame #41: 0x00000001018be334 js`EnterJit(cx=<unavailable>, state=<unavailable>, code=<unavailable>) at Jit.cpp:114:5
+    frame #42: 0x00000001018bdd50 js`js::jit::MaybeEnterJit(cx=0x0000000107450200, state=0x000000016fdfdfd0) at Jit.cpp:260:10
+    frame #43: 0x000000010013f764 js`js::RunScript(cx=0x0000000107450200, state=0x000000016fdfdfd0) at Interpreter.cpp:492:32
+    frame #44: 0x00000001001429d8 js`js::ExecuteKernel(cx=0x0000000107450200, script=JS::HandleScript @ 0x000000016fdfe050, envChainArg=JS::HandleObject @ 0x000000016fdfe048, evalInFrame=(ptr_ = 0), result=JS::MutableHandleValue @ 0x000000016fdfe038) at Interpreter.cpp:893:13
+    frame #45: 0x0000000100143014 js`js::Execute(cx=0x0000000107450200, script=JS::HandleScript @ 0x000000016fdfe0e0, envChain=JS::HandleObject @ 0x000000016fdfe0d8, rval=JS::MutableHandleValue @ 0x000000016fdfe0d0) at Interpreter.cpp:926:10
+    frame #46: 0x000000010031e148 js`ExecuteScript(cx=0x0000000107450200, envChain=JS::HandleObject @ 0x000000016fdfe140, script=JS::HandleScript @ 0x000000016fdfe138, rval=JS::MutableHandleValue @ 0x000000016fdfe130) at CompilationAndEvaluation.cpp:590:10
+    frame #47: 0x000000010031e268 js`JS_ExecuteScript(cx=0x0000000107450200, scriptArg=JS::HandleScript @ 0x000000016fdfe1f0) at CompilationAndEvaluation.cpp:614:10
+    frame #48: 0x00000001000cd5cc js`RunFile(cx=0x0000000107450200, filename="test.js", file=0x00000001e7ac80d0, compileMethod=DontInflate, compileOnly=false, fullParse=false) at js.cpp:1307:10
+    frame #49: 0x00000001000ccc44 js`Process(cx=0x0000000107450200, filename="test.js", forceTTY=false, kind=FileScript) at js.cpp:1942:14
+    frame #50: 0x0000000100059594 js`ProcessArgs(cx=0x0000000107450200, op=0x000000016fdfea58) at js.cpp:11741:10
+    frame #51: 0x0000000100015a8c js`Shell(cx=0x0000000107450200, op=0x000000016fdfea58) at js.cpp:11993:12
+    frame #52: 0x00000001000104d8 js`main(argc=7, argv=0x000000016fdfee20) at js.cpp:12408:12
+    frame #53: 0x0000000182628274 dyld`start + 2840
+```
+
+Now it seems that the issue might be in baseline compilation so inspecting `frame #6` and doing the following `print frame->script()->pcToOffset(pc)`
+
+we get the offset 920 looking at the surrounding code in the bytecode it looks something like this (also ref the bytecode attachment above):
+
+```
+00904:   9  GetProp "value"             # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method DISPOSECAPABILITY[(dec merged<0>)].value
+00909:   9  Call 0                      # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method()
+00912:   9  DupAt 2                     # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method() DISPOSECAPABILITY
+00916:   9  DupAt 2                     # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method() DISPOSECAPABILITY (dec merged<0>)
+00920:   9  GetElem                     # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method() DISPOSECAPABILITY[(dec merged<0>)]
+00921:   9  GetProp "hint"              # STACK THROWING RVAL merged<false> false true PC DISPOSECAPABILITY (dec merged<0>) DISPOSECAPABILITY[(dec merged<0>)].method() DISPOSECAPABILITY[(dec merged<0>)].hint
+```
+
+and also interestingly at the same frame trying to do `print (*lhs.ptr)->toObject().dump()` we get EXC_BAD_ACCESS which makes me think is it possible that DISPOSECAPABILITY that we see at offset 916 got eliminated by gc? seems unlikely I guess but cant find no explanation on why the object would disappear here note that the DISPOSECAPABILITY is extracted by the TakeDisposeCapability [0] op and it clears the enivironment object of the dispose capability is it possible maybe thats why it deems the object as unreachable?
+
+Anyway my investigation continues!
+
+[0] https://searchfox.org/mozilla-central/source/js/src/vm/Interpreter.cpp#2207
+
+---
+
+**Comment 10 — iireland@mozilla.com — 2024-12-04T23:51:13Z**
+
+I think that this is due to a missing prebarrier in the generated baseline code [here](https://searchfox.org/mozilla-central/rev/7fb746f0be47ce0135af7bca9fffdb5cd1c4b1d5/js/src/jit/BaselineCodeGen.cpp#4977). I expect that the same problem can also be triggered by the Ion code generated [here](https://searchfox.org/mozilla-central/rev/7fb746f0be47ce0135af7bca9fffdb5cd1c4b1d5/js/src/jit/CodeGenerator.cpp#22107).
+
+The specific sequence of events that is probably going wrong: 1. We trigger a GC. We mark the roots, which includes values that have been pushed on the stack. 2. We're done root marking, so we yield back to JS (because of the gczeal). 3. We run the jitcode for TakeDisposeCapability, which copies the array from the environment to the stack and overwrites the environment with undefined. 4. We continue our GC and eventually trace the environment. The array is no longer reachable from there. We don't trace the stack slots again, because we already did that earlier. 5. We finish our GC, and we never marked the array. It gets freed. Oops!
+
+Pre-barriers guarantee that if we overwrite a pointer to an object while there's an incremental GC going on, we immediately mark that object, in case it's being written into a place that was already marked earlier. [Here's an example](https://searchfox.org/mozilla-central/rev/7fb746f0be47ce0135af7bca9fffdb5cd1c4b1d5/js/src/jit/BaselineCodeGen.cpp#3655) of another place where baseline generates a pre-barrier. (Ion also has `emitPreBarrier` as a helper function.)
+
+I probably should have spotted this when I initially reviewed this code.
+
+---
+
+**Comment 11 — debadree333@gmail.com — 2024-12-05T10:10:56Z**
+
+Created attachment 9441869
+Bug 1934423 - Emit pre-barrier for TakeDisposeCapability opcode in baseline and ion. r?arai,iain
+
+---
+
+**Comment 12 — arai.unmht@gmail.com — 2024-12-05T18:20:55Z**
+
+*** Bug 1934369 has been marked as a duplicate of this bug. ***
+
+---
+
+**Comment 13 — pulsebot@bmo.tld — 2024-12-05T18:39:28Z**
+
+Pushed by iireland@mozilla.com:
+https://hg.mozilla.org/integration/autoland/rev/0343413edfc8
+Emit pre-barrier for TakeDisposeCapability opcode in baseline and ion. r=arai,iain
+
+---
+
+**Comment 14 — aryx.bugmail@gmx-topmail.de — 2024-12-06T09:34:31Z**
+
+https://hg.mozilla.org/mozilla-central/rev/0343413edfc8
+
+---
+
+**Comment 15 — bugmon@mozilla.com — 2024-12-06T16:22:55Z**
+
+Verified bug as fixed on rev mozilla-central 20241206092831-34cbc79fe32c.
+Removing bugmon keyword as no further action possible.  Please review the bug and re-add the keyword for further analysis.

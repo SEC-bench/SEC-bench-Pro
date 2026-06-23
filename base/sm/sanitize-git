@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="${1:-.}"
+
+if [ ! -d "$repo" ]; then
+  exit 0
+fi
+
+repo="$(cd "$repo" && pwd -P)"
+message="$(mktemp)"
+trap 'rm -f "$message"' EXIT
+
+gitdir=""
+
+if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  gitdir="$(git -C "$repo" rev-parse --absolute-git-dir)"
+  if git -C "$repo" rev-parse --verify HEAD >/dev/null 2>&1; then
+    git -C "$repo" log -1 --format=%B > "$message"
+  else
+    printf '%s\n' "Benchmark snapshot" > "$message"
+  fi
+else
+  printf '%s\n' "Benchmark snapshot" > "$message"
+fi
+
+remove_path() {
+  case "${1:-}" in
+    ""|"/")
+      return
+      ;;
+  esac
+  rm -rf -- "$1"
+}
+
+# Remove only the repository metadata. Avoid walking the whole Gecko tree and
+# objdirs: this sanitizer is intentionally log-only for fast final-layer use.
+remove_path "$gitdir"
+remove_path "$repo/.git"
+
+git -C "$repo" init -q
+git -C "$repo" config user.email secbench@example.com
+git -C "$repo" config user.name SEC-bench
+git -C "$repo" config gc.auto 0
+git -C "$repo" config status.showUntrackedFiles no
+git -C "$repo" config advice.statusUoption false
+
+git -C "$repo" commit -q -F "$message" --allow-empty --allow-empty-message

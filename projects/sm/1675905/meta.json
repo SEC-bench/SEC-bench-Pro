@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1675905",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/IonBuilder.cpp",
+    "js/src/jit/IonIC.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --no-warp --no-threads",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Write side effects in MCallGetProperty opcode not accounted for. CVE-2020-26950, sec-critical. In js/src/jit/MIR.h, MCallGetProperty was marked idempotent_=true when emitted by IonBuilder::createThisScripted to read the constructor's .prototype slot, so Ion treated the call as effect-free. But the .prototype getter could trigger js::fun_resolve, which lazily writes the new property and may relocate the function's slot storage. The Ion cache cached a pre-relocation slot pointer; on next entry it dereferenced the freed/moved memory → type confusion sufficient for Pwn2Own-style RCE. Fix: hg 8cdc2037b4b0 'Bug 1675905 - Simplify IonBuilder::createThisScripted' (Ted Campbell, Phabricator D96309) — emits a getThis IC rather than the bespoke idempotent MCallGetProperty so the slot reload is correctly observed. Reproduces with --fuzzing-safe --no-warp --no-threads on debug+ASAN.",
+  "fix_commits": [
+    "38358a9bcbf4"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-38358a9bcbf4.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1675905 - Simplify IonBuilder::createThisScripted. r=jandem,iain",
+      "source_commit": "38358a9bcbf4",
+      "commit": "38358a9bcbf4",
+      "url": "https://github.com/mozilla/gecko-dev/commit/38358a9bcbf4",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/38358a9bcbf4",
+      "phabricator": "D96309"
+    }
+  ],
+  "vrp": null
+}

@@ -1,0 +1,41 @@
+From d942bcd55a236074e4fd0601a103e8c252e56899 Mon Sep 17 00:00:00 2001
+From: Yury Delendik <ydelendik@mozilla.com>
+Date: Thu, 22 Aug 2024 14:23:03 +0000
+Subject: [PATCH] Bug 1914009 - [wasm] Properly handle return_call_ref results
+ in baseline. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D219693
+---
+ js/src/wasm/WasmBaselineCompile.cpp | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index d83f51989cb43..98a8024e3853e 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -5464,23 +5464,17 @@ bool BaseCompiler::emitReturnCallRef() {
+ 
+   uint32_t numArgs = funcType->args().length() + 1;
+ 
+-  ResultType resultType(ResultType::Vector(funcType->results()));
+-  StackResultsLoc results;
+-  if (!pushStackResultsForCall(resultType, RegPtr(ABINonArgReg0), &results)) {
+-    return false;
+-  }
+-
+   FunctionCall baselineCall{};
+   // State and realm are restored as needed by by callRef (really by
+   // MacroAssembler::wasmCallRef).
+   beginCall(baselineCall, UseABI::Wasm, RestoreRegisterStateAndRealm::False);
+ 
+-  if (!emitCallArgs(funcType->args(), NormalCallResults(results), &baselineCall,
++  if (!emitCallArgs(funcType->args(), TailCallResults(*funcType), &baselineCall,
+                     CalleeOnStack::True)) {
+     return false;
+   }
+ 
+-  const Stk& callee = peek(results.count());
++  const Stk& callee = peek(0);
+   returnCallRef(callee, baselineCall, funcType);
+ 
+   MOZ_ASSERT(stackMapGenerator_.framePushedExcludingOutboundCallArgs.isSome());

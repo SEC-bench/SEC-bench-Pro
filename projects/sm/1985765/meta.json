@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1985765",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/ds/Bitmap.h"
+  ],
+  "target_subdir": [
+    "js/src/ds"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --enable-symbols-as-weakmap-keys --more-compartments",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Dense bitmap (used to track atoms used by uncollected zones) computed the wrong bitmask when checking a single bit, off-by-one collision across word boundaries. With --enable-symbols-as-weakmap-keys and a class with #private fields seeded as WeakMap keys across globals, the symbol entry was incorrectly considered marked \u2192 `!gc::IsAboutToBeFinalized` UAF assert in WeakMap::clearAndCompact, crash on opt build. sec-high. Fix: correct bitmask calculation (git 3a8fb49d343b r=sfink, Phabricator D263252, 1-line Bitmap.h fix).",
+  "fix_commits": [
+    "3a8fb49d343b"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-3a8fb49d343b.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1985765 fix",
+      "source_commit": "3a8fb49d343b",
+      "commit": "3a8fb49d343b",
+      "url": "https://github.com/mozilla/gecko-dev/commit/3a8fb49d343b",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/3a8fb49d343b"
+    }
+  ],
+  "vrp": null
+}

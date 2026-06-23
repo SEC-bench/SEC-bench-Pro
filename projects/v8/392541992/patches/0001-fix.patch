@@ -1,0 +1,40 @@
+From 4d8f79a7f783a61ec5327c8af7fbd42572b55ca2 Mon Sep 17 00:00:00 2001
+From: Igor Sheludko <ishell@chromium.org>
+Date: Fri, 31 Jan 2025 10:57:04 +0100
+Subject: [PATCH] [base] Disallow base::Realloc() with zero size
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The result of realloc with zero size is implementation dependent and
+thus we must not rely on it.
+
+Fixed: 392541992
+Change-Id: Icaa281a6489ca297eeac749ea064af25a8f9e745
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6218209
+Auto-Submit: Igor Sheludko <ishell@chromium.org>
+Reviewed-by: Stephen Röttger <sroettger@google.com>
+Commit-Queue: Stephen Röttger <sroettger@google.com>
+Commit-Queue: Igor Sheludko <ishell@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#98432}
+---
+ src/base/platform/memory.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/base/platform/memory.h b/src/base/platform/memory.h
+index 4d3e1876c85..32161ba8197 100644
+--- a/src/base/platform/memory.h
++++ b/src/base/platform/memory.h
+@@ -46,6 +46,9 @@ inline void* Malloc(size_t size) {
+ }
+ 
+ inline void* Realloc(void* memory, size_t size) {
++  // The result of realloc with zero size is implementation dependent.
++  // Disallow it.
++  CHECK_NE(0, size);
+ #if V8_OS_STARBOARD
+   return SbMemoryReallocate(memory, size);
+ #elif V8_OS_AIX && _LINUX_SOURCE_COMPAT
+-- 
+2.43.0
+

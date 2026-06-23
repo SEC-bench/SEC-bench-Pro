@@ -1,0 +1,36 @@
+From c6786f1019e59269e01c81e9e9d79947f199870a Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Thu, 11 Jul 2024 13:52:19 +0000
+Subject: [PATCH] Bug 1903041: Use a linear search in more situations. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D214989
+---
+ js/src/wasm/WasmTypeDef.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/wasm/WasmTypeDef.h b/js/src/wasm/WasmTypeDef.h
+index e7589207bc358..f1e492e4ffbd5 100644
+--- a/js/src/wasm/WasmTypeDef.h
++++ b/js/src/wasm/WasmTypeDef.h
+@@ -842,11 +842,12 @@ class TypeDef {
+       return true;
+     }
+     const SuperTypeVector* subSTV = subTypeDef->superTypeVector();
++    const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
+ 
+     // During construction of a recursion group, the super type vector may not
+     // have been computed yet, in which case we need to fall back to a linear
+     // search.
+-    if (!subSTV) {
++    if (!subSTV || !superSTV) {
+       while (subTypeDef) {
+         if (subTypeDef == superTypeDef) {
+           return true;
+@@ -868,7 +869,6 @@ class TypeDef {
+       return false;
+     }
+ 
+-    const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
+     MOZ_ASSERT(superSTV);
+     MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
+ 

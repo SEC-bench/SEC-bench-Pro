@@ -1,0 +1,49 @@
+From 3905f930df89fff78eb4416b1e9d7c0c8971686d Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 6 Oct 2025 20:44:48 +0000
+Subject: [PATCH] Bug 1985224: Don't compile realm-independent self-hosted
+ baseline code off-thread r=bthrall
+
+The JSNullableAutoRealm mechanism that we use for on-thread compilation isn't available off-thread, since it works via the JSContext. It would be possible to manually null the realm pointer in a variety of places, but this seems cleanest and safest. A handful of main-thread compilations isn't a big deal; the whole point of the self-hosted cache is that we only compile each self-hosted function once per runtime.
+
+Differential Revision: https://phabricator.services.mozilla.com/D267135
+---
+ js/src/jit-test/tests/baseline/bug1985224.js | 11 +++++++++++
+ js/src/jit/BaselineJIT.cpp                   |  3 +++
+ 2 files changed, 14 insertions(+)
+ create mode 100644 js/src/jit-test/tests/baseline/bug1985224.js
+
+diff --git a/js/src/jit-test/tests/baseline/bug1985224.js b/js/src/jit-test/tests/baseline/bug1985224.js
+new file mode 100644
+index 000000000000..7a0871dfbff0
+--- /dev/null
++++ b/js/src/jit-test/tests/baseline/bug1985224.js
+@@ -0,0 +1,11 @@
++// |jit-test| --baseline-offthread-compile=on; --setpref=experimental.self_hosted_cache=true
++Object.defineProperty(this, "x", {
++  value: {
++    c: function*() {}.constructor
++  }
++})
++x.c()().next();
++setJitCompilerOption("offthread-compilation.enable", 1);
++for (var i = 0; i < 500; i++) {
++  x.c()().next();
++}
+diff --git a/js/src/jit/BaselineJIT.cpp b/js/src/jit/BaselineJIT.cpp
+index ac04f8984a69..9cc69da3a619 100644
+--- a/js/src/jit/BaselineJIT.cpp
++++ b/js/src/jit/BaselineJIT.cpp
+@@ -223,6 +223,9 @@ bool BaselineCompileTask::OffThreadBaselineCompilationAvailable(
+   if (script->isDebuggee()) {
+     return false;
+   }
++  if (JS::Prefs::experimental_self_hosted_cache() && script->selfHosted()) {
++    return false;
++  }
+   return CanUseExtraThreads();
+ }
+ 
+-- 
+2.43.0
+

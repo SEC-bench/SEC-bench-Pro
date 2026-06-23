@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:395895382",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--expose-memory-corruption-api --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/compiler/js-call-reducer.cc"
+  ],
+  "target_subdir": [
+    "src/compiler"
+  ],
+  "target_vulnerability_type": "Out-of-bounds write",
+  "error_type": "ASAN_CRASH",
+  "description": "In Turbofan's inlining phase, JSCallReducer::ReduceCallOrConstructWithArrayLikeOrSpread() reads the array length from an AllocationSite boilerplate cached in the FeedbackVector for spread-call nodes (e.g., fn(...arr)). If the boilerplate JSArray length has been corrupted to a negative value via sandbox memory corruption, new_argument_count becomes negative and the loop that inserts input nodes for each array element is skipped entirely. The negative arity is then encoded into a 27-bit ArityField in CallParameters, truncating it to a large positive value. NodeProperties::ReplaceEffectInput() subsequently calls node->ReplaceInput() using this truncated arity as an index offset (via FirstEffectIndex -> FirstEffectIndex + corrupted ValueInputCount), far beyond the node's actual allocated inputs. This out-of-bounds ReplaceInput() reads stale Node* and Use* pointers from adjacent heap memory and manipulates the Use linked list through Node::RemoveUse(), resulting in an arbitrary address write primitive that can be used to escape the V8 sandbox.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[turbofan] Fix Call argument count mismatch for array literals",
+      "url": "https://crrev.com/c/6478570",
+      "cl": 6478570,
+      "source_commit": "da14a949b0dc122c848f556b9e89ab1064a73306",
+      "commit": "da14a949b0dc122c848f556b9e89ab1064a73306",
+      "description": "Local patch exported from https://crrev.com/c/6478570 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6478570",
+      "source_cl": 6478570,
+      "source_ref": "refs/changes/70/6478570/5",
+      "source_patchset": 5
+    }
+  ]
+}

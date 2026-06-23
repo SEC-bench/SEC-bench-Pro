@@ -1,0 +1,48 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:443475183",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--fuzzing --sandbox-fuzzing --single-threaded",
+  "target_source_files": [
+    "third_party/partition_alloc/src/partition_alloc/partition_page.h",
+    "src/init/isolate-group.cc"
+  ],
+  "target_subdir": [
+    "third_party/partition_alloc/src/partition_alloc",
+    "src/init"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A sandbox escape vulnerability exists in the interaction between PartitionAlloc freelist metadata and V8's ArrayBuffer backing-store allocator. `SlotSpanMetadata::freelist_head` in `third_party/partition_alloc/src/partition_alloc/partition_page.h` is consumed as a raw pointer, and `PABackedSandboxedArrayBufferAllocator` in `src/init/isolate-group.cc` can therefore be driven to treat an attacker-controlled address as a freshly allocated backing store. When that address is zero-initialized with `memset`, V8 performs an out-of-sandbox write.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6938258 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "8398f9aa445af42c44d52a771e2fd3a9605b3573 AB: Fix possiblity of PA metadata being stored inlined",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6938258",
+      "source_cl": 6938258,
+      "source_commit": "8398f9aa445af42c44d52a771e2fd3a9605b3573"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-enable-external-pa-metadata.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "description": "Enable PartitionAlloc external metadata at 100% so metadata is moved outside the gigacage rather than stored inline.",
+      "context": "chromium-src-base-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "1bce72c8b127a02fba5d51cfbd8baa3aa40eb6ef Enable PartitionAlloc External Metadata feature at 100%",
+      "source_url": "https://chromium-review.googlesource.com/c/chromium/src/+/6964115",
+      "source_cl": 6964115,
+      "source_commit": "1bce72c8b127a02fba5d51cfbd8baa3aa40eb6ef"
+    }
+  ]
+}

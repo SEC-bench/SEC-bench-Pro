@@ -1,0 +1,43 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1841119",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmBaselineCompile.cpp",
+        "js/src/wasm/WasmIonCompile.cpp",
+        "js/src/wasm/WasmJS.cpp",
+        "js/src/wasm/WasmModuleTypes.cpp",
+        "js/src/wasm/WasmModuleTypes.h",
+        "js/src/wasm/WasmSerialize.cpp",
+        "js/src/wasm/WasmTable.cpp",
+        "js/src/wasm/WasmTable.h",
+        "js/src/wasm/WasmTypeDef.h",
+        "js/src/wasm/WasmValType.h"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off --wasm-function-references --wasm-gc",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "WASM-GC Exported Object Lifecycle — TypeDef RecGroup Freed Before WasmTableObject/WasmGlobalObject/WasmTagObject Finalizer Reads RefType::hierarchy(). Bug 1841119 (sec-high). In the WebAssembly GC implementation, exported tables, globals, and tags hold references to TypeDef objects stored in RecGroups (recursion groups), which are normally kept alive by their containing wasm Instance. However, when these JS-API objects are exported and outlive the Instance that owns the RecGroup, the TypeDef is freed while still referenced. During garbage collection finalization in js::wasm::Table::gcMallocBytes() (called from WasmTableObject::finalize), the code calls RefType::hierarchy() on the freed TypeDef, resulting in a use-after-free. In debug builds this triggers a MOZ_CRASH, but in release builds the freed memory may contain attacker-influenced data that could bypass the crash and allow further exploitation. The fix (changeset e0c97d1317e4) adds a strong reference from the JS-API objects (WasmTableObject, WasmGlobalObject, WasmTagObject) to the RecGroup containing their TypeDef, ensuring the type definition remains alive for the lifetime of the exported object.",
+    "fix_commits": [
+        "9115ac056da8285348457b5c206636c280636cbb"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-wasm-keep-recursion-group-alive-for-globals.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1841119 - wasm: Keep recursion group alive for globals,",
+            "source_commit": "9115ac056da8285348457b5c206636c280636cbb",
+            "commit": "9115ac056da8285348457b5c206636c280636cbb",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/9115ac056da8285348457b5c206636c280636cbb",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/9115ac056da8285348457b5c206636c280636cbb",
+            "phabricator": "D187568"
+        }
+    ],
+    "vrp": null
+}

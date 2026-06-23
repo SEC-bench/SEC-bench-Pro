@@ -1,0 +1,13 @@
+Verified on 2026-04-11 with `../../v8/crash_check.sh 435630464`.
+
+- Image: `hwiwonlee/v8.x86_64:435630464`
+- Binary: `out/x64.release/d8 --sandbox-testing`
+- PoC: local `poc.js`, identical to collector attachment `v8sbx-unlock-sharedstruct.js`
+- Result: `CONFIMRED: SANDBOX_VIOLATION`
+
+Fresh local `output.txt` shows:
+
+- `## V8 sandbox violation detected!`
+- `Received signal 11 SEGV_MAPERR 1337144700db`
+
+This matches the report's intended standalone V8 sandbox-bypass repro through revived `--harmony-struct` builtins and a controlled invalid access near the attacker-chosen `0x13371447...` region.

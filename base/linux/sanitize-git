@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Sanitize git history for a Linux kernel worktree.
+#
+# Removes the bare repo (/src/linux.git) and replaces the worktree's git
+# linkage with a fresh single-commit repository. This prevents agents from
+# reading fix commits via `git log --all` or `git show <fix-hash>`.
+#
+# Usage (from a per-CVE Dockerfile, after build.sh completes):
+#   RUN secb-sanitize-git /src/linux
+#
+# The resulting /src/linux is a normal git repo with one commit containing
+# the full source tree at the vulnerable build_commit.
+
+set -euo pipefail
+
+repo="${1:-/src/linux}"
+
+if [ ! -d "$repo" ]; then
+  echo "secb-sanitize-git: directory not found: $repo" >&2
+  exit 1
+fi
+
+repo="$(cd "$repo" && pwd -P)"
+
+# Resolve the bare repo backing this worktree (if any).
+bare_repo=""
+if [ -f "$repo/.git" ]; then
+  # Worktree: .git is a file pointing to the bare repo's worktrees/ entry.
+  bare_repo="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null || true)"
+  if [ -n "$bare_repo" ] && [ "$bare_repo" != "$repo/.git" ]; then
+    bare_repo="$(cd "$repo" && cd "$bare_repo" && pwd -P)"
+  else
+    bare_repo=""
+  fi
+elif [ -d "$repo/.git" ]; then
+  bare_repo="$repo/.git"
+fi
+
+# Capture the current HEAD message for the replacement commit.
+message="$(mktemp)"
+trap 'rm -f "$message"' EXIT
+
+if git -C "$repo" rev-parse --verify HEAD >/dev/null 2>&1; then
+  git -C "$repo" log -1 --format=%B > "$message"
+else
+  printf '%s\n' "Benchmark snapshot" > "$message"
+fi
+
+# Disconnect the worktree from the bare repo.
+rm -rf "$repo/.git"
+
+# Remove the bare repo entirely — this is where all history lives.
+if [ -n "$bare_repo" ] && [ "$bare_repo" != "/" ] && [ -d "$bare_repo" ]; then
+  rm -rf "$bare_repo"
+fi
+
+# Reinitialize as a standalone repo with a single empty commit.
+# We skip `git add` — the kernel tree is large and the agent does not need
+# git diff/status on source files (they are read-only reference material).
+git -C "$repo" init -q
+git -C "$repo" config user.email secbench@example.com
+git -C "$repo" config user.name SEC-bench
+git -C "$repo" config gc.auto 0
+git -C "$repo" config status.showUntrackedFiles no
+git -C "$repo" config advice.statusUoption false
+
+git -C "$repo" commit -q -F "$message" --allow-empty --allow-empty-message
+
+# Update secb_config.json build_commit to match the new synthetic HEAD so
+# build.sh doesn't try to checkout a commit that no longer exists.
+new_head="$(git -C "$repo" rev-parse HEAD)"
+secb_config="/run/secb/config.json"
+if [ -r "$secb_config" ] && command -v jq >/dev/null 2>&1; then
+  tmp="$(mktemp)"
+  jq --arg commit "$new_head" '.kernel.build_commit = $commit' "$secb_config" > "$tmp"
+  mv "$tmp" "$secb_config"
+fi

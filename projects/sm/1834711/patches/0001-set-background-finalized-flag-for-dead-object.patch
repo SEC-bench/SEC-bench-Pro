@@ -1,0 +1,213 @@
+From 5432788739532336e444d0f4dbe88c6941f54f60 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Tue, 6 Jun 2023 08:37:02 +0000
+Subject: [PATCH] Bug 1834711 - Set background finalized flag for dead object
+ proxes created after nuking all CCWs r=jandem
+
+The background finalized flag wasn't getting set in the second overload of
+NewDeadProxyObject. The patch makes the first overload of this function more
+generic so it can accept non-proxy arguments and uses it in all cases.
+
+The testcase also results in dead object proxies being returned from rewrap()
+in RemapDeadWrapper which previously cased an assertion. I added an early
+return for this case - do you think that's OK?
+
+Differential Revision: https://phabricator.services.mozilla.com/D179576
+---
+ js/src/proxy/CrossCompartmentWrapper.cpp |  2 +-
+ js/src/proxy/DeadObjectProxy.cpp         | 31 ++++++------------------
+ js/src/proxy/DeadObjectProxy.h           |  8 +-----
+ js/src/vm/Compartment.cpp                |  3 +--
+ js/src/vm/JSObject.cpp                   | 28 +++++++++------------
+ js/src/vm/JSObject.h                     |  2 ++
+ 6 files changed, 24 insertions(+), 50 deletions(-)
+
+diff --git a/js/src/proxy/CrossCompartmentWrapper.cpp b/js/src/proxy/CrossCompartmentWrapper.cpp
+index c16bdeb833665..07b9b8afd7349 100644
+--- a/js/src/proxy/CrossCompartmentWrapper.cpp
++++ b/js/src/proxy/CrossCompartmentWrapper.cpp
+@@ -562,7 +562,7 @@ void js::RemapDeadWrapper(JSContext* cx, HandleObject wobj,
+   }
+ 
+   if (!wobj->is<WrapperObject>()) {
+-    MOZ_ASSERT(js::IsDOMRemoteProxyObject(wobj));
++    MOZ_ASSERT(js::IsDOMRemoteProxyObject(wobj) || IsDeadProxyObject(wobj));
+     return;
+   }
+ 
+diff --git a/js/src/proxy/DeadObjectProxy.cpp b/js/src/proxy/DeadObjectProxy.cpp
+index 2cb7859739ae0..fe32946eb32c0 100644
+--- a/js/src/proxy/DeadObjectProxy.cpp
++++ b/js/src/proxy/DeadObjectProxy.cpp
+@@ -11,6 +11,8 @@
+ #include "vm/JSFunction.h"            // XXXefaust Bug 1064662
+ #include "vm/ProxyObject.h"
+ 
++#include "vm/JSObject-inl.h"
++
+ using namespace js;
+ 
+ const DeadObjectProxy DeadObjectProxy::singleton;
+@@ -125,28 +127,26 @@ bool js::IsDeadProxyObject(const JSObject* obj) {
+   return IsDerivedProxyObject(obj, &DeadObjectProxy::singleton);
+ }
+ 
+-Value js::DeadProxyTargetValue(ProxyObject* obj) {
++Value js::DeadProxyTargetValue(JSObject* obj) {
+   // When nuking scripted proxies, isCallable and isConstructor values for
+   // the proxy needs to be preserved.  So does background-finalization status.
+   int32_t flags = 0;
+-  if (obj->handler()->isCallable(obj)) {
++  if (obj->isCallable()) {
+     flags |= DeadObjectProxyIsCallable;
+   }
+-  if (obj->handler()->isConstructor(obj)) {
++  if (obj->isConstructor()) {
+     flags |= DeadObjectProxyIsConstructor;
+   }
+-  if (obj->handler()->finalizeInBackground(obj->private_())) {
++  if (obj->isBackgroundFinalized()) {
+     flags |= DeadObjectProxyIsBackgroundFinalized;
+   }
+   return Int32Value(flags);
+ }
+ 
+ JSObject* js::NewDeadProxyObject(JSContext* cx, JSObject* origObj) {
+-  MOZ_ASSERT_IF(origObj, origObj->is<ProxyObject>());
+-
+   RootedValue target(cx);
+-  if (origObj && origObj->is<ProxyObject>()) {
+-    target = DeadProxyTargetValue(&origObj->as<ProxyObject>());
++  if (origObj) {
++    target = DeadProxyTargetValue(origObj);
+   } else {
+     target = Int32Value(DeadObjectProxyIsBackgroundFinalized);
+   }
+@@ -154,18 +154,3 @@ JSObject* js::NewDeadProxyObject(JSContext* cx, JSObject* origObj) {
+   return NewProxyObject(cx, &DeadObjectProxy::singleton, target, nullptr,
+                         ProxyOptions());
+ }
+-
+-JSObject* js::NewDeadProxyObject(JSContext* cx, IsCallableFlag isCallable,
+-                                 IsConstructorFlag isConstructor) {
+-  int32_t flags = 0;
+-  if (isCallable == IsCallableFlag::True) {
+-    flags |= DeadObjectProxyIsCallable;
+-  }
+-  if (isConstructor == IsConstructorFlag::True) {
+-    flags |= DeadObjectProxyIsConstructor;
+-  }
+-
+-  RootedValue target(cx, Int32Value(flags));
+-  return NewProxyObject(cx, &DeadObjectProxy::singleton, target, nullptr,
+-                        ProxyOptions());
+-}
+diff --git a/js/src/proxy/DeadObjectProxy.h b/js/src/proxy/DeadObjectProxy.h
+index a27f1e16eef1f..6b7805b018b0b 100644
+--- a/js/src/proxy/DeadObjectProxy.h
++++ b/js/src/proxy/DeadObjectProxy.h
+@@ -91,16 +91,10 @@ class DeadObjectProxy : public BaseProxyHandler {
+ 
+ bool IsDeadProxyObject(const JSObject* obj);
+ 
+-JS::Value DeadProxyTargetValue(ProxyObject* obj);
++JS::Value DeadProxyTargetValue(JSObject* obj);
+ 
+ JSObject* NewDeadProxyObject(JSContext* cx, JSObject* origObj = nullptr);
+ 
+-enum class IsCallableFlag : bool { False, True };
+-enum class IsConstructorFlag : bool { False, True };
+-
+-JSObject* NewDeadProxyObject(JSContext* cx, IsCallableFlag isCallable,
+-                             IsConstructorFlag isConstructor);
+-
+ } /* namespace js */
+ 
+ #endif /* proxy_DeadObjectProxy_h */
+diff --git a/js/src/vm/Compartment.cpp b/js/src/vm/Compartment.cpp
+index bdb7f25100a1d..a99a9145c7a70 100644
+--- a/js/src/vm/Compartment.cpp
++++ b/js/src/vm/Compartment.cpp
+@@ -231,8 +231,7 @@ bool Compartment::getNonWrapperObjectForCurrentCompartment(
+   // Disallow creating new wrappers if we nuked the object's realm or the
+   // current compartment.
+   if (!AllowNewWrapper(this, obj)) {
+-    obj.set(NewDeadProxyObject(cx, IsCallableFlag(obj->isCallable()),
+-                               IsConstructorFlag(obj->isConstructor())));
++    obj.set(NewDeadProxyObject(cx, obj));
+     return !!obj;
+   }
+ 
+diff --git a/js/src/vm/JSObject.cpp b/js/src/vm/JSObject.cpp
+index ad1f64dbb6fba..292971cf3e4e7 100644
+--- a/js/src/vm/JSObject.cpp
++++ b/js/src/vm/JSObject.cpp
+@@ -26,6 +26,7 @@
+ #include "builtin/String.h"
+ #include "builtin/Symbol.h"
+ #include "builtin/WeakSetObject.h"
++#include "gc/AllocKind.h"
+ #include "gc/GC.h"
+ #include "js/CharacterEncoding.h"
+ #include "js/friend/DumpFunctions.h"  // js::DumpObject
+@@ -1189,21 +1190,6 @@ bool ProxyObject::fixupAfterSwap(JSContext* cx,
+   return true;
+ }
+ 
+-#ifdef DEBUG
+-static bool IsBackgroundFinalizedWhenTenured(JSObject* obj) {
+-  if (obj->isTenured()) {
+-    return gc::IsBackgroundFinalized(obj->asTenured().getAllocKind());
+-  }
+-
+-  if (obj->is<ProxyObject>()) {
+-    return gc::IsBackgroundFinalized(
+-        obj->as<ProxyObject>().allocKindForTenure());
+-  }
+-
+-  return js::gc::CanUseBackgroundAllocKind(obj->getClass());
+-}
+-#endif
+-
+ static gc::AllocKind SwappableObjectAllocKind(JSObject* obj) {
+   MOZ_ASSERT(ObjectMayBeSwapped(obj));
+ 
+@@ -1222,8 +1208,7 @@ static gc::AllocKind SwappableObjectAllocKind(JSObject* obj) {
+ void JSObject::swap(JSContext* cx, HandleObject a, HandleObject b,
+                     AutoEnterOOMUnsafeRegion& oomUnsafe) {
+   // Ensure swap doesn't cause a finalizer to be run at the wrong time.
+-  MOZ_ASSERT(IsBackgroundFinalizedWhenTenured(a) ==
+-             IsBackgroundFinalizedWhenTenured(b));
++  MOZ_ASSERT(a->isBackgroundFinalized() == b->isBackgroundFinalized());
+ 
+   MOZ_ASSERT(a->compartment() == b->compartment());
+ 
+@@ -3273,6 +3258,15 @@ JS_PUBLIC_API void js::DumpBacktrace(JSContext* cx) {
+ 
+ /* * */
+ 
++bool JSObject::isBackgroundFinalized() const {
++  if (isTenured()) {
++    return js::gc::IsBackgroundFinalized(asTenured().getAllocKind());
++  }
++
++  js::Nursery& nursery = runtimeFromMainThread()->gc.nursery();
++  return js::gc::IsBackgroundFinalized(allocKindForTenure(nursery));
++}
++
+ js::gc::AllocKind JSObject::allocKindForTenure(
+     const js::Nursery& nursery) const {
+   using namespace js::gc;
+diff --git a/js/src/vm/JSObject.h b/js/src/vm/JSObject.h
+index 2adc284cc7aeb..91128bc42f3a6 100644
+--- a/js/src/vm/JSObject.h
++++ b/js/src/vm/JSObject.h
+@@ -434,6 +434,8 @@ class JSObject
+   MOZ_ALWAYS_INLINE JSNative callHook() const;
+   MOZ_ALWAYS_INLINE JSNative constructHook() const;
+ 
++  bool isBackgroundFinalized() const;
++
+   MOZ_ALWAYS_INLINE void finalize(JS::GCContext* gcx);
+ 
+  public:

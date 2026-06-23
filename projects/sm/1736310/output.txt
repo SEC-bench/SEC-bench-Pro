@@ -1,0 +1,2 @@
+Assertion failure: !obj->hasDetachedBuffer() (detaching an array buffer sets the length to zero), at /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:1021
+Segmentation fault (core dumped)

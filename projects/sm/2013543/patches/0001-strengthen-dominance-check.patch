@@ -1,0 +1,51 @@
+From bf98f12eb281d60b77984d9497a08209c69ad8d8 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Tue, 3 Feb 2026 21:43:28 +0000
+Subject: [PATCH] Bug 2013543: Strengthen dominance check r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D281543
+---
+ js/src/jit-test/tests/ion/bug2013543.js | 20 ++++++++++++++++++++
+ js/src/jit/IonAnalysis.cpp              |  2 +-
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+ create mode 100644 js/src/jit-test/tests/ion/bug2013543.js
+
+diff --git a/js/src/jit-test/tests/ion/bug2013543.js b/js/src/jit-test/tests/ion/bug2013543.js
+new file mode 100644
+index 0000000000000..950f65945e164
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug2013543.js
+@@ -0,0 +1,20 @@
++function foo(obj1, obj2) {
++  var keys1 = Object.keys(obj1);
++  var val = obj2[keys1[0]];
++  var keys2 = Object.keys(obj2);
++  return val;
++}
++
++var objs = [];
++for (var i = 0; i < 30; i++) {
++  var o = {};
++  for (var j = 0; j <= i; j++) {
++    o["p" + j] = j + 1;
++  }
++  objs.push(o);
++}
++
++for (var i = 0; i < 5000; i++) {
++  var o = objs[i % objs.length];
++  foo(o, o);
++}
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index cdb7ab78194c8..b7e6562dcacc4 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -5485,7 +5485,7 @@ bool jit::OptimizeIteratorIndices(const MIRGenerator* mir, MIRGraph& graph) {
+             otherIter = FindObjectToIteratorUse(SkipIterObjectUnbox(receiver));
+           }
+ 
+-          if (!otherIter || !otherIter->block()->dominates(ins->block())) {
++          if (!otherIter || !otherIter->dominates(ins)) {
+             continue;
+           }
+         }

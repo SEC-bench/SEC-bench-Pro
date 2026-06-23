@@ -1,0 +1,43 @@
+From 6e91b751bf989146a76a2369da6d090109309fba Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 16 Mar 2026 16:07:16 +0000
+Subject: [PATCH] Bug 2023024: Add comment and test r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D287741
+---
+ js/src/jit-test/tests/fuses/bug2023024.js | 13 +++++++++++++
+ js/src/jit/CacheIR.cpp                    |  1 +
+ 2 files changed, 14 insertions(+)
+ create mode 100644 js/src/jit-test/tests/fuses/bug2023024.js
+
+diff --git a/js/src/jit-test/tests/fuses/bug2023024.js b/js/src/jit-test/tests/fuses/bug2023024.js
+new file mode 100644
+index 0000000000000..7700efded5464
+--- /dev/null
++++ b/js/src/jit-test/tests/fuses/bug2023024.js
+@@ -0,0 +1,13 @@
++var re = /foo/g;
++re.lastIndex = {};
++var obj = Object.create(re);
++
++function read() {
++  return obj.lastIndex;
++}
++
++for (var i = 0; i < 50; i++) read();
++
++re.exec("foofoofoo");
++
++read();
+diff --git a/js/src/jit/CacheIR.cpp b/js/src/jit/CacheIR.cpp
+index e3afc26f68182..3c910517b190b 100644
+--- a/js/src/jit/CacheIR.cpp
++++ b/js/src/jit/CacheIR.cpp
+@@ -2248,6 +2248,7 @@ bool IRGenerator::canOptimizeConstantDataProperty(NativeObject* holder,
+     return false;
+   }
+ 
++  // Watchtower doesn't watch changes to reserved slots.
+   if (MOZ_UNLIKELY(prop.slot() < JSCLASS_RESERVED_SLOTS(holder->getClass()))) {
+     return false;
+   }

@@ -1,0 +1,23 @@
+Assertion failure: slots == calculateDynamicSlots(), at /src/gecko-dev/js/src/vm/JSObject-inl.h:45
+#01: ???[/out/js +0x2eaac1d]
+#02: ???[/out/js +0x47640e7]
+#03: ???[/out/js +0x4797713]
+#04: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55c21cab8c52 bp 0x7ffdefa5fb30 sp 0x7ffdefa5fb00 T0)
+==10==The signal is caused by a WRITE memory access.
+==10==Hint: address points to the zero page.
+    #0 0x55c21cab8c52 in js::NativeObject::numDynamicSlots() const /src/gecko-dev/js/src/vm/JSObject-inl.h:45:3
+    #1 0x55c21e3720e6 in bool js::jit::TryAddOrSetPlainObjectProperty<true>(JSContext*, JS::Handle<js::PlainObject*>, JS::PropertyKey, JS::Handle<JS::Value>, bool*) /src/gecko-dev/js/src/jit/VMFunctions.cpp:2136:28
+    #2 0x55c21e3a5712 in bool js::jit::SetElementMegamorphic<true>(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, bool) /src/gecko-dev/js/src/jit/VMFunctions.cpp:2163:12
+    #3 0x289b3f8b6eb1  (<unknown module>)
+
+==10==Register values:
+rax = 0x0000000000000000  rbx = 0x00003ffedb600760  rcx = 0x000055c21a6e7e60  rdx = 0x0000000000000000  
+rdi = 0x000055c220461b30  rsi = 0x00007ffdefa5fab8  rbp = 0x00007ffdefa5fb30  rsp = 0x00007ffdefa5fb00  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00003ffedb600758  r13 = 0x000007ffdb6c00ec  r14 = 0x0000000000000004  r15 = 0x0000000000000080  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/vm/JSObject-inl.h:45:3 in js::NativeObject::numDynamicSlots() const
+==10==ABORTING

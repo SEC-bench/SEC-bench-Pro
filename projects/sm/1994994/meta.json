@@ -1,0 +1,36 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1994994",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/irregexp/imported/regexp-bytecode-generator.cc",
+    "js/src/irregexp/imported/regexp-compiler.cc",
+    "js/src/irregexp/imported/regexp-compiler.h",
+    "js/src/irregexp/imported/regexp-macro-assembler.cc"
+  ],
+  "target_subdir": [
+    "js/src/irregexp/imported"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "ASAN_CRASH",
+  "description": "irregexp bytecode compiler emitted an assert when the cp_offset (character position offset) for a quantified loop went below kMinCPOffset (the minimum allowed negative lookback). For specific regex shapes the optimizer would compute a cp_offset more negative than supported by the macro-assembler API, hitting the `(kMinCPOffset) <= (cp_offset)` assert. Fix: upstream irregexp patch (git 866e7aa6a080 r=dminor) \u2014 extends the compiler to bail-out / clamp at the limit, plus a Mozilla-side macro-assembler tweak. Multi-file: regexp-compiler.cc, regexp-compiler.h, regexp-macro-assembler.cc.",
+  "fix_commits": [
+    "866e7aa6a080"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-866e7aa6a080.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1994994 fix",
+      "source_commit": "866e7aa6a080",
+      "commit": "866e7aa6a080",
+      "url": "https://github.com/mozilla/gecko-dev/commit/866e7aa6a080",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/866e7aa6a080"
+    }
+  ],
+  "vrp": null
+}

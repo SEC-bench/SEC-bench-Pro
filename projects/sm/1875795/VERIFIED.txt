@@ -1,0 +1,9 @@
+VERIFIED at 2026-05-29T05:42:31Z — orchestrator end-to-end on bug 1875795 (sec-high JIT)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type (iter 2/100)
+  - Crash: Assertion failure: slots == calculateDynamicSlots(), at js/src/vm/JSObject-inl.h:45
+            -> ASAN SEGV in js::NativeObject::numDynamicSlots()
+            -> via js::jit::TryAddOrSetPlainObjectProperty / SetElementMegamorphic
+            -> bug arises from MacroAssembler scratch2-register clobbering pre-fix
+  - Fix (patches/0001-fix-from-git-58d7323c391c.patch): "Take scratch2 from register
+    set before creating LiveRegisterSet" — touches js/src/jit/MacroAssembler.cpp
+  - Fixed image blocks PoC 10/10

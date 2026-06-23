@@ -1,0 +1,33 @@
+Warmup...
+ - ok
+Caught trap from pwn function
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11==ERROR: AddressSanitizer: SEGV on unknown address 0x79c100012340 (pc 0x563ef5b4ab4c bp 0x7fff315010c0 sp 0x7fff31501090 T0)
+==11==The signal is caused by a READ memory access.
+    #0 0x563ef5b4ab4c in Builtins_JSToWasmHandleReturns setup-isolate-deserialize.cc
+    #1 0x563ef5b4768e in Builtins_JSToWasmWrapper setup-isolate-deserialize.cc
+    #2 0x563ef58615a2 in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #3 0x563ef585dd9b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #4 0x563ef585daea in Builtins_JSEntry setup-isolate-deserialize.cc
+    #5 0x563ef0a06f54 in Call src/execution/simulator.h:191:12
+    #6 0x563ef0a06f54 in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:436:22
+    #7 0x563ef0a09e1b in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::DirectHandle<v8::internal::JSFunction>, v8::internal::DirectHandle<v8::internal::Object>, v8::internal::DirectHandle<v8::internal::Object>) src/execution/execution.cc:536:10
+    #8 0x563ef024eb00 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2153:7
+    #9 0x563ef01b2e4d in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1012:44
+    #10 0x563ef01e11d3 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4914:10
+    #11 0x563ef01ec14e in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5858:37
+    #12 0x563ef01eb4a5 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5767:18
+    #13 0x563ef01ee8c8 in v8::Shell::Main(int, char**) src/d8/d8.cc:6621:18
+    #14 0x7f02a41171c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #15 0x7f02a411728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #16 0x563ef00a2024 in _start (/src/v8/out/x64.asan/d8+0x2064024) (BuildId: 5fb83b4fdf757a0e)
+
+==11==Register values:
+rax = 0x000079c100081a85  rbx = 0x000079c100000011  rcx = 0x000079c100012341  rdx = 0x0000000000000000  
+rdi = 0x0000000001e848c0  rsi = 0x0000000000000002  rbp = 0x00007fff315010c0  rsp = 0x00007fff31501090  
+ r8 = 0x000000000000000b   r9 = 0x0000000000000000  r10 = 0x000079c10000202d  r11 = 0x000079b7000402ad  
+r12 = 0x00007f02a40ec15c  r13 = 0x00007e12a31e1080  r14 = 0x000079c100000000  r15 = 0x00007fff31500fc1  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV setup-isolate-deserialize.cc in Builtins_JSToWasmHandleReturns
+==11==ABORTING

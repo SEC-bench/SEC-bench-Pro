@@ -1,0 +1,140 @@
+From 5dcdd12edecd4c0cf9750909360d214586102b71 Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Thu, 18 Sep 2025 17:44:21 +0000
+Subject: [PATCH] Bug 1988967 - Also check the use-instruction in
+ NeedsKeepAlive. r=iain
+
+This patch changes the `AddKeepAliveInstructions` pass to also check the `use`
+instruction can't GC instead of only checking the instructions before it.
+The effect is that we now add a keep-alive instruction for the object after
+`MApplyArray` and `MConstructArray` instructions.
+
+This fixes an issue with the simple allocator for `LApplyArrayGeneric` (which uses
+the elements register before making a call that can GC). The simple allocator was
+spilling the elements register and then added that stack slot to the safepoint but
+not its owner object.
+
+Running jit-tests with extra assertions identified a number of instructions that
+can't GC that should be added to the allow-list in `NeedsKeepAlive`, to not change
+behavior for those instructions.
+
+Differential Revision: https://phabricator.services.mozilla.com/D265302
+---
+ js/src/jit-test/tests/ion/bug1988967.js |  5 +++
+ js/src/jit/IonAnalysis.cpp              | 50 ++++++++++++++-----------
+ 2 files changed, 33 insertions(+), 22 deletions(-)
+ create mode 100644 js/src/jit-test/tests/ion/bug1988967.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1988967.js b/js/src/jit-test/tests/ion/bug1988967.js
+new file mode 100644
+index 000000000000..42b4fc0eb74e
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1988967.js
+@@ -0,0 +1,5 @@
++// |jit-test| error:InternalError; test-also=--ion-regalloc=simple
++function f() {
++  f.apply(this|0, new Array());
++}
++f();
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index d251bb1a5991..1163768dae5d 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -4407,40 +4407,39 @@ static bool NeedsKeepAlive(MInstruction* slotsOrElements, MInstruction* use) {
+     return true;
+   }
+ 
+-  // Allocating a BigInt can GC, so we have to keep the object alive.
+-  if (use->type() == MIRType::BigInt) {
+-    return true;
+-  }
+-  if (use->isLoadTypedArrayElementHole() &&
+-      Scalar::isBigIntType(use->toLoadTypedArrayElementHole()->arrayType())) {
+-    return true;
+-  }
+-
+   MBasicBlock* block = use->block();
+   MInstructionIterator iter(block->begin(slotsOrElements));
+   MOZ_ASSERT(*iter == slotsOrElements);
+   ++iter;
+ 
+   while (true) {
+-    if (*iter == use) {
+-      return false;
+-    }
+-
+-    switch (iter->op()) {
++    MInstruction* ins = *iter;
++    switch (ins->op()) {
+       case MDefinition::Opcode::Nop:
+       case MDefinition::Opcode::Constant:
+       case MDefinition::Opcode::KeepAliveObject:
+       case MDefinition::Opcode::Unbox:
+       case MDefinition::Opcode::LoadDynamicSlot:
++      case MDefinition::Opcode::LoadDynamicSlotAndUnbox:
+       case MDefinition::Opcode::StoreDynamicSlot:
+       case MDefinition::Opcode::LoadFixedSlot:
++      case MDefinition::Opcode::LoadFixedSlotAndUnbox:
+       case MDefinition::Opcode::StoreFixedSlot:
+       case MDefinition::Opcode::LoadElement:
+       case MDefinition::Opcode::LoadElementAndUnbox:
+       case MDefinition::Opcode::LoadElementHole:
+       case MDefinition::Opcode::StoreElement:
+       case MDefinition::Opcode::StoreHoleValueElement:
++      case MDefinition::Opcode::LoadUnboxedScalar:
++      case MDefinition::Opcode::StoreUnboxedScalar:
++      case MDefinition::Opcode::StoreTypedArrayElementHole:
++      case MDefinition::Opcode::LoadDataViewElement:
++      case MDefinition::Opcode::StoreDataViewElement:
++      case MDefinition::Opcode::AtomicTypedArrayElementBinop:
++      case MDefinition::Opcode::AtomicExchangeTypedArrayElement:
++      case MDefinition::Opcode::CompareExchangeTypedArrayElement:
+       case MDefinition::Opcode::InitializedLength:
++      case MDefinition::Opcode::SetInitializedLength:
+       case MDefinition::Opcode::ArrayLength:
+       case MDefinition::Opcode::BoundsCheck:
+       case MDefinition::Opcode::GuardElementNotHole:
+@@ -4449,11 +4448,25 @@ static bool NeedsKeepAlive(MInstruction* slotsOrElements, MInstruction* use) {
+       case MDefinition::Opcode::SpectreMaskIndex:
+       case MDefinition::Opcode::DebugEnterGCUnsafeRegion:
+       case MDefinition::Opcode::DebugLeaveGCUnsafeRegion:
+-        iter++;
+         break;
++      case MDefinition::Opcode::LoadTypedArrayElementHole: {
++        // Allocating a BigInt can GC, so we have to keep the object alive.
++        auto* loadIns = ins->toLoadTypedArrayElementHole();
++        if (Scalar::isBigIntType(loadIns->arrayType())) {
++          return true;
++        }
++        break;
++      }
+       default:
+         return true;
+     }
++
++    if (ins == use) {
++      // We didn't find any instructions in range [slotsOrElements, use] that
++      // can GC.
++      return false;
++    }
++    iter++;
+   }
+ 
+   MOZ_CRASH("Unreachable");
+@@ -4512,13 +4525,6 @@ bool jit::AddKeepAliveInstructions(MIRGraph& graph) {
+ 
+         if (!NeedsKeepAlive(ins, use)) {
+ #ifdef DEBUG
+-          // These two instructions don't start a GC unsafe region, because they
+-          // overwrite their elements register at the very start. This ensures
+-          // there's no invalidated elements value kept on the stack.
+-          if (use->isApplyArray() || use->isConstructArray()) {
+-            continue;
+-          }
+-
+           if (!graph.alloc().ensureBallast()) {
+             return false;
+           }
+-- 
+2.43.0
+

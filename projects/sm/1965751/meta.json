@@ -1,0 +1,36 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1965751",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/gc/Nursery.h",
+    "js/src/gc/Tenuring.cpp",
+    "js/src/vm/StringType.cpp"
+  ],
+  "target_subdir": [
+    "js/src/gc",
+    "js/src/vm"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Tenuring promotion of a rope/dependent-string whose base pointer also needed promotion left the dependent string holding the un-promoted (old, nursery) base pointer, while the GC's post-barrier list had already been emptied \u2192 next minor GC walked the dependent string, computed the (asBits_ & CellAlignMask) of the freed nursery cell and hit the Cell.h:109 reserved-mask assertion (UAF surface). Fix: always update to promoted root base string and post-barrier (git 0f4762548281 r=jonco, multi-file: gc/Tenuring.cpp, gc/Nursery.h, vm/StringType.cpp).",
+  "fix_commits": [
+    "0f4762548281"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-0f4762548281.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1965751 fix",
+      "source_commit": "0f4762548281",
+      "commit": "0f4762548281",
+      "url": "https://github.com/mozilla/gecko-dev/commit/0f4762548281",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/0f4762548281"
+    }
+  ],
+  "vrp": null
+}

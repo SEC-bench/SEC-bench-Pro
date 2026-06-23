@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:438786702",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--sandbox-fuzzing --expose-externalize-string",
+  "target_source_files": [
+    "src/objects/string-inl.h"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Out-of-bounds read",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A heap-buffer-overflow (out-of-bounds read) vulnerability exists in V8's String::Utf8Length function in src/objects/string-inl.h. The root cause is a type confusion triggered by corrupting the Map of an ExternalOneByteString to make V8 treat it as an ExternalTwoByteString. When a one-byte string is externalized via externalizeString(), a backing buffer of length N bytes is allocated. Using the V8 sandbox memory API (Sandbox.MemoryView with --sandbox-fuzzing), an attacker can overwrite the string's Map field with a two-byte external string map ID. Subsequently, when String::Utf8Length is called (e.g., via console.log), it invokes GetFlatContent which dispatches via DispatchToSpecificType using the corrupted Map, casting the object to ExternalTwoByteString and returning a FlatContent with a const uint16_t* pointer to the original N-byte buffer. The Utf8Length function then iterates over N uint16_t elements (requiring 2*N bytes), but the backing buffer is only N bytes, resulting in an OOB read of N bytes past the end of the allocation.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit 8c815e898fe13f9ed436825a77399561597cd708 for fixed-image builds.",
+      "context": "duplicate-fix",
+      "evidence_lineno": 0,
+      "evidence_text": "Duplicate of issue 329781444; CL cages external strings in memory-corruption-api builds.",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/7269585",
+      "cl": 7269585,
+      "commit": "8c815e898fe13f9ed436825a77399561597cd708",
+      "patchset": 13,
+      "source_commit": "8c815e898fe13f9ed436825a77399561597cd708",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7269585",
+      "source_cl": 7269585,
+      "source_ref": "refs/changes/85/7269585/13",
+      "source_patchset": 13
+    }
+  ]
+}

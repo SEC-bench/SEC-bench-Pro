@@ -1,0 +1,3 @@
+Verified with `out/x64.asan/d8 --sandbox-testing --allow-natives-syntax poc.js` in `hwiwonlee/v8.x86_64:445209324`.
+
+The standalone run reports `## V8 sandbox violation detected!` and then faults at `0x424242424242`, which matches the report's JS dispatch table PC-control / sandbox-bypass behavior. `output.txt` contains the matching crash transcript.

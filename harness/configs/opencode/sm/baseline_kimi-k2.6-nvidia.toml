@@ -1,0 +1,271 @@
+# Example OpenCode harness config.
+#
+# Run from the repo root:
+#   uv run harness/eval_opencode.py harness/configs/opencode/sm/config.example.toml
+#
+# Paths below are resolved relative to the harness/ directory, matching the
+# Codex and Claude harness configs.
+
+# Model/provider -------------------------------------------------------------
+#
+# The harness builds the OpenCode model reference as:
+#   "<provider-prefix>/<model>"
+#
+# For this example, api="moonshot-cn" and model="kimi-k2.6" become:
+#   moonshotai-cn/kimi-k2.6
+#
+# Supported api values:
+#   opencode      -> opencode/<model>
+#   openrouter    -> openrouter/<model>
+#   moonshot      -> moonshotai/<model>
+#   moonshot-cn   -> moonshotai-cn/<model>
+#   openai        -> openai/<model>
+#   nvidia        -> nvidia/<model>
+#   bedrock       -> amazon-bedrock/<model>
+#
+# Required host credentials are forwarded into the Docker container:
+#   openrouter: OPENROUTER_API_KEY
+#   moonshot/moonshot-cn: MOONSHOT_API_KEY
+#   openai: OPENAI_API_KEY
+#   nvidia: NVIDIA_API_KEY
+#   bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN,
+#            and AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
+# NVIDIA namespaces third-party models by lab, so Kimi K2.6's id on NVIDIA's
+# API is "moonshotai/kimi-k2.6" (NOT "kimi-k2.6"). With api="nvidia" the harness
+# builds the ref "nvidia/moonshotai/kimi-k2.6".
+model = "moonshotai/kimi-k2.6"
+api = "nvidia"
+
+# Benchmark selection --------------------------------------------------------
+#
+# instances are SpiderMonkey issue/case ids. Each id must have metadata and Docker image
+# information under images_dir.
+instances = [
+    "1675905",
+    "1736307",
+    "1736310",
+    "1739972",
+    "1791520",
+    "1791975",
+    "1796901",
+    "1804626",
+    "1810711",
+    "1814899",
+    "1820543",
+    "1821959",
+    "1827073",
+    "1834711",
+    "1838587",
+    "1841119",
+    "1842617",
+    "1851569",
+    "1852218",
+    "1854068",
+    "1862473",
+    "1863391",
+    "1871089",
+    "1871618",
+    "1875795",
+    "1878261",
+    "1879237",
+    "1880719",
+    "1882751",
+    "1883542",
+    "1884427",
+    "1884518",
+    "1884552",
+    "1884887",
+    "1885775",
+    "1885828",
+    "1885829",
+    "1886683",
+    "1886849",
+    "1888614",
+    "1888892",
+    "1889317",
+    "1895086",
+    "1895123",
+    "1901411",
+    "1902983",
+    "1903041",
+    "1903219",
+    "1904644",
+    "1908631",
+    "1911909",
+    "1912715",
+    "1914009",
+    "1914475",
+    "1917807",
+    "1919246",
+    "1926235",
+    "1929623",
+    "1933023",
+    "1934365",
+    "1934423",
+    "1942648",
+    "1942881",
+    "1945318",
+    "1946004",
+    "1952215",
+    "1954042",
+    "1965751",
+    "1966612",
+    "1966614",
+    "1968423",
+    "1970095",
+    "1970811",
+    "1979359",
+    "1985224",
+    "1985765",
+    "1987290",
+    "1987481",
+    "1987624",
+    "1988967",
+    "1989978",
+    "1992130",
+    "1992902",
+    "1994994",
+    "1998050",
+    "2000469",
+    "2003588",
+    "2003589",
+    "2009303",
+    "2010940",
+    "2010943",
+    "2011069",
+    "2012018",
+    "2013165",
+    "2013543",
+    "2013549",
+    "2013560",
+    "2013562",
+    "2013741",
+    "2019813",
+    "2023007",
+    "2023024",
+    "2024918",
+    "2029065",
+]
+
+# Runtime and input paths -----------------------------------------------------
+#
+# outdir receives one timestamped run directory per invocation.
+# timeout is per instance, in seconds.
+# prompt_template is rendered into prompt.txt.
+# agents_md is copied into the container worktree as AGENTS.md and also embedded
+# in the generated OpenCode agent config.
+# images_dir points at benchmark metadata directories, not Docker images.
+outdir = "output/sm/opencode/example"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_sm.j2"
+agents_md = "../prompts/baseline/AGENTS_sm.j2"
+images_dir = "../projects/sm"
+
+# Tracking and artifacts ------------------------------------------------------
+#
+# tracking:
+#   none  -> no issue tracking setup
+#   beads -> initialize bd sqlite tracking inside the worktree
+#   acov  -> enable acov shims; also set acov_path and optionally acov_subsystems
+#
+# opencode_artifacts:
+#   compact -> default; saves trajectory/, opencode_session/ continuation bundle,
+#              reasoning/, prompt/config/stdout, worktree diffs, audit files,
+#              and results.
+#   debug   -> compact plus raw OpenCode DB/WAL/SHM, storage, logs, tool output,
+#              snapshots, and full project .opencode. This can be much larger.
+tracking = "none"
+opencode_artifacts = "compact"
+# acov_path = "../acov"
+# acov_subsystems = "v8"
+
+# OpenCode run settings -------------------------------------------------------
+#
+# output_format is passed to `opencode run --format`. The latest OpenCode CLI
+# documents: default or json. Keep json so the harness router can render raw
+# tool calls, reasoning parts, and usage events.
+output_format = "json"
+
+# Reasoning and provider options ---------------------------------------------
+#
+# reasoning_effort is written as the documented OpenCode agent provider option:
+#   agent.<agent_name>.reasoningEffort
+#
+# This is intentionally separate from OpenCode's model variant mechanism.
+# Kimi models currently use provider options for reasoning control; do not set
+# variant="high" unless OpenCode reports that the selected model supports that
+# exact variant.
+reasoning_effort = "high"
+
+# Optional provider-specific options are written directly into the generated
+# agent config, alongside reasoningEffort, so use the provider's documented
+# camelCase option names.
+# [agent_options]
+# reasoningEffort = "high"
+# textVerbosity = "low"
+
+# Optional OpenCode model variant. Only enable when the selected model/provider
+# exposes the named variant in OpenCode.
+# variant = "provider-specific-variant"
+
+# Optional harness/OpenCode settings -----------------------------------------
+#
+# opencode_cli: CLI command available inside each Docker image.
+# agent_name: generated OpenCode primary agent name.
+# privileged: run Docker containers with --privileged when a target requires it.
+# skill_directory: local directory copied to worktree/.opencode/skills.
+# steps: maximum OpenCode agentic iterations before forcing a text-only response.
+# opencode_config: advanced raw config override, deep-merged into generated
+#                  project-root opencode.json.
+# opencode_cli = "opencode"
+# agent_name = "secbench"
+# privileged = false
+# skill_directory = ".agents/skills"
+steps = 10
+
+# The harness disables OpenCode's per-edit git snapshots by default (writes
+# snapshot = false into the generated opencode.json) to avoid overloading the
+# large benchmark worktrees. Re-enable here only if you need them.
+
+# Permissions ----------------------------------------------------------------
+#
+# The harness uses this table by default if [permission] is omitted.
+#
+# Built-in tools from https://opencode.ai/docs/tools/#built-in:
+#   bash, edit, write, read, grep, glob, lsp, apply_patch, skill, todowrite,
+#   webfetch, websearch, question
+#
+# Permission notes from the OpenCode docs:
+#   - write, apply_patch, and multiedit are controlled by the edit permission.
+#   - websearch is only available when the provider/environment enables it.
+#   - question is denied so the eval cannot wait for user input.
+#   - webfetch/websearch are denied for reproducibility and offline benchmark
+#     scope. The agent can still search local code with grep/glob/read/bash.
+#   - doom_loop, external_directory, and task are documented permission keys,
+#     not built-in tools. They are allowed to keep container runs autonomous.
+#   - The harness intentionally does not pass unsupported approval-bypass CLI
+#     flags. Autonomy is configured here in opencode.json instead.
+#   - codesearch is listed on the permissions page as web/code search, but it
+#     is not a built-in tool on the tools page, so it is intentionally omitted
+#     here. Add `codesearch = "deny"` if your OpenCode build exposes it.
+#
+[permission]
+bash = "allow"
+edit = "allow"
+grep = "allow"
+glob = "allow"
+lsp = "allow"
+skill = "allow"
+todowrite = "allow"
+webfetch = "deny"
+websearch = "deny"
+question = "deny"
+doom_loop = "allow"
+external_directory = "allow"
+task = "allow"
+
+[permission.read]
+"*" = "allow"
+"*.env" = "deny"
+"*.env.*" = "deny"
+"*.env.example" = "allow"

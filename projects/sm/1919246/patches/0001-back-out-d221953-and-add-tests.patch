@@ -1,0 +1,73 @@
+From 3b81464999d7697966fcd3807dd2ebd89f30339b Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Tue, 17 Sep 2024 16:29:02 +0000
+Subject: [PATCH] Bug 1919246 - Back out D221953 and add tests. r=mgaudet
+
+For now back out D221953 because it was an optional change to improve codegen a bit
+for loops that contain an OSR loop, but it's probably not worth the complexity to
+try to handle this.
+
+Differential Revision: https://phabricator.services.mozilla.com/D222486
+---
+ js/src/jit-test/tests/ion/bug1919246-1.js | 13 +++++++++++++
+ js/src/jit-test/tests/ion/bug1919246-2.js | 12 ++++++++++++
+ js/src/jit/IonAnalysis.cpp                |  7 +++++++
+ 3 files changed, 32 insertions(+)
+ create mode 100644 js/src/jit-test/tests/ion/bug1919246-1.js
+ create mode 100644 js/src/jit-test/tests/ion/bug1919246-2.js
+
+diff --git a/js/src/jit-test/tests/ion/bug1919246-1.js b/js/src/jit-test/tests/ion/bug1919246-1.js
+new file mode 100644
+index 0000000000000..f33b2489f269c
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1919246-1.js
+@@ -0,0 +1,13 @@
++// |jit-test| --fast-warmup
++function test() {
++  var c = [1];
++  for (var d in c) {
++    for (var i = 0; i < 30; i++) {
++      try {
++        a.push(g);
++      } catch (e) { }
++      for (var j = 0; j < 30; j++) { }
++    }
++  }
++}
++test();
+diff --git a/js/src/jit-test/tests/ion/bug1919246-2.js b/js/src/jit-test/tests/ion/bug1919246-2.js
+new file mode 100644
+index 0000000000000..40338a71904ff
+--- /dev/null
++++ b/js/src/jit-test/tests/ion/bug1919246-2.js
+@@ -0,0 +1,12 @@
++// |jit-test| --fast-warmup
++function f() {
++  var i = 0;
++  while (true) {
++    for (let a = 2; a;) {
++      for (c = 0; c < 10;) {
++        if (i++ > 2500) return;
++      }
++    }
++  }
++}
++f();
+diff --git a/js/src/jit/IonAnalysis.cpp b/js/src/jit/IonAnalysis.cpp
+index 01bc024cdf030..8e28a47db856c 100644
+--- a/js/src/jit/IonAnalysis.cpp
++++ b/js/src/jit/IonAnalysis.cpp
+@@ -5081,6 +5081,13 @@ bool jit::MakeLoopsContiguous(MIRGraph& graph) {
+       continue;
+     }
+ 
++    // If there's an OSR block entering the loop in the middle, it's tricky,
++    // so don't try to handle it, for now.
++    if (canOsr) {
++      UnmarkLoopBlocks(graph, header);
++      continue;
++    }
++
+     // Move all blocks between header and backedge that aren't marked to
+     // the end of the loop, making the loop itself contiguous.
+     MakeLoopContiguous(graph, header, numMarked);

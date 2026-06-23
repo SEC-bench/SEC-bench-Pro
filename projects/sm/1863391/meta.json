@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1863391",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/gc/Barrier.h",
+    "js/src/gc/WeakMap-inl.h",
+    "js/src/gc/WeakMap.h"
+  ],
+  "target_subdir": [
+    "js/src/gc"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Bug 1863391 (Assertion failure: CurrentThreadCanAccessRuntime(cell->runtimeFromAnyThread()) || CurrentThreadIsPerformingGC(), at gc/S). sec-high; fix landed in git 5d939d9990c7. RCA fields TBD by rca agent (run git show 5d939d9990c7 inside vuln image). Auto-staged 2026-05.",
+  "fix_commits": [
+    "5d939d9990c7"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-5d939d9990c7.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1863391 fix",
+      "source_commit": "5d939d9990c7",
+      "commit": "5d939d9990c7",
+      "url": "https://github.com/mozilla/gecko-dev/commit/5d939d9990c7",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/5d939d9990c7"
+    }
+  ],
+  "vrp": null
+}

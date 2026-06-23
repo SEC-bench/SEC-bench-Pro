@@ -1,0 +1,623 @@
+diff --git a/src/builtins/builtins-arraybuffer.cc b/src/builtins/builtins-arraybuffer.cc
+index 07181645698..b747035ae38 100644
+--- a/src/builtins/builtins-arraybuffer.cc
++++ b/src/builtins/builtins-arraybuffer.cc
+@@ -39,74 +39,94 @@ namespace internal {
+ 
+ namespace {
+ 
++// Tries to allocate a BackingStore given the input configuration. Either
++// returns the BackingStore or a message template that should be thrown as
++// RangeError.
++std::pair<std::unique_ptr<BackingStore>, std::optional<MessageTemplate>>
++TryAllocateBackingStore(Isolate* isolate, SharedFlag shared,
++                        ResizableFlag resizable, DirectHandle<Object> length,
++                        DirectHandle<Object> max_length,
++                        InitializedFlag initialized) {
++  DisallowJavascriptExecution no_js(isolate);
++
++  size_t byte_length;
++  size_t max_byte_length = 0;
++  std::unique_ptr<BackingStore> backing_store;
++
++  if (!TryNumberToSize(*length, &byte_length) ||
++      byte_length > JSArrayBuffer::kMaxByteLength) {
++    return {nullptr, MessageTemplate::kInvalidArrayBufferLength};
++  }
++
++  switch (resizable) {
++    case ResizableFlag::kNotResizable:
++      backing_store =
++          BackingStore::Allocate(isolate, byte_length, shared, initialized);
++      break;
++    case ResizableFlag::kResizable:
++      static_assert(JSArrayBuffer::kMaxByteLength ==
++                    JSTypedArray::kMaxByteLength);
++      if (!TryNumberToSize(*max_length, &max_byte_length) ||
++          max_byte_length > JSArrayBuffer::kMaxByteLength) {
++        return {nullptr, MessageTemplate::kInvalidArrayBufferMaxLength};
++      }
++      if (byte_length > max_byte_length) {
++        return {nullptr, MessageTemplate::kInvalidArrayBufferMaxLength};
++      }
++
++      size_t page_size, initial_pages, max_pages;
++      const auto maybe_range_error =
++          JSArrayBuffer::GetResizableBackingStorePageConfigurationImpl(
++              isolate, byte_length, max_byte_length, &page_size, &initial_pages,
++              &max_pages);
++      if (maybe_range_error.has_value()) {
++        return {nullptr, maybe_range_error.value()};
++      }
++      backing_store = BackingStore::TryAllocateAndPartiallyCommitMemory(
++          isolate, byte_length, max_byte_length, page_size, initial_pages,
++          max_pages, WasmMemoryFlag::kNotWasm, shared);
++      break;
++  }
++
++  // Range errors bailed out earlier; only the failing allocation needs to be
++  // caught here.
++  if (!backing_store) {
++    return {nullptr, MessageTemplate::kArrayBufferAllocationFailed};
++  }
++  return {std::move(backing_store), std::nullopt};
++}
++
+ Tagged<Object> ConstructBuffer(Isolate* isolate,
+                                DirectHandle<JSFunction> target,
+                                DirectHandle<JSReceiver> new_target,
+                                DirectHandle<Object> length,
+                                DirectHandle<Object> max_length,
+                                InitializedFlag initialized) {
+-  SharedFlag shared = *target != target->native_context()->array_buffer_fun()
+-                          ? SharedFlag::kShared
+-                          : SharedFlag::kNotShared;
+-  ResizableFlag resizable = max_length.is_null() ? ResizableFlag::kNotResizable
+-                                                 : ResizableFlag::kResizable;
++  // We first try to convert the sizes and collect any possible range errors. If
++  // no errors are observable we create the BackingStore before the
++  // JSArrayBuffer to avoid a complex dance during setup. We then always create
++  // the AB before throwing a possible error as the creation is observable.
++  const SharedFlag shared =
++      *target != target->native_context()->array_buffer_fun()
++          ? SharedFlag::kShared
++          : SharedFlag::kNotShared;
++  const ResizableFlag resizable = max_length.is_null()
++                                      ? ResizableFlag::kNotResizable
++                                      : ResizableFlag::kResizable;
++  // BackingStore allocation may GC which is not observable itself.
++  auto [backing_store, range_error] = TryAllocateBackingStore(
++      isolate, shared, resizable, length, max_length, initialized);
+   DirectHandle<JSObject> result;
+   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+       isolate, result,
+       JSObject::New(target, new_target, {}, NewJSObjectType::kAPIWrapper));
+   auto array_buffer = Cast<JSArrayBuffer>(result);
+-  // Ensure that all fields are initialized because BackingStore::Allocate is
+-  // allowed to GC. Note that we cannot move the allocation of the ArrayBuffer
+-  // after BackingStore::Allocate because of the spec.
+-  array_buffer->Setup(shared, resizable, nullptr, isolate);
+-
+-  size_t byte_length;
+-  size_t max_byte_length = 0;
+-  if (!TryNumberToSize(*length, &byte_length) ||
+-      byte_length > JSArrayBuffer::kMaxByteLength) {
+-    // ToNumber failed.
+-    THROW_NEW_ERROR_RETURN_FAILURE(
+-        isolate, NewRangeError(MessageTemplate::kInvalidArrayBufferLength));
+-  }
+-
+-  std::unique_ptr<BackingStore> backing_store;
+-  if (resizable == ResizableFlag::kNotResizable) {
+-    backing_store =
+-        BackingStore::Allocate(isolate, byte_length, shared, initialized);
+-    max_byte_length = byte_length;
+-  } else {
+-    static_assert(JSArrayBuffer::kMaxByteLength ==
+-                  JSTypedArray::kMaxByteLength);
+-    if (!TryNumberToSize(*max_length, &max_byte_length) ||
+-        max_byte_length > JSArrayBuffer::kMaxByteLength) {
+-      THROW_NEW_ERROR_RETURN_FAILURE(
+-          isolate,
+-          NewRangeError(MessageTemplate::kInvalidArrayBufferMaxLength));
+-    }
+-    if (byte_length > max_byte_length) {
+-      THROW_NEW_ERROR_RETURN_FAILURE(
+-          isolate,
+-          NewRangeError(MessageTemplate::kInvalidArrayBufferMaxLength));
+-    }
+-
+-    size_t page_size, initial_pages, max_pages;
+-    MAYBE_RETURN(JSArrayBuffer::GetResizableBackingStorePageConfiguration(
+-                     isolate, byte_length, max_byte_length, kThrowOnError,
+-                     &page_size, &initial_pages, &max_pages),
+-                 ReadOnlyRoots(isolate).exception());
+-
+-    backing_store = BackingStore::TryAllocateAndPartiallyCommitMemory(
+-        isolate, byte_length, max_byte_length, page_size, initial_pages,
+-        max_pages, WasmMemoryFlag::kNotWasm, shared);
++  const bool backing_store_creation_failed = !backing_store;
++  array_buffer->Setup(shared, resizable, std::move(backing_store), isolate);
++  if (backing_store_creation_failed) {
++    CHECK(range_error.has_value());
++    THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewRangeError(range_error.value()));
+   }
+-  if (!backing_store) {
+-    // Allocation of backing store failed.
+-    THROW_NEW_ERROR_RETURN_FAILURE(
+-        isolate, NewRangeError(MessageTemplate::kArrayBufferAllocationFailed));
+-  }
+-
+-  array_buffer->Attach(std::move(backing_store));
+-  array_buffer->set_max_byte_length(max_byte_length);
+   return *array_buffer;
+ }
+ 
+diff --git a/src/heap/array-buffer-sweeper.cc b/src/heap/array-buffer-sweeper.cc
+index a02569759f5..636ab92acd3 100644
+--- a/src/heap/array-buffer-sweeper.cc
++++ b/src/heap/array-buffer-sweeper.cc
+@@ -8,7 +8,6 @@
+ #include <memory>
+ #include <utility>
+ 
+-#include "array-buffer-sweeper.h"
+ #include "src/base/logging.h"
+ #include "src/heap/gc-tracer-inl.h"
+ #include "src/heap/gc-tracer.h"
+@@ -348,19 +347,18 @@ void ArrayBufferSweeper::ReleaseAll(ArrayBufferList* list) {
+   *list = ArrayBufferList(list->age_);
+ }
+ 
+-void ArrayBufferSweeper::Append(Tagged<JSArrayBuffer> object,
+-                                ArrayBufferExtension* extension) {
++void ArrayBufferSweeper::Append(ArrayBufferExtension* extension) {
+   size_t bytes = extension->accounting_length();
+ 
+   FinishIfDone();
+ 
+-  // `Heap::InYoungGeneration` during full GC with sticky markbits is generally
+-  // inaccurate. However, a full GC will sweep both lists and promote all to
+-  // old, so it doesn't matter which list initially holds the extension.
+-  if (HeapLayout::InYoungGeneration(object)) {
+-    young_.Append(extension);
+-  } else {
+-    old_.Append(extension);
++  switch (extension->age()) {
++    case ArrayBufferExtension::Age::kYoung:
++      young_.Append(extension);
++      break;
++    case v8::internal::ArrayBufferExtension::Age::kOld:
++      old_.Append(extension);
++      break;
+   }
+ 
+   IncrementExternalMemoryCounters(bytes);
+@@ -370,9 +368,8 @@ void ArrayBufferSweeper::Resize(ArrayBufferExtension* extension,
+                                 int64_t delta) {
+   FinishIfDone();
+ 
+-  ArrayBufferExtension::AccountingState previous_value =
++  const ArrayBufferExtension::AccountingState previous_value =
+       extension->UpdateAccountingLength(delta);
+-
+   UpdateApproximateBytes(delta, previous_value.age());
+   if (delta > 0) {
+     IncrementExternalMemoryCounters(delta);
+diff --git a/src/heap/array-buffer-sweeper.h b/src/heap/array-buffer-sweeper.h
+index 4ea113c705a..63922f0f762 100644
+--- a/src/heap/array-buffer-sweeper.h
++++ b/src/heap/array-buffer-sweeper.h
+@@ -64,8 +64,8 @@ class ArrayBufferSweeper final {
+                     TreatAllYoungAsPromoted treat_all_young_as_promoted);
+   void EnsureFinished();
+ 
+-  // Track the given ArrayBufferExtension for the given JSArrayBuffer.
+-  void Append(Tagged<JSArrayBuffer> object, ArrayBufferExtension* extension);
++  // Track the given ArrayBufferExtension.
++  void Append(ArrayBufferExtension* extension);
+ 
+   void Resize(ArrayBufferExtension* extension, int64_t delta);
+ 
+diff --git a/src/heap/heap.cc b/src/heap/heap.cc
+index 8688089581b..4e91da999d9 100644
+--- a/src/heap/heap.cc
++++ b/src/heap/heap.cc
+@@ -4196,10 +4196,9 @@ void Heap::RemoveNearHeapLimitCallback(v8::NearHeapLimitCallback callback,
+   UNREACHABLE();
+ }
+ 
+-void Heap::AppendArrayBufferExtension(Tagged<JSArrayBuffer> object,
+-                                      ArrayBufferExtension* extension) {
++void Heap::AppendArrayBufferExtension(ArrayBufferExtension* extension) {
+   // ArrayBufferSweeper is managing all counters and updating Heap counters.
+-  array_buffer_sweeper_->Append(object, extension);
++  array_buffer_sweeper_->Append(extension);
+ }
+ 
+ void Heap::ResizeArrayBufferExtension(ArrayBufferExtension* extension,
+diff --git a/src/heap/heap.h b/src/heap/heap.h
+index cf052b11ef2..db71d2ebf92 100644
+--- a/src/heap/heap.h
++++ b/src/heap/heap.h
+@@ -563,7 +563,7 @@ class Heap final {
+       double threshold_percent);
+ 
+   V8_EXPORT_PRIVATE void AppendArrayBufferExtension(
+-      Tagged<JSArrayBuffer> object, ArrayBufferExtension* extension);
++      ArrayBufferExtension* extension);
+   V8_EXPORT_PRIVATE void ResizeArrayBufferExtension(
+       ArrayBufferExtension* extension, int64_t delta);
+   void DetachArrayBufferExtension(ArrayBufferExtension* extension);
+diff --git a/src/objects/js-array-buffer.cc b/src/objects/js-array-buffer.cc
+index 1dad58118ef..113af40eb66 100644
+--- a/src/objects/js-array-buffer.cc
++++ b/src/objects/js-array-buffer.cc
+@@ -47,13 +47,17 @@ bool CanonicalNumericIndexString(Isolate* isolate,
+ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
+                           std::shared_ptr<BackingStore> backing_store,
+                           Isolate* isolate) {
++  if (shared == SharedFlag::kShared) {
++    isolate->CountUsage(
++        v8::Isolate::UseCounterFeature::kSharedArrayBufferConstructed);
++  }
+   clear_padding();
++  init_extension();
+   set_detach_key(ReadOnlyRoots(isolate).undefined_value());
+   set_bit_field(0);
+   set_is_shared(shared == SharedFlag::kShared);
+   set_is_resizable_by_js(resizable == ResizableFlag::kResizable);
+   set_is_detachable(shared != SharedFlag::kShared);
+-  init_extension();
+   SetupLazilyInitializedCppHeapPointerField(
+       JSAPIObjectWithEmbedderSlots::kCppHeapWrappableOffset);
+   for (int i = 0; i < v8::ArrayBuffer::kEmbedderFieldCount; i++) {
+@@ -63,29 +67,19 @@ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
+     set_backing_store(isolate, EmptyBackingStoreBuffer());
+     set_byte_length(0);
+     set_max_byte_length(0);
+-  } else {
+-    Attach(std::move(backing_store));
+-  }
+-  if (shared == SharedFlag::kShared) {
+-    isolate->CountUsage(
+-        v8::Isolate::UseCounterFeature::kSharedArrayBufferConstructed);
++    return;
+   }
+-}
+-
+-void JSArrayBuffer::Attach(std::shared_ptr<BackingStore> backing_store) {
+-  DCHECK_NOT_NULL(backing_store);
++  // Rest of the code here deals with attaching an the BackingStore.
+   DCHECK_EQ(is_shared(), backing_store->is_shared());
+   DCHECK_EQ(is_resizable_by_js(), backing_store->is_resizable_by_js());
+   DCHECK_IMPLIES(
+       !backing_store->is_wasm_memory() && !backing_store->is_resizable_by_js(),
+       backing_store->byte_length() == backing_store->max_byte_length());
+-  DCHECK(!was_detached());
+-  Isolate* isolate = GetIsolate();
+ 
+   void* backing_store_buffer = backing_store->buffer_start();
+   // Wasm memory always needs a backing store; this is guaranteed by reserving
+   // at least one page for the BackingStore (so {IsEmpty()} is always false).
+-  CHECK_IMPLIES(backing_store->is_wasm_memory(), !backing_store->IsEmpty());
++  DCHECK_IMPLIES(backing_store->is_wasm_memory(), !backing_store->IsEmpty());
+   // Non-empty backing stores must start at a non-null pointer.
+   DCHECK_IMPLIES(backing_store_buffer == EmptyBackingStoreBuffer(),
+                  backing_store->IsEmpty());
+@@ -102,6 +96,7 @@ void JSArrayBuffer::Attach(std::shared_ptr<BackingStore> backing_store) {
+       (is_shared() && is_resizable_by_js()) ? 0 : backing_store->byte_length();
+   CHECK_LE(backing_store->byte_length(), kMaxByteLength);
+   set_byte_length(byte_len);
++
+   // For Wasm memories, it is possible for the backing store maximum to be
+   // different from the JSArrayBuffer maximum. The maximum pages allowed on a
+   // Wasm memory are tracked on the Wasm memory object, and not the
+@@ -109,12 +104,12 @@ void JSArrayBuffer::Attach(std::shared_ptr<BackingStore> backing_store) {
+   auto max_byte_len = is_resizable_by_js() ? backing_store->max_byte_length()
+                                            : backing_store->byte_length();
+   set_max_byte_length(max_byte_len);
+-  if (backing_store->is_wasm_memory()) set_is_detachable(false);
+-  ArrayBufferExtension* extension = EnsureExtension();
+-  size_t bytes = backing_store->PerIsolateAccountingLength();
+-  extension->set_accounting_state(bytes, ArrayBufferExtension::Age::kYoung);
+-  extension->set_backing_store(std::move(backing_store));
+-  isolate->heap()->AppendArrayBufferExtension(*this, extension);
++
++  if (backing_store->is_wasm_memory()) {
++    set_is_detachable(false);
++  }
++
++  CreateExtension(isolate, std::move(backing_store));
+ }
+ 
+ Maybe<bool> JSArrayBuffer::Detach(DirectHandle<JSArrayBuffer> buffer,
+@@ -219,12 +214,43 @@ Maybe<bool> JSArrayBuffer::GetResizableBackingStorePageConfiguration(
+   return Just(true);
+ }
+ 
+-ArrayBufferExtension* JSArrayBuffer::EnsureExtension() {
+-  ArrayBufferExtension* extension = this->extension();
+-  if (extension != nullptr) return extension;
++// static
++std::optional<MessageTemplate>
++JSArrayBuffer::GetResizableBackingStorePageConfigurationImpl(
++    Isolate* isolate, size_t byte_length, size_t max_byte_length,
++    size_t* page_size, size_t* initial_pages, size_t* max_pages) {
++  DCHECK_NOT_NULL(page_size);
++  DCHECK_NOT_NULL(initial_pages);
++  DCHECK_NOT_NULL(max_pages);
++
++  *page_size = AllocatePageSize();
++
++  if (!RoundUpToPageSize(byte_length, *page_size, JSArrayBuffer::kMaxByteLength,
++                         initial_pages)) {
++    return MessageTemplate::kInvalidArrayBufferLength;
++  }
++
++  if (!RoundUpToPageSize(max_byte_length, *page_size,
++                         JSArrayBuffer::kMaxByteLength, max_pages)) {
++    return MessageTemplate::kInvalidArrayBufferMaxLength;
++  }
++  return {};
++}
+ 
+-  extension = new ArrayBufferExtension(std::shared_ptr<BackingStore>());
++ArrayBufferExtension* JSArrayBuffer::CreateExtension(
++    Isolate* isolate, std::shared_ptr<BackingStore> backing_store) {
++  // `Heap::InYoungGeneration` during full GC with sticky markbits is generally
++  // inaccurate. However, a full GC will sweep both lists and promote all to
++  // old, so it doesn't matter which list initially holds the extension in this
++  // case.
++  const auto age =
++      HeapLayout::InYoungGeneration(UncheckedCast<JSArrayBuffer>(*this))
++          ? ArrayBufferExtension::Age::kYoung
++          : ArrayBufferExtension::Age::kOld;
++  ArrayBufferExtension* extension =
++      new ArrayBufferExtension(std::move(backing_store), age);
+   set_extension(extension);
++  isolate->heap()->AppendArrayBufferExtension(extension);
+   return extension;
+ }
+ 
+diff --git a/src/objects/js-array-buffer.h b/src/objects/js-array-buffer.h
+index fafeab3850c..ea8c868994f 100644
+--- a/src/objects/js-array-buffer.h
++++ b/src/objects/js-array-buffer.h
+@@ -98,9 +98,6 @@ class JSArrayBuffer
+                                std::shared_ptr<BackingStore> backing_store,
+                                Isolate* isolate);
+ 
+-  // Attaches the backing store to an already constructed empty ArrayBuffer.
+-  // This is intended to be used only in ArrayBufferConstructor builtin.
+-  V8_EXPORT_PRIVATE void Attach(std::shared_ptr<BackingStore> backing_store);
+   // Detach the backing store from this array buffer if it is detachable.
+   // This sets the internal pointer and length to 0 and unregisters the backing
+   // store from the array buffer tracker. If the array buffer is not detachable,
+@@ -129,9 +126,15 @@ class JSArrayBuffer
+       ShouldThrow should_throw, size_t* page_size, size_t* initial_pages,
+       size_t* max_pages);
+ 
+-  // Allocates an ArrayBufferExtension for this array buffer, unless it is
+-  // already associated with an extension.
+-  V8_EXPORT_PRIVATE ArrayBufferExtension* EnsureExtension();
++  static std::optional<MessageTemplate>
++  GetResizableBackingStorePageConfigurationImpl(
++      Isolate* isolate, size_t byte_length, size_t max_byte_length,
++      size_t* page_size, size_t* initial_pages, size_t* max_pages);
++
++  // Allocates an ArrayBufferExtension for this array buffer. This is assumed to
++  // be only called during setup as it always creates a new extension.
++  V8_EXPORT_PRIVATE ArrayBufferExtension* CreateExtension(
++      Isolate* isolate, std::shared_ptr<BackingStore> backing_store);
+ 
+   // Frees the associated ArrayBufferExtension and returns its backing store.
+   std::shared_ptr<BackingStore> RemoveExtension();
+@@ -192,28 +195,26 @@ class ArrayBufferExtension final
+ #else
+     : public Malloced {
+ #endif  // V8_COMPRESS_POINTERS
+-  static constexpr uint64_t kAgeMask = 1;
+-  static constexpr uint64_t kAccountingLengthBitOffset = 1;
+-
+  public:
+   enum class Age : uint8_t { kYoung = 0, kOld = 1 };
+ 
+   // Packs `accounting_length` and `age` into a single integer for consistent
+   // accounting, allowing resize while concurrently sweeping.
+-  struct AccountingState {
++  struct AccountingState final {
+     size_t accounting_length() const {
+-      DCHECK_LE(value >> kAccountingLengthBitOffset,
+-                std::numeric_limits<size_t>::max());
+-      return static_cast<size_t>(value >> kAccountingLengthBitOffset);
++      return AccountingLengthField::decode(value);
+     }
+-    Age age() const { return static_cast<Age>(value & kAgeMask); }
++    Age age() const { return static_cast<Age>(AgeField::decode(value)); }
+ 
+     uint64_t value;
+   };
+ 
+-  ArrayBufferExtension() : backing_store_(std::shared_ptr<BackingStore>()) {}
+-  explicit ArrayBufferExtension(std::shared_ptr<BackingStore> backing_store)
+-      : backing_store_(backing_store) {}
++  ArrayBufferExtension(std::shared_ptr<BackingStore> backing_store,
++                       ArrayBufferExtension::Age age)
++      : backing_store_(std::move(backing_store)),
++        accounting_state_(AccountingLengthField::encode(static_cast<size_t>(
++                              backing_store_->PerIsolateAccountingLength())) |
++                          AgeField::encode(static_cast<uint8_t>(age))) {}
+ 
+   void Mark() { marked_.store(true, std::memory_order_relaxed); }
+   void Unmark() { marked_.store(false, std::memory_order_relaxed); }
+@@ -223,46 +224,39 @@ class ArrayBufferExtension final
+   void YoungMarkPromoted() { set_young_gc_state(GcState::Promoted); }
+   void YoungUnmark() { set_young_gc_state(GcState::Dead); }
+   bool IsYoungMarked() const { return young_gc_state() != GcState::Dead; }
+-
+   bool IsYoungPromoted() const { return young_gc_state() == GcState::Promoted; }
+ 
+   std::shared_ptr<BackingStore> backing_store() { return backing_store_; }
+-  BackingStore* backing_store_raw() { return backing_store_.get(); }
++  void set_backing_store(std::shared_ptr<BackingStore> backing_store) {
++    backing_store_ = std::move(backing_store);
++  }
++  std::shared_ptr<BackingStore> RemoveBackingStore() {
++    return std::move(backing_store_);
++  }
+ 
+   size_t accounting_length() const {
+     return AccountingState{accounting_state_.load(std::memory_order_relaxed)}
+         .accounting_length();
+   }
+-  void set_accounting_state(size_t accounting_length, Age age) {
+-    accounting_state_.store((static_cast<uint64_t>(accounting_length)
+-                             << kAccountingLengthBitOffset) |
+-                                static_cast<uint8_t>(age),
+-                            std::memory_order_relaxed);
+-  }
+-
+   // Applies `delta` to `accounting_length` and returns the AccountingState
+   // before the update.
+   AccountingState UpdateAccountingLength(int64_t delta) {
+-    return {accounting_state_.fetch_add(delta << kAccountingLengthBitOffset,
+-                                        std::memory_order_relaxed)};
++    if (delta >= 0) {
++      return {accounting_state_.fetch_add(
++          AccountingLengthField::encode(static_cast<size_t>(delta)),
++          std::memory_order_relaxed)};
++    }
++    return {accounting_state_.fetch_sub(
++        AccountingLengthField::encode(static_cast<size_t>(-delta)),
++        std::memory_order_relaxed)};
+   }
+-
+   // Clears `accounting_length` and returns the AccountingState before the
+   // update.
+   AccountingState ClearAccountingLength() {
+-    return {accounting_state_.fetch_and(kAgeMask, std::memory_order_relaxed)};
+-  }
+-
+-  std::shared_ptr<BackingStore> RemoveBackingStore() {
+-    return std::move(backing_store_);
+-  }
+-
+-  void set_backing_store(std::shared_ptr<BackingStore> backing_store) {
+-    backing_store_ = std::move(backing_store);
++    return {accounting_state_.fetch_and(AgeField::kMask,
++                                        std::memory_order_relaxed)};
+   }
+ 
+-  void reset_backing_store() { backing_store_.reset(); }
+-
+   ArrayBufferExtension* next() const { return next_; }
+   void set_next(ArrayBufferExtension* extension) { next_ = extension; }
+ 
+@@ -272,20 +266,19 @@ class ArrayBufferExtension final
+   }
+   // Updates `age` and returns the AccountingState before the update.
+   AccountingState SetOld() {
+-    return {accounting_state_.fetch_or(kAgeMask, std::memory_order_relaxed)};
++    return {
++        accounting_state_.fetch_or(AgeField::kMask, std::memory_order_relaxed)};
+   }
+   AccountingState SetYoung() {
+-    return {accounting_state_.fetch_and(~kAgeMask, std::memory_order_relaxed)};
++    return {accounting_state_.fetch_and(~AgeField::kMask,
++                                        std::memory_order_relaxed)};
+   }
+ 
+  private:
+   enum class GcState : uint8_t { Dead = 0, Copied, Promoted };
+ 
+-  std::atomic<bool> marked_{false};
+-  std::atomic<GcState> young_gc_state_{GcState::Dead};
+-  std::shared_ptr<BackingStore> backing_store_;
+-  ArrayBufferExtension* next_ = nullptr;
+-  std::atomic<uint64_t> accounting_state_{kAgeMask};
++  using AgeField = base::BitField<uint8_t, 0, 1, uint64_t>;
++  using AccountingLengthField = AgeField::Next<size_t, 63>;
+ 
+   GcState young_gc_state() const {
+     return young_gc_state_.load(std::memory_order_relaxed);
+@@ -294,6 +287,12 @@ class ArrayBufferExtension final
+   void set_young_gc_state(GcState value) {
+     young_gc_state_.store(value, std::memory_order_relaxed);
+   }
++
++  std::shared_ptr<BackingStore> backing_store_;
++  ArrayBufferExtension* next_ = nullptr;
++  std::atomic<uint64_t> accounting_state_;
++  std::atomic<bool> marked_{false};
++  std::atomic<GcState> young_gc_state_{GcState::Dead};
+ };
+ 
+ class JSArrayBufferView
+diff --git a/test/unittests/heap/heap-unittest.cc b/test/unittests/heap/heap-unittest.cc
+index e9e827dbca9..a3b5d2f0b86 100644
+--- a/test/unittests/heap/heap-unittest.cc
++++ b/test/unittests/heap/heap-unittest.cc
+@@ -592,62 +592,6 @@ TEST_F(HeapTestWithRandomGCInterval, AllocationTimeout) {
+ }
+ #endif  // V8_ENABLE_ALLOCATION_TIMEOUT
+ 
+-TEST_F(HeapTest, Regress341769455) {
+-#ifdef V8_COMPRESS_POINTERS
+-  if (!v8_flags.incremental_marking) return;
+-  if (!v8_flags.minor_ms) return;
+-  Isolate* iso = isolate();
+-  bool original_concurrent_minor_ms_marking_value =
+-      v8_flags.concurrent_minor_ms_marking;
+-  ManualGCScope manual_gc_scope(iso);
+-  v8_flags.concurrent_minor_ms_marking =
+-      original_concurrent_minor_ms_marking_value;
+-  Heap* heap = iso->heap();
+-  HandleScope outer(iso);
+-  DirectHandle<JSArrayBuffer> ab;
+-  {
+-    // Make sure new space is empty
+-    InvokeAtomicMajorGC();
+-    ab = iso->factory()
+-             ->NewJSArrayBufferAndBackingStore(
+-                 1, InitializedFlag::kZeroInitialized, AllocationType::kYoung)
+-             .ToHandleChecked();
+-    // Reset the EPT handle to null.
+-    ab->init_extension();
+-    // MinorMS promotes pages that haven't been allocated on since the last GC.
+-    // Force a minor GC to reset the counter of bytes allocated on the page.
+-    InvokeAtomicMinorGC();
+-    // Set up a global to make sure the JSArrayBuffer is visited before the
+-    // atomic pause.
+-    Global<JSArrayBuffer> global(
+-        v8_isolate(), Utils::Convert<JSArrayBuffer, JSArrayBuffer>(ab));
+-    CHECK_EQ(Heap::HeapState::NOT_IN_GC, heap->gc_state());
+-    CHECK(heap->incremental_marking()->IsStopped());
+-    // Start incremental marking such that setting an extension (via
+-    // `EnsureExtension`) triggers a write barrier.
+-    v8_flags.incremental_marking = true;
+-    heap->StartIncrementalMarking(GCFlag::kNoFlags,
+-                                  GarbageCollectionReason::kTesting,
+-                                  GCCallbackFlags::kNoGCCallbackFlags,
+-                                  GarbageCollector::MINOR_MARK_SWEEPER);
+-    CHECK(heap->incremental_marking()->IsMinorMarking());
+-    heap->minor_mark_sweep_collector()->DrainMarkingWorklistForTesting();
+-    ab->EnsureExtension();
+-    heap->AppendArrayBufferExtension(*ab, ab->extension());
+-  }
+-  // Trigger a 2nd minor GC to promote the JSArrayBuffer to old space.
+-  CHECK(HeapLayout::InYoungGeneration(*ab));
+-  InvokeAtomicMinorGC();
+-  CHECK(!HeapLayout::InYoungGeneration(*ab));
+-  // If the EPT entry for the JSArrayBuffer wasn't promoted to the old table, a
+-  // 3rd minor GC will observe it as unmarked (since the owning object is old)
+-  // and free it. The major GC after it will then crash when trying to access
+-  // the extension of the JSArrayBuffer although the entry has been freed.
+-  InvokeAtomicMinorGC();
+-  InvokeAtomicMajorGC();
+-#endif  // V8_COMPRESS_POINTERS
+-}
+-
+ namespace {
+ struct CompactionDisabler {
+   CompactionDisabler() : was_enabled_(v8_flags.compact) {

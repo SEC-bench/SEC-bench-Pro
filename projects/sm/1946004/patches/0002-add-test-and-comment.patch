@@ -1,0 +1,65 @@
+From b99d0f2e83d392c1cb70d9e9cf606427e628a74c Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Thu, 17 Apr 2025 18:51:48 +0000
+Subject: [PATCH] Bug 1946004 - Add test and comment. r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D237531
+---
+ js/src/jit-test/tests/wasm/bug1946004.js | 35 ++++++++++++++++++++++++
+ js/src/wasm/WasmStubs.cpp                |  1 +
+ 2 files changed, 36 insertions(+)
+ create mode 100644 js/src/jit-test/tests/wasm/bug1946004.js
+
+diff --git a/js/src/jit-test/tests/wasm/bug1946004.js b/js/src/jit-test/tests/wasm/bug1946004.js
+new file mode 100644
+index 0000000000000..b7405a5fed45a
+--- /dev/null
++++ b/js/src/jit-test/tests/wasm/bug1946004.js
+@@ -0,0 +1,35 @@
++let code = `
++(module
++  (type (array i32))
++  (func (result i32)
++    i64.const 0
++    i64.const 0
++    call 2
++    drop
++    drop
++    i32.const 0
++    i32.const 0
++    call 1
++    drop)
++  (func (param i32 i32) (result i32 i32)
++    loop (result i32)
++      i32.const 3
++    end
++    loop (result i32)
++      i32.const 4
++    end)
++  (func (param i64 i64) (result i64 i64)
++    loop (result i64)
++      i64.const 0xffff_ffff_ffff_ffff
++    end
++    loop (result i64)
++      i64.const 0xffff_ffff_ffff_ffff
++    end)
++  (export "main" (func 0)))
++`;
++let bin = wasmTextToBinary(code);
++let module = new WebAssembly.Module(bin);
++let instance = new WebAssembly.Instance(module);
++for (var i = 0; i < 10000; i++) {
++  assertEq(instance.exports.main(), 3);
++}
+diff --git a/js/src/wasm/WasmStubs.cpp b/js/src/wasm/WasmStubs.cpp
+index b4e75d1bd1230..d647871e683ce 100644
+--- a/js/src/wasm/WasmStubs.cpp
++++ b/js/src/wasm/WasmStubs.cpp
+@@ -1247,6 +1247,7 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
+       case ValType::I32:
+         GenPrintIsize(DebugChannel::Function, masm, ReturnReg);
+ #ifdef JS_64BIT
++        // boxNonDouble requires a widened int32 value.
+         masm.widenInt32(ReturnReg);
+ #endif
+         masm.boxNonDouble(JSVAL_TYPE_INT32, ReturnReg, JSReturnOperand);

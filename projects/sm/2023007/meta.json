@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:2023007",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/vm/StructuredClone.cpp"
+  ],
+  "target_subdir": [
+    "js/src/vm"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --more-compartments",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "StructuredClone::writeSharedWasmMemory of a cross-compartment wrapper to a WebAssembly.Memory did not enter the target realm before serializing \u2014 the JSContext realm was used, triggering a compartment mismatch on the wrapped object. sec-high. Fix: enter the correct realm in writeSharedWasmMemory (git a38514932bd9, sfink).",
+  "fix_commits": [
+    "a38514932bd9"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-a38514932bd9.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 2023007 fix",
+      "source_commit": "a38514932bd9",
+      "commit": "a38514932bd9",
+      "url": "https://github.com/mozilla/gecko-dev/commit/a38514932bd9",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/a38514932bd9"
+    }
+  ],
+  "vrp": null
+}

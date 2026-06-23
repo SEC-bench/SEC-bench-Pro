@@ -1,0 +1,147 @@
+=================================================================
+==13==ERROR: AddressSanitizer: heap-use-after-free on address 0x7402580553d8 at pc 0x62c366bf4c81 bp 0x7fffdf4b9c10 sp 0x7fffdf4b9c08
+READ of size 8 at 0x7402580553d8 thread T0
+    #0 0x62c366bf4c80 in JS::Realm::unsafeUnbarrieredMaybeGlobal() const /src/gecko-dev/js/src/vm/Realm.h:519:20
+    #1 0x62c366bf4c80 in js::BaseShape::traceChildren(JSTracer*) /src/gecko-dev/js/src/gc/TraceMethods-inl.h:295:35
+    #2 0x62c366bf4c80 in void UpdateCellPointers<js::BaseShape>(js::gc::MovingTracer*, js::BaseShape*) /src/gecko-dev/js/src/gc/Compacting.cpp:488:9
+    #3 0x62c366bf4c80 in void UpdateArenaPointersTyped<js::BaseShape>(js::gc::MovingTracer*, js::gc::Arena*) /src/gecko-dev/js/src/gc/Compacting.cpp:494:5
+    #4 0x62c366bf4c80 in UpdateArenaPointers(js::gc::MovingTracer*, js::gc::Arena*) /src/gecko-dev/js/src/gc/Compacting.cpp:524:5
+    #5 0x62c366bf4c80 in UpdateArenaListSegmentPointers(js::gc::GCRuntime*, ArenaListSegment const&) /src/gecko-dev/js/src/gc/Compacting.cpp:548:5
+    #6 0x62c366bf0e11 in js::gc::GCRuntime::updateCellPointers(JS::Zone*, mozilla::EnumSet<js::gc::AllocKind, unsigned long>) /src/gecko-dev/js/src/gc/Compacting.cpp:687:5
+    #7 0x62c366be8419 in js::gc::GCRuntime::updateAllCellPointers(js::gc::MovingTracer*, JS::Zone*) /src/gecko-dev/js/src/gc/Compacting.cpp:755:3
+    #8 0x62c366be8419 in js::gc::GCRuntime::updateZonePointersToRelocatedCells(JS::Zone*) /src/gecko-dev/js/src/gc/Compacting.cpp:796:3
+    #9 0x62c366be6d1c in js::gc::GCRuntime::compactPhase(JS::GCReason, js::SliceBudget&, js::gc::AutoGCSession&) /src/gecko-dev/js/src/gc/Compacting.cpp:90:7
+    #10 0x62c366c2d008 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3378:13
+    #11 0x62c366c33c1d in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3839:3
+    #12 0x62c366c36ae7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4027:9
+    #13 0x62c366c3c342 in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp:4473:5
+    #14 0x62c366c4077a in js::gc::GCRuntime::gcIfNeededAtAllocation(JSContext*) /src/gecko-dev/js/src/gc/Allocator.cpp:445:5
+    #15 0x62c366c4077a in bool js::gc::GCRuntime::checkAllocatorState<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:409:10
+    #16 0x62c366c44ce3 in js::gc::TenuredCell* js::gc::detail::AllocateTenuredImpl<(js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Allocator.cpp:339:26
+    #17 0x62c365fe89b1 in js::Shape* js::gc::CellAllocator::NewCell<js::Shape, (js::AllowGC)1, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool>(JSContext*, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool&&) /src/gecko-dev/js/src/gc/Allocator.h:135:9
+    #18 0x62c365fe89b1 in js::Shape* JSContext::newCell<js::Shape, (js::AllowGC)1, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool>(JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool&&) /src/gecko-dev/js/src/vm/JSContext.h:267:12
+    #19 0x62c365fe89b1 in js::SharedShape::new_(JSContext*, JS::Handle<js::BaseShape*>, js::EnumFlags<js::ObjectFlag>, unsigned int, JS::Handle<js::SharedPropMap*>, unsigned int) /src/gecko-dev/js/src/vm/Shape.cpp:1091:14
+    #20 0x62c365fe89b1 in js::SharedShape::getPropMapShape(JSContext*, js::BaseShape*, unsigned long, JS::Handle<js::SharedPropMap*>, unsigned int, js::EnumFlags<js::ObjectFlag>, bool*) /src/gecko-dev/js/src/vm/Shape.cpp:1255:11
+    #21 0x62c365feef35 in js::NativeObject::addProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, js::PropertyFlags, unsigned int*) /src/gecko-dev/js/src/vm/Shape.cpp:331:21
+    #22 0x62c365dad92a in bool AddOrChangeProperty<(IsAddOrChange)0>(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::PropertyDescriptor>, js::PropertyResult*) /src/gecko-dev/js/src/vm/NativeObject.cpp:1257:12
+    #23 0x62c365da996a in js::NativeDefineProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::PropertyDescriptor>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:1563:10
+    #24 0x62c365cb9d2c in js::DefineDataProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, unsigned int, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/JSObject.cpp:2109:10
+    #25 0x62c365cba2f2 in js::DefineDataProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, unsigned int) /src/gecko-dev/js/src/vm/JSObject.cpp:2130:8
+    #26 0x62c365cbc3f9 in DefineFunctionFromSpec(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/JSObject.cpp:2296:10
+    #27 0x62c365cbc3f9 in js::DefineFunctions(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/JSObject.cpp:2302:10
+    #28 0x62c365e0d4ca in JS_DefineFunctions(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/PropertyAndElement.cpp:949:10
+    #29 0x62c365b51b45 in js::GlobalObject::resolveConstructor(JSContext*, JS::Handle<js::GlobalObject*>, JSProtoKey, js::GlobalObject::IfClassIsDisabled) /src/gecko-dev/js/src/vm/GlobalObject.cpp:368:10
+    #30 0x62c365cba88d in js::GlobalObject::ensureConstructor(JSContext*, JS::Handle<js::GlobalObject*>, JSProtoKey) /src/gecko-dev/js/src/vm/GlobalObject.h:327:12
+    #31 0x62c365cba88d in js::SetImmutablePrototype(JSContext*, JS::Handle<JSObject*>, bool*) /src/gecko-dev/js/src/vm/JSObject.cpp:2174:10
+    #32 0x62c36641c6b1 in JS_SetImmutablePrototype(JSContext*, JS::Handle<JSObject*>, bool*) /src/gecko-dev/js/src/jsapi.cpp:1907:10
+    #33 0x62c36556e28d in NewGlobalObject(JSContext*, JS::RealmOptions&, JSPrincipals*, ShellGlobalKind, bool) /src/gecko-dev/js/src/shell/js.cpp:10209:12
+    #34 0x62c36559a518 in NewGlobal(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:6614:27
+    #35 0x28bc7a0e647e  (<unknown module>)
+
+0x7402580553d8 is located 88 bytes inside of 944-byte region [0x740258055380,0x740258055730)
+freed by thread T0 here:
+    #0 0x62c3654e4906 in free /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x62c366c15709 in js_free(void*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:414:3
+    #2 0x62c366c15709 in void JS::GCContext::deleteUntracked<JS::Realm>(JS::Realm*) /src/gecko-dev/js/src/gc/GCContext.h:139:7
+    #3 0x62c366c15709 in JS::Realm::destroy(JS::GCContext*) /src/gecko-dev/js/src/gc/GC.cpp:1969:8
+    #4 0x62c366c16bae in JS::Compartment::sweepRealms(JS::GCContext*, bool, bool) /src/gecko-dev/js/src/gc/GC.cpp:2054:14
+    #5 0x62c366c163f9 in JS::Zone::sweepCompartments(JS::GCContext*, bool, bool) /src/gecko-dev/js/src/gc/GC.cpp:2020:11
+    #6 0x62c366c17682 in js::gc::GCRuntime::sweepZones(JS::GCContext*, bool) /src/gecko-dev/js/src/gc/GC.cpp:2094:13
+    #7 0x62c366c2ccea in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3354:9
+    #8 0x62c366c33c1d in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:3839:3
+    #9 0x62c366c36ae7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4027:9
+    #10 0x62c366c3c342 in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp:4473:5
+    #11 0x62c366c4077a in js::gc::GCRuntime::gcIfNeededAtAllocation(JSContext*) /src/gecko-dev/js/src/gc/Allocator.cpp:445:5
+    #12 0x62c366c4077a in bool js::gc::GCRuntime::checkAllocatorState<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:409:10
+    #13 0x62c366c44ce3 in js::gc::TenuredCell* js::gc::detail::AllocateTenuredImpl<(js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Allocator.cpp:339:26
+    #14 0x62c365fe89b1 in js::Shape* js::gc::CellAllocator::NewCell<js::Shape, (js::AllowGC)1, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool>(JSContext*, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool&&) /src/gecko-dev/js/src/gc/Allocator.h:135:9
+    #15 0x62c365fe89b1 in js::Shape* JSContext::newCell<js::Shape, (js::AllowGC)1, JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool>(JS::Handle<js::BaseShape*>&, js::EnumFlags<js::ObjectFlag>&, unsigned int&, JS::Handle<js::SharedPropMap*>&, unsigned int&, bool&&) /src/gecko-dev/js/src/vm/JSContext.h:267:12
+    #16 0x62c365fe89b1 in js::SharedShape::new_(JSContext*, JS::Handle<js::BaseShape*>, js::EnumFlags<js::ObjectFlag>, unsigned int, JS::Handle<js::SharedPropMap*>, unsigned int) /src/gecko-dev/js/src/vm/Shape.cpp:1091:14
+    #17 0x62c365fe89b1 in js::SharedShape::getPropMapShape(JSContext*, js::BaseShape*, unsigned long, JS::Handle<js::SharedPropMap*>, unsigned int, js::EnumFlags<js::ObjectFlag>, bool*) /src/gecko-dev/js/src/vm/Shape.cpp:1255:11
+    #18 0x62c365feef35 in js::NativeObject::addProperty(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, js::PropertyFlags, unsigned int*) /src/gecko-dev/js/src/vm/Shape.cpp:331:21
+    #19 0x62c365b5cd54 in js::GlobalObject::addIntrinsicValue(JSContext*, JS::Handle<js::GlobalObject*>, JS::Handle<js::PropertyName*>, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/GlobalObject.cpp:941:8
+    #20 0x62c365b5c357 in js::GlobalObject::getSelfHostedFunction(JSContext*, JS::Handle<js::GlobalObject*>, JS::Handle<js::PropertyName*>, JS::Handle<JSAtom*>, unsigned int, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/GlobalObject.cpp:891:10
+    #21 0x62c3664215b3 in JS::NewFunctionFromSpec(JSContext*, JSFunctionSpec const*, JS::Handle<JS::PropertyKey>) /src/gecko-dev/js/src/jsapi.cpp:2202:10
+    #22 0x62c365cbc2b5 in DefineFunctionFromSpec(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/JSObject.cpp:2290:21
+    #23 0x62c365cbc2b5 in js::DefineFunctions(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/JSObject.cpp:2302:10
+    #24 0x62c365e0d4ca in JS_DefineFunctions(JSContext*, JS::Handle<JSObject*>, JSFunctionSpec const*) /src/gecko-dev/js/src/vm/PropertyAndElement.cpp:949:10
+    #25 0x62c365b51a77 in js::GlobalObject::resolveConstructor(JSContext*, JS::Handle<js::GlobalObject*>, JSProtoKey, js::GlobalObject::IfClassIsDisabled) /src/gecko-dev/js/src/vm/GlobalObject.cpp:358:10
+    #26 0x62c365cba88d in js::GlobalObject::ensureConstructor(JSContext*, JS::Handle<js::GlobalObject*>, JSProtoKey) /src/gecko-dev/js/src/vm/GlobalObject.h:327:12
+    #27 0x62c365cba88d in js::SetImmutablePrototype(JSContext*, JS::Handle<JSObject*>, bool*) /src/gecko-dev/js/src/vm/JSObject.cpp:2174:10
+    #28 0x62c36641c6b1 in JS_SetImmutablePrototype(JSContext*, JS::Handle<JSObject*>, bool*) /src/gecko-dev/js/src/jsapi.cpp:1907:10
+    #29 0x62c36556e28d in NewGlobalObject(JSContext*, JS::RealmOptions&, JSPrincipals*, ShellGlobalKind, bool) /src/gecko-dev/js/src/shell/js.cpp:10209:12
+    #30 0x62c36559a518 in NewGlobal(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:6614:27
+    #31 0x28bc7a0e647e  (<unknown module>)
+    #32 0x28bc7a0d9d81  (<unknown module>)
+    #33 0x28bc7a0b3d88  (<unknown module>)
+    #34 0x62c366ffb77b in EnterBaseline(JSContext*, EnterJitData&) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:142:5
+    #35 0x62c366ffb77b in js::jit::EnterBaselineInterpreterAtBranch(JSContext*, js::InterpreterFrame*, unsigned char*) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:198:26
+    #36 0x62c36577cebe in Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2232:17
+    #37 0x62c365761cbf in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:431:13
+    #38 0x62c3657954bf in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:825:13
+
+previously allocated by thread T0 here:
+    #0 0x62c3654e4ba4 in malloc /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3
+    #1 0x62c3655fd9eb in js_arena_malloc(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:366:10
+    #2 0x62c3655fd9eb in unsigned char* js_pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:576:26
+    #3 0x62c3655fd9eb in unsigned char* js::MallocProvider<JSContext>::maybe_pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:57:12
+    #4 0x62c3655fd9eb in unsigned char* js::MallocProvider<JSContext>::pod_arena_malloc<unsigned char>(unsigned long, unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:109:12
+    #5 0x62c366c3ac31 in unsigned char* js::MallocProvider<JSContext>::pod_malloc<unsigned char>(unsigned long) /src/gecko-dev/js/src/vm/MallocProvider.h:127:12
+    #6 0x62c366c3ac31 in JS::Realm* js::MallocProvider<JSContext>::new_<JS::Realm, JS::Compartment*&, JS::RealmOptions const&>(JS::Compartment*&, JS::RealmOptions const&) /src/gecko-dev/js/src/vm/MallocProvider.h:234:3
+    #7 0x62c366c3ac31 in js::NewRealm(JSContext*, JSPrincipals*, JS::RealmOptions const&) /src/gecko-dev/js/src/gc/GC.cpp:4399:30
+    #8 0x62c365b57ee7 in js::GlobalObject::new_(JSContext*, JSClass const*, JSPrincipals*, JS::OnNewGlobalHookOption, JS::RealmOptions const&) /src/gecko-dev/js/src/vm/GlobalObject.cpp:611:18
+    #9 0x62c36556e041 in NewGlobalObject(JSContext*, JS::RealmOptions&, JSPrincipals*, ShellGlobalKind, bool) /src/gecko-dev/js/src/shell/js.cpp:10184:21
+    #10 0x62c36559a518 in NewGlobal(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/shell/js.cpp:6614:27
+    #11 0x28bc7a0e647e  (<unknown module>)
+    #12 0x28bc7a0d9d81  (<unknown module>)
+    #13 0x28bc7a0b3d88  (<unknown module>)
+    #14 0x62c366ffb77b in EnterBaseline(JSContext*, EnterJitData&) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:142:5
+    #15 0x62c366ffb77b in js::jit::EnterBaselineInterpreterAtBranch(JSContext*, js::InterpreterFrame*, unsigned char*) /src/gecko-dev/js/src/jit/BaselineJIT.cpp:198:26
+    #16 0x62c36577cebe in Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2232:17
+    #17 0x62c365761cbf in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:431:13
+    #18 0x62c3657954bf in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:825:13
+    #19 0x62c365795e89 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:857:10
+    #20 0x62c365a5a690 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:467:10
+    #21 0x62c365a5abcb in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:491:10
+    #22 0x62c3655ce9b9 in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1055:10
+    #23 0x62c3655cd567 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #24 0x62c365550b8a in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10541:10
+    #25 0x62c365550b8a in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11220:12
+    #26 0x62c36554228c in main /src/gecko-dev/js/src/shell/js.cpp:12321:12
+    #27 0x767258b411c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #28 0x767258b4128a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x62c3654436b8 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x24716b8) (BuildId: 191cc66ef162e0a3808a132f32fcadbf94e531b4)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/vm/Realm.h:519:20 in JS::Realm::unsafeUnbarrieredMaybeGlobal() const
+Shadow bytes around the buggy address:
+  0x740258055100: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055180: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055200: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x740258055300: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x740258055380: fd fd fd fd fd fd fd fd fd fd fd[fd]fd fd fd fd
+  0x740258055400: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055480: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055500: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055580: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x740258055600: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

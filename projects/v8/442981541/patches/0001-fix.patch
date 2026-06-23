@@ -1,0 +1,205 @@
+From 2388032b518d067b8d5bbc4313c3c7d595f10e90 Mon Sep 17 00:00:00 2001
+From: Nikolaos Papaspyrou <nikolaos@chromium.org>
+Date: Fri, 5 Sep 2025 18:19:18 +0200
+Subject: [PATCH] [d8] Guard against DynamicImportData abuses
+
+This CL fixes a UAF in d8 that can occur with --sandbox-fuzzing, by
+setting the same DynamicImportData object for two different imported
+modules.
+
+Bug: 442981541
+Change-Id: Ifb2a42777d9ae58e2393b033543a06c4e3ebae88
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6917687
+Reviewed-by: Michael Lippautz <mlippautz@chromium.org>
+Commit-Queue: Nikolaos Papaspyrou <nikolaos@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102321}
+---
+ src/d8/d8.cc                              | 38 +++++++-------
+ src/d8/d8.h                               |  7 ++-
+ test/mjsunit/sandbox/regress-442981541.js | 61 +++++++++++++++++++++++
+ 3 files changed, 84 insertions(+), 22 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress-442981541.js
+
+diff --git a/src/d8/d8.cc b/src/d8/d8.cc
+index f6d1658b2bb..fc3874f1e0d 100644
+--- a/src/d8/d8.cc
++++ b/src/d8/d8.cc
+@@ -1668,11 +1668,13 @@ Maybe<bool> ChainDynamicImportPromise(Isolate* isolate, Local<Context> realm,
+ }
+ }  // namespace
+ 
+-void Shell::DoHostImportModuleDynamically(void* import_data) {
+-  DynamicImportData* import_data_ =
+-      static_cast<DynamicImportData*>(import_data);
++void Shell::DoHostImportModuleDynamically(void* data) {
++  Isolate* current_isolate = reinterpret_cast<Isolate*>(i::Isolate::Current());
++  DynamicImportData* import_data =
++      PerIsolateData::Get(current_isolate)->LookupImportData(data);
++  CHECK_EQ(current_isolate, import_data->isolate);
+ 
+-  Isolate* isolate(import_data_->isolate);
++  Isolate* isolate(import_data->isolate);
+   Global<Context> global_realm;
+   Global<Promise::Resolver> global_resolver;
+   Global<Promise> global_result_promise;
+@@ -1683,19 +1685,18 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
+ 
+   {
+     HandleScope handle_scope(isolate);
+-    Local<Context> realm = import_data_->context.Get(isolate);
+-    Local<Value> referrer = import_data_->referrer.Get(isolate);
+-    Local<String> v8_specifier = import_data_->specifier.Get(isolate);
+-    ModuleImportPhase phase = import_data_->phase;
++    Local<Context> realm = import_data->context.Get(isolate);
++    Local<Value> referrer = import_data->referrer.Get(isolate);
++    Local<String> v8_specifier = import_data->specifier.Get(isolate);
++    ModuleImportPhase phase = import_data->phase;
+     Local<FixedArray> import_attributes =
+-        import_data_->import_attributes.Get(isolate);
+-    Local<Promise::Resolver> resolver = import_data_->resolver.Get(isolate);
++        import_data->import_attributes.Get(isolate);
++    Local<Promise::Resolver> resolver = import_data->resolver.Get(isolate);
+ 
+     global_realm.Reset(isolate, realm);
+     global_resolver.Reset(isolate, resolver);
+ 
+-    PerIsolateData* data = PerIsolateData::Get(isolate);
+-    data->DeleteDynamicImportData(import_data_);
++    PerIsolateData::Get(isolate)->DeleteDynamicImportData(import_data);
+ 
+     Context::Scope context_scope(realm);
+     std::string specifier = ToSTLString(isolate, v8_specifier);
+@@ -1960,11 +1961,9 @@ PerIsolateData::~PerIsolateData() {
+   if (i::v8_flags.expose_async_hooks) {
+     delete async_hooks_wrapper_;  // This uses the isolate
+   }
+-#if defined(LEAK_SANITIZER)
+   for (DynamicImportData* data : import_data_) {
+     delete data;
+   }
+-#endif
+ }
+ 
+ void PerIsolateData::RemoveUnhandledPromise(Local<Promise> promise) {
+@@ -2010,16 +2009,19 @@ int PerIsolateData::HandleUnhandledPromiseRejections() {
+ }
+ 
+ void PerIsolateData::AddDynamicImportData(DynamicImportData* data) {
+-#if defined(LEAK_SANITIZER)
++  SBXCHECK_EQ(import_data_.end(), import_data_.find(data));
+   import_data_.insert(data);
+-#endif
+ }
+ void PerIsolateData::DeleteDynamicImportData(DynamicImportData* data) {
+-#if defined(LEAK_SANITIZER)
++  SBXCHECK_NE(import_data_.end(), import_data_.find(data));
+   import_data_.erase(data);
+-#endif
+   delete data;
+ }
++DynamicImportData* PerIsolateData::LookupImportData(void* data) {
++  auto* result = static_cast<DynamicImportData*>(data);
++  SBXCHECK_NE(import_data_.end(), import_data_.find(result));
++  return result;
++}
+ 
+ Local<FunctionTemplate> PerIsolateData::GetTestApiObjectCtor() const {
+   return test_api_object_ctor_.Get(isolate_);
+diff --git a/src/d8/d8.h b/src/d8/d8.h
+index 696922242e0..d22bcfc8999 100644
+--- a/src/d8/d8.h
++++ b/src/d8/d8.h
+@@ -334,10 +334,11 @@ class PerIsolateData {
+                            Local<Value> exception);
+   int HandleUnhandledPromiseRejections();
+ 
+-  // Keep track of DynamicImportData so we can properly free it on shutdown
+-  // when LEAK_SANITIZER is active.
++  // Keep track of DynamicImportData so we can prevent leaks and unauthorized
++  // uses.
+   void AddDynamicImportData(DynamicImportData*);
+   void DeleteDynamicImportData(DynamicImportData*);
++  DynamicImportData* LookupImportData(void*);
+ 
+   Local<FunctionTemplate> GetTestApiObjectCtor() const;
+   void SetTestApiObjectCtor(Local<FunctionTemplate> ctor);
+@@ -367,9 +368,7 @@ class PerIsolateData {
+   std::vector<std::tuple<Global<Promise>, Global<Message>, Global<Value>>>
+       unhandled_promises_;
+   AsyncHooks* async_hooks_wrapper_;
+-#if defined(LEAK_SANITIZER)
+   std::unordered_set<DynamicImportData*> import_data_;
+-#endif
+   Global<FunctionTemplate> test_api_object_ctor_;
+   Global<FunctionTemplate> dom_node_ctor_;
+   // Track workers and their callbacks separately, so that we know both which
+diff --git a/test/mjsunit/sandbox/regress-442981541.js b/test/mjsunit/sandbox/regress-442981541.js
+new file mode 100644
+index 00000000000..95e90d08d5e
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress-442981541.js
+@@ -0,0 +1,61 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --sandbox-testing
++
++const kHeapObjectTag = 1;
++const mem = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++
++const r32 = (addr) => mem.getUint32(addr, true);
++const w32 = (addr, val) => mem.setUint32(addr, val, true);
++
++function getTypeNameAtTagged(tagged_val) {
++  const target_addr = (tagged_val - kHeapObjectTag) >>> 0;
++  const name = Sandbox.getInstanceTypeOfObjectAt(target_addr);
++  return name;
++}
++
++function findCallbackTasks(start_addr, max_objects = 15) {
++  const tasks = [];
++  let addr = start_addr >>> 0;
++  var foreign_count = 0;
++  for (let i = 0; i < max_objects; i++) {
++    let size = Sandbox.getSizeOfObjectAt(addr);
++    objtype = getTypeNameAtTagged(addr)
++    if(objtype == "FOREIGN_TYPE") {
++      foreign_count++;
++      if(foreign_count == 2){
++        print("first data found at 0x"+ (addr-1+4+Sandbox.base).toString(16));
++        tasks.push(addr-1+4);
++      }
++      if(foreign_count == 4){
++        print("second data found at 0x"+ (addr-1+4+Sandbox.base).toString(16));
++        tasks.push(addr-1+4);
++        break;
++      }
++    }
++    if(objtype == "CALLBACK_TASK_TYPE") {
++      print("CALLBACK_TASK_TYPE found at 0x"+addr.toString(16));
++    }
++    addr = (addr + size) >>> 0;
++  }
++  return tasks;
++}
++
++(function main() {
++  const marker = { x: 1, y: 2 };
++  const marker_addr = Sandbox.getAddressOf(marker);
++
++  const p1 = import("data:text/javascript,export const a=1;");
++  const p2 = import("data:text/javascript,export const b=2;");
++
++  const tasks = findCallbackTasks(marker_addr+1);
++
++  const t1 = tasks[tasks.length - 2];
++  const t2 = tasks[tasks.length - 1];
++
++  w32(t1,r32(t2));
++
++  Promise.allSettled([p1, p2]).then(() => {});
++})();
+-- 
+2.43.0
+

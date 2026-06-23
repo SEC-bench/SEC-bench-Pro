@@ -1,0 +1,15 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==7==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x7b9b922773d8 bp 0xfffe1ed76d31d9e8 sp 0x7ffed70552f8 T0)
+==7==The signal is caused by a READ memory access.
+==7==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x7b9b922773d8  (<unknown module>)
+
+==7==Register values:
+rax = 0x1a1be5e5e5e5e5e5  rbx = 0x000000000000c346  rcx = 0x0000000000000000  rdx = 0x0000000000000080  
+rdi = 0x00000f74026b0080  rsi = 0x00000000000000f5  rbp = 0xfffe1ed76d31d9e8  rsp = 0x00007ffed70552f8  
+ r8 = 0x00007b9c135c01a0   r9 = 0x0000000000000000  r10 = 0x00000f7382684906  r11 = 0x00001b192fc6d820  
+r12 = 0x0000000000000008  r13 = 0x00007dac1440bda0  r14 = 0x00001b192fc74180  r15 = 0x00000f74026d1b0c  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==7==ABORTING

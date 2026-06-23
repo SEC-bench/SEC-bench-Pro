@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1985224",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/BaselineJIT.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --setpref=experimental.self_hosted_cache=true",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Off-thread baseline compilation of self-hosted scripts did not null the realm pointer (JSNullableAutoRealm only works on-thread via the JSContext). When experimental.self_hosted_cache is enabled, repeated generator-function constructor calls under JIT off-thread compilation hit `!masm.maybeRealm()` in BaselineCodeGen.h:153 \u2014 the wrong-realm check that should detect missing GC pre-barriers, letting the GC lose track of objects (UAF risk). sec-high csectype-uaf. Fix: do not off-thread compile realm-independent self-hosted baseline code (git 3905f930df89, iireland@mozilla.com).",
+  "fix_commits": [
+    "3905f930df89"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-3905f930df89.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1985224 fix",
+      "source_commit": "3905f930df89",
+      "commit": "3905f930df89",
+      "url": "https://github.com/mozilla/gecko-dev/commit/3905f930df89",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/3905f930df89"
+    }
+  ],
+  "vrp": null
+}

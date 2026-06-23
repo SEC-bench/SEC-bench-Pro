@@ -1,0 +1,13 @@
+diff --git a/src/maglev/maglev-graph-builder.cc b/src/maglev/maglev-graph-builder.cc
+index 710e56e9fe7..60ca7c84b9c 100644
+--- a/src/maglev/maglev-graph-builder.cc
++++ b/src/maglev/maglev-graph-builder.cc
+@@ -12939,6 +12939,8 @@ VirtualObject* MaglevGraphBuilder::CreateVirtualObject(
+   ValueNode** slots = zone()->AllocateArray<ValueNode*>(slot_count);
+   VirtualObject* vobject = NodeBase::New<VirtualObject>(
+       zone(), 0, map, NewObjectId(), slot_count, slots);
++  std::fill_n(slots, slot_count,
++              GetRootConstant(RootIndex::kOnePointerFillerMap));
+   return vobject;
+ }
+ 

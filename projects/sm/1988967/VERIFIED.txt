@@ -1,0 +1,9 @@
+VERIFIED at 2026-05-30T00:00:00Z — 2025-Q3 batch on bug 1988967 (sec-high, 2025-Sep)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `SEGV in js::Nursery::forwardBufferPointer at Nursery.cpp:1042` (via UpdateIonJSFrameForMinorGC during nursery doCollection)
+  - matches report's `Crash [@ js::Nursery::forwardBufferPointer(unsigned long*)]` verbatim
+  - root cause: under `--ion-regalloc=simple`, Ion's NeedsKeepAlive inspected only the def-instruction and missed the use-instruction; the import() Promise result was dead-eliminated before its nursery forwarding pointer was updated → minor-GC reading the moved-from buffer dereferenced unmapped memory.
+  - PoC is tiny (4 lines: function `a` recursively applies itself with `import("") ^ 0`); extracted inline from Report.md (collector heuristic missed it but the block is well-formed).
+  - flags: `--fuzzing-safe --ion-offthread-compile=off --ion-regalloc=simple` (per report).
+  - fixed image (git 5dcdd12edecd "Also check the use-instruction in NeedsKeepAlive", Phabricator D265302, ~50 lines in IonAnalysis.cpp) blocks PoC 5/5.
+  - Same ExclusiveData=delete patch (2025-Sep source predates upstream fix in this area — Mozilla had reverted the upstream fix at some point).

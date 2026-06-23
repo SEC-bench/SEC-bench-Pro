@@ -1,0 +1,7 @@
+VERIFIED at 2026-05-29T05:30:00Z — 2025-Q4 import on bug 2000469 (sec-high csectype-jit, 2025-Nov)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: slots == calculateDynamicSlots(), at /src/gecko-dev/js/src/vm/JSObject-inl.h:36`
+  - exact line + assertion match against report
+  - JIT path: Int8Array.reduceRight invokes setter (set g) that shifts `a` (via a.shift()) — IonMonkey's MGuardShape::foldsTo had already folded away the shape guard without checking dependency chain, so the IC let growSlotsPure run with stale shape → numDynamicSlots() assertion
+  - flags required: `--fuzzing-safe --no-threads --fast-warmup` (report-stated; --ion-eager does NOT trigger this — corrected from initial staging)
+  - fixed image (git 2fa42593dec7 "Check dependency in MGuardShape::foldsTo") blocks PoC 5/5

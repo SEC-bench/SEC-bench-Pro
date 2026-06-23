@@ -1,0 +1,67 @@
+From fd2d87c96285a5eb430ae45e28a4a2f351e95293 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 11 Sep 2023 22:23:58 +0000
+Subject: [PATCH] Bug 1852218: Remove old hints after adding new hints
+ r=dpalmeiro
+
+Differential Revision: https://phabricator.services.mozilla.com/D187807
+---
+ js/src/jit-test/tests/bug1852218.js | 17 +++++++++++++++++
+ js/src/jit/JitHints.cpp             | 13 +++++++------
+ 2 files changed, 24 insertions(+), 6 deletions(-)
+ create mode 100644 js/src/jit-test/tests/bug1852218.js
+
+diff --git a/js/src/jit-test/tests/bug1852218.js b/js/src/jit-test/tests/bug1852218.js
+new file mode 100644
+index 0000000000000..2a80fe95599ae
+--- /dev/null
++++ b/js/src/jit-test/tests/bug1852218.js
+@@ -0,0 +1,17 @@
++// |jit-test| skip-if: getBuildConfiguration()["arm64-simulator"] === true
++// This test times out in ARM64 simulator builds.
++
++function makeIonCompiledScript(n) {
++  let src = "";
++  for (var i = 0; i < n; i++) {
++    src += "\n";
++  }
++  src += "function f() {}";
++  eval(src);
++  f();
++  return f;
++}
++
++for (var i = 0; i < 5010; i++) {
++  makeIonCompiledScript(i);
++}
+diff --git a/js/src/jit/JitHints.cpp b/js/src/jit/JitHints.cpp
+index e29a6ca4a3ff7..7501c64be4482 100644
+--- a/js/src/jit/JitHints.cpp
++++ b/js/src/jit/JitHints.cpp
+@@ -20,12 +20,6 @@ JitHintsMap::~JitHintsMap() {
+ 
+ JitHintsMap::IonHint* JitHintsMap::addIonHint(ScriptKey key,
+                                               ScriptToHintMap::AddPtr& p) {
+-  if (ionHintMap_.count() >= IonHintMaxEntries) {
+-    IonHint* h = ionHintQueue_.popFirst();
+-    ionHintMap_.remove(h->key());
+-    js_delete(h);
+-  }
+-
+   IonHint* hint = js_new<IonHint>(key);
+   if (!hint) {
+     return nullptr;
+@@ -36,6 +30,13 @@ JitHintsMap::IonHint* JitHintsMap::addIonHint(ScriptKey key,
+   }
+ 
+   ionHintQueue_.insertBack(hint);
++
++  if (ionHintMap_.count() > IonHintMaxEntries) {
++    IonHint* h = ionHintQueue_.popFirst();
++    ionHintMap_.remove(h->key());
++    js_delete(h);
++  }
++
+   return hint;
+ }
+ 

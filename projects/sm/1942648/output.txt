@@ -1,0 +1,35 @@
+[13] Assertion failure: ins->type() == MIRType::Int32, at /src/gecko-dev/js/src/jit/Lowering.cpp:2100
+#01: ???[/out/js +0x58d5132]
+#02: ???[/out/js +0x598dd49]
+#03: ???[/out/js +0x598ee6a]
+#04: ???[/out/js +0x598f6ba]
+#05: ???[/out/js +0x559df09]
+#06: ???[/out/js +0x559e8cc]
+#07: ???[/out/js +0x55a2389]
+#08: ???[/out/js +0x55a3f8e]
+#09: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x567e32747167 bp 0x7fff727b48b0 sp 0x7fff727b4850 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x567e32747167 in js::jit::LIRGenerator::visitSign(js::jit::MSign*) /src/gecko-dev/js/src/jit/Lowering.cpp:2100:5
+    #1 0x567e327ffd48 in js::jit::LIRGenerator::visitInstruction(js::jit::MInstruction*) /src/gecko-dev/js/src/jit/Lowering.cpp:7950:3
+    #2 0x567e32800e69 in js::jit::LIRGenerator::visitBlock(js::jit::MBasicBlock*) /src/gecko-dev/js/src/jit/Lowering.cpp:8020:10
+    #3 0x567e328016b9 in js::jit::LIRGenerator::generate() /src/gecko-dev/js/src/jit/Lowering.cpp:8094:10
+    #4 0x567e3240ff08 in js::jit::GenerateLIR(js::jit::MIRGenerator*) /src/gecko-dev/js/src/jit/Ion.cpp:1521:17
+    #5 0x567e324108cb in js::jit::CompileBackEnd(js::jit::MIRGenerator*, js::jit::WarpSnapshot*) /src/gecko-dev/js/src/jit/Ion.cpp:1612:19
+    #6 0x567e32414388 in js::jit::IonCompile(JSContext*, JS::Handle<JSScript*>, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1781:38
+    #7 0x567e32414388 in js::jit::Compile(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1935:24
+    #8 0x567e32415f8d in BaselineCanEnterAtEntry(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*) /src/gecko-dev/js/src/jit/Ion.cpp:2067:25
+    #9 0x567e32415f8d in IonCompileScriptForBaseline(JSContext*, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2192:12
+    #10 0x111fcc4d4f15  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fff727b4a60  rcx = 0x0000567e2e20f420  rdx = 0x0000000000000000  
+rdi = 0x0000567e34171310  rsi = 0x00007fff727b4808  rbp = 0x00007fff727b48b0  rsp = 0x00007fff727b4850  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00000fffee4f694c  r13 = 0x0000794dd8547f68  r14 = 0x0000794dd8547ef8  r15 = 0x00000f29bb0a8fed  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/Lowering.cpp:2100:5 in js::jit::LIRGenerator::visitSign(js::jit::MSign*)
+==13==ABORTING

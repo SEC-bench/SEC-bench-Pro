@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:452605803",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/wasm/wasm-objects.cc",
+    "src/wasm/wasm-js.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "Corrupting the import dispatch table frees a WasmCPT wrapper handle and leads to a use-after-free outside the sandbox.",
+  "vrp": "20000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "source_commit": "58bdae122c0f44e427ee2ec7dda636620e7aade2",
+      "commit": "58bdae122c0f44e427ee2ec7dda636620e7aade2",
+      "context": "fix-parent-format-patch",
+      "description": "Non-empty fix patch applied after checking out the parent of the validated fix commit.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/7105440",
+      "source_cl": 7105440,
+      "evidence_text": "58bdae122c0f44e427ee2ec7dda636620e7aade2 Reland \"[sandbox][wasm] Un-expose dispatch_table_for_imports\""
+    }
+  ]
+}

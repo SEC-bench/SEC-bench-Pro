@@ -1,0 +1,72 @@
+[13] Assertion failure: !empty(), at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:597
+#01: ???[/out/js +0x59cf5b6]
+#02: ???[/out/js +0x5926c30]
+#03: ???[/out/js +0x59427f5]
+#04: ???[/out/js +0x59734a6]
+#05: ???[/out/js +0x5b5ef50]
+#06: ???[/out/js +0x5b61191]
+#07: ???[/out/js +0x5af25bf]
+#08: ???[/out/js +0x5af162a]
+#09: ???[/out/js +0x5bc0d08]
+#10: ???[/out/js +0x2ea5c78]
+#11: ???[/out/js +0x2ebc5a0]
+#12: ???[/out/js +0x2e5ab98]
+#13: ???[/out/js +0x2e7574d]
+#14: ???[/out/js +0x2e5639a]
+#15: ???[/out/js +0x2e5ce15]
+#16: ???[/out/js +0x2e5d7ca]
+#17: ???[/out/js +0x320399b]
+#18: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x3203e20]
+#19: ???[/out/js +0x2ccbf4b]
+#20: ???[/out/js +0x2cca771]
+#21: ???[/out/js +0x2c477bd]
+#22: ???[/out/js +0x2c396bc]
+#23: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#24: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#25: _start[/out/js +0x2b3c155]
+#26: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5741c85e45eb bp 0x7ffd91806440 sp 0x7ffd91806410 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5741c85e45eb in mozilla::Vector<js::wasm::Stk, 0ul, js::SystemAllocPolicy>::back() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:597:5
+    #1 0x5741c85e45eb in js::wasm::BaseCompiler::popI32() /src/gecko-dev/js/src/wasm/WasmBCStkMgmt-inl.h:742:17
+    #2 0x5741c853bc2f in js::wasm::BaseCompiler::popTableIndexToClampedInt32(js::wasm::IndexType) /src/gecko-dev/js/src/wasm/WasmBCStkMgmt-inl.h:1221:12
+    #3 0x5741c853bc2f in js::wasm::BaseCompiler::emitTableFill() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:6743:16
+    #4 0x5741c85577f4 in js::wasm::BaseCompiler::emitBody() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:11546:13
+    #5 0x5741c85884a5 in js::wasm::BaseCompiler::emitFunction() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:11943:8
+    #6 0x5741c85884a5 in js::wasm::BaselineCompileFunctions(js::wasm::CodeMetadata const&, js::wasm::CompilerEnvironment const&, js::LifoAlloc&, mozilla::Vector<js::wasm::FuncCompileInput, 8ul, js::SystemAllocPolicy> const&, js::wasm::CompiledCode*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:12119:12
+    #7 0x5741c8773f4f in ExecuteCompileTask(js::wasm::CompileTask*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:509:12
+    #8 0x5741c8776190 in js::wasm::ModuleGenerator::locallyCompileCurrentTask() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:592:8
+    #9 0x5741c8776190 in js::wasm::ModuleGenerator::finishFuncDefs() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:729:24
+    #10 0x5741c87075be in bool DecodeCodeSection<js::wasm::Decoder, js::wasm::ModuleGenerator>(js::wasm::CodeMetadata const&, js::wasm::Decoder&, js::wasm::ModuleGenerator&) /src/gecko-dev/js/src/wasm/WasmCompile.cpp
+    #11 0x5741c8706629 in js::wasm::CompileBuffer(js::wasm::CompileArgs const&, js::wasm::ShareableBytes const&, mozilla::UniquePtr<char [], JS::FreePolicy>*, mozilla::Vector<mozilla::UniquePtr<char [], JS::FreePolicy>, 0ul, js::SystemAllocPolicy>*, JS::OptimizedEncodingListener*) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:900:8
+    #12 0x5741c87d5d07 in js::WasmModuleObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1568:7
+    #13 0x5741c5abac77 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:491:13
+    #14 0x5741c5ad159f in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:507:8
+    #15 0x5741c5a6fb97 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:713:14
+    #16 0x5741c5a8a74c in js::ConstructFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:760:10
+    #17 0x5741c5a8a74c in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3334:16
+    #18 0x5741c5a6b399 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:463:13
+    #19 0x5741c5a71e14 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:13
+    #20 0x5741c5a727c9 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:882:10
+    #21 0x5741c5e1899a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:495:10
+    #22 0x5741c5e18e1f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:519:10
+    #23 0x5741c58e0f4a in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1195:10
+    #24 0x5741c58df770 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #25 0x5741c585c7bc in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11274:10
+    #26 0x5741c585c7bc in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11526:12
+    #27 0x5741c584e6bb in main /src/gecko-dev/js/src/shell/js.cpp:12052:12
+    #28 0x70a6c61b71c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x70a6c61b728a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #30 0x5741c5751154 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b3c154) (BuildId: e547918933b29b8a1855183221a5525b)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffd91807530  rcx = 0x00005741c3f4e580  rdx = 0x0000000000000000  
+rdi = 0x00005741c99c6e10  rsi = 0x00007ffd918063c8  rbp = 0x00007ffd91806440  rsp = 0x00007ffd91806410  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000000  r13 = 0x00007ffd91808054  r14 = 0x00000fffb2300ef0  r15 = 0x00007ffd91808050  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:597:5 in mozilla::Vector<js::wasm::Stk, 0ul, js::SystemAllocPolicy>::back()
+==13==ABORTING

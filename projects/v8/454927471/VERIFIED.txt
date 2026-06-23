@@ -1,0 +1,4 @@
+Verified on 2026-04-16.
+Recovered from failed/454927471 by restoring the report-aligned ASan build and rerunning the promoted root case.
+Reproduced with ../../v8/crash_check.sh 454927471.
+Result: CONFIMRED: SANDBOX_VIOLATION.

@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:404285918",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--experimental-wasm-jspi --sandbox-testing",
+  "target_source_files": [
+    "src/execution/isolate.cc"
+  ],
+  "target_subdir": [
+    "src/execution"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability exists in the Wasm JSPI (JavaScript Promise Integration) central stack management. The root cause is in `Isolate::UpdateCentralStackInfo()` (src/execution/isolate.cc), which is called on every stack switch via `Isolate::SwitchStacks()`. This function traverses the active WasmContinuationObject chain and selects the first (innermost) stack whose saved SP (`jmpbuf()->sp`) lies within the central stack address range, storing it as `central_stack_sp_`. The selection is unvalidated: there is no check that the chosen SP is the deepest (most recently active) position on the central stack. An attacker can craft a continuation chain in which a suspended continuation holds a stale SP pointing to a shallower (already-in-use) position on the central stack that still passes `IsOnCentralStack()`. When `UpdateCentralStackInfo()` runs, it picks this stale SP and stores it in `thread_local_top()->central_stack_sp_`. A subsequent Wasm-to-JS call triggers `switch_to_the_central_stack_for_js()`, which switches execution to this invalid SP, causing subsequent calls to overwrite active central stack frames. This gives an attacker full control over the central stack contents (SP and PC), achieving a complete V8 sandbox bypass.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Minimal compatibility hardening for the JSPI central-stack confusion: validate the trusted JumpBuffer caller chain against the continuation parent chain before deriving central stack state.",
+      "context": "landed-commit-compat-minimal",
+      "evidence_lineno": 0,
+      "evidence_text": "CL 6426203 removes the untrusted WasmContinuationObject parent chain; this local patch enforces the same trusted-chain invariant in UpdateCentralStackInfo for this checkout.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6426203",
+      "source_cl": 6426203,
+      "source_commit": "d4700da23d4ab417d9f706e3cd5371a3b12ab593"
+    }
+  ]
+}

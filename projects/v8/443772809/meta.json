@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:443772809",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/objects/objects-body-descriptors-inl.h"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "command_options": "--allow-natives-syntax --expose-gc --sandbox-testing",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A use-after-free vulnerability exists in V8's JSDispatchEntry lifecycle management when the LeapTiering feature is enabled. The root cause is that `InstructionStream::BodyDescriptor::kRelocModeMask` in `src/objects/objects-body-descriptors-inl.h` does not include `RelocInfo::ModeMask(RelocInfo::JS_DISPATCH_HANDLE)`. As a result, when the garbage collector iterates the body of an InstructionStream (JITted machine code) object, it skips over `JS_DISPATCH_HANDLE` relocation info entries and never calls `VisitJSDispatchTableEntry` for dispatch handles that are referenced exclusively through JITted code's reloc info. This means a JSDispatchEntry referenced only by Maglev-compiled code's relocation info is not marked as alive during GC. An attacker can exploit this by: (1) using an in-sandbox write primitive to zero out all in-sandbox references to a target dispatch entry (JSFunction.dispatch_handle and FeedbackCell.dispatch_handle), (2) triggering GC to free the now-unreferenced dispatch entry, (3) allocating a new function whose dispatch entry reuses the freed slot but with a different parameter count. Stale Maglev-compiled code that previously recorded the dispatch handle in reloc info continues to call through the entry using the old parameter count, causing a stack imbalance that leads to RIP/PC control \u2014 a sandbox violation enabling arbitrary code execution.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "[heap] Fix processing of JSDispatch handle through RelocInfo",
+      "url": "https://crrev.com/c/6939390",
+      "cl": 6939390,
+      "source_commit": "51b324c6d189eeca06b84200d1acbdfba85f5c9b",
+      "commit": "51b324c6d189eeca06b84200d1acbdfba85f5c9b",
+      "description": "Local patch exported from https://crrev.com/c/6939390 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6939390",
+      "source_cl": 6939390,
+      "source_ref": "refs/changes/90/6939390/11",
+      "source_patchset": 11
+    }
+  ]
+}

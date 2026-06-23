@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:430572435",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.debug/d8",
+  "command_options": "",
+  "target_source_files": [
+    "src/maglev/maglev-graph-builder.cc"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "DCHECK",
+  "description": "A JIT type confusion vulnerability exists in V8's Maglev compiler due to missing bytecode size accounting for small eagerly-inlined functions. In MaglevGraphBuilder::TryBuildInlineCall, when ShouldEagerInlineCall() returns true (for tiny functions like noop()), execution takes an early-exit path directly to BuildEagerInlineCall() without calling graph()->add_inlined_bytecode_size(). As a result, the cumulative bytecode size guard in CanInlineCall() is never triggered, allowing an unbounded number of small functions to be eagerly inlined. Each inlined call pushes an entry onto graph()->inlined_functions(), and the inlining ID is derived from this vector's size. The InliningIdField in SourcePosition is a 16-bit BitField64 (max value 65535), and SetInliningId stores id+1 in it. After more than ~65534 inlined function entries (achievable with a function containing 70,000 calls to a tiny function), the inlining ID overflows this field. In debug builds, this triggers the DCHECK(is_valid(value)) assertion in BitField::encode. In release builds, the SourcePosition inlining metadata is silently corrupted (ID wraps around), causing the JIT compiler to confuse the identity of inlined call sites and enabling type confusion during compilation.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 284,
+      "evidence_text": "Not seeing any issues related to this fix at this time, please [https://crrev.com/c/6732846](<https://crrev.com/c/6732846>) to 13.9 and 13.8 by EOD tomorrow / Friday so this fix can be included in the next update of M138 Stable, and M139 Stable RC being cut on Tuesday",
+      "url": "https://crrev.com/c/6732846",
+      "cl": 6732846,
+      "commit": "f22ca7b61a92d3cd2b856485a55a1519cb11b627",
+      "description": "Local patch exported from https://crrev.com/c/6732846 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/6732846",
+      "source_cl": 6732846,
+      "source_commit": "f22ca7b61a92d3cd2b856485a55a1519cb11b627",
+      "source_ref": "refs/changes/46/6732846/2",
+      "source_patchset": 2
+    }
+  ]
+}

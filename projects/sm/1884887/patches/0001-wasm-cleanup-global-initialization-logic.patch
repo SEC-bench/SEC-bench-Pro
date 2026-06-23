@@ -1,0 +1,170 @@
+From 22ea154bc960b7810f5e316d179746222b476d05 Mon Sep 17 00:00:00 2001
+From: Ryan Hunt <rhunt@eqrion.net>
+Date: Fri, 22 Mar 2024 19:11:19 +0000
+Subject: [PATCH] Bug 1884887 - wasm: Cleanup global initialization logic.
+ r=yury
+
+Differential Revision: https://phabricator.services.mozilla.com/D204378
+---
+ js/src/wasm/WasmInitExpr.cpp |  1 +
+ js/src/wasm/WasmInstance.cpp |  7 +++----
+ js/src/wasm/WasmJS.cpp       | 23 +++++++++++++++++++----
+ js/src/wasm/WasmJS.h         |  6 +++++-
+ js/src/wasm/WasmModule.cpp   |  2 +-
+ js/src/wasm/WasmValue.h      | 10 +++++-----
+ 6 files changed, 34 insertions(+), 15 deletions(-)
+
+diff --git a/js/src/wasm/WasmInitExpr.cpp b/js/src/wasm/WasmInitExpr.cpp
+index 1283be2f7e81a..581eca2f6265c 100644
+--- a/js/src/wasm/WasmInitExpr.cpp
++++ b/js/src/wasm/WasmInitExpr.cpp
+@@ -645,6 +645,7 @@ bool InitExpr::decodeAndValidate(Decoder& d, ModuleEnvironment* env,
+   expr->type_ = expected;
+ 
+   if (literal) {
++    literal->unsafeSetType(expected);
+     expr->kind_ = InitExprKind::Literal;
+     expr->literal_ = *literal;
+     return true;
+diff --git a/js/src/wasm/WasmInstance.cpp b/js/src/wasm/WasmInstance.cpp
+index b5b361ee501fd..606601581d313 100644
+--- a/js/src/wasm/WasmInstance.cpp
++++ b/js/src/wasm/WasmInstance.cpp
+@@ -2449,11 +2449,10 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
+ 
+         if (global.isIndirect()) {
+           // Initialize the cell
+-          wasm::GCPtrVal& cell = globalObjs[i]->val();
+-          cell = val.get();
++          globalObjs[i]->setVal(val);
++
+           // Link to the cell
+-          void* address = (void*)&cell.get().cell();
+-          *(void**)globalAddr = address;
++          *(void**)globalAddr = globalObjs[i]->addressOfCell();
+         } else {
+           val.get().writeToHeapLocation(globalAddr);
+         }
+diff --git a/js/src/wasm/WasmJS.cpp b/js/src/wasm/WasmJS.cpp
+index e1a6656d68dd0..5778943138efd 100644
+--- a/js/src/wasm/WasmJS.cpp
++++ b/js/src/wasm/WasmJS.cpp
+@@ -3229,7 +3229,7 @@ void WasmGlobalObject::finalize(JS::GCContext* gcx, JSObject* obj) {
+     // Release the strong reference to the type definitions this global could
+     // be referencing.
+     global->type().Release();
+-    gcx->delete_(obj, &global->val(), MemoryUse::WasmGlobalCell);
++    gcx->delete_(obj, &global->mutableVal(), MemoryUse::WasmGlobalCell);
+   }
+ }
+ 
+@@ -3255,7 +3255,9 @@ WasmGlobalObject* WasmGlobalObject::create(JSContext* cx, HandleVal value,
+ 
+   // It's simpler to initialize the cell after the object has been created,
+   // to avoid needing to root the cell before the object creation.
+-  obj->val() = value.get();
++  // We don't use `setVal` here because the assumes the cell has already
++  // been initialized.
++  obj->mutableVal() = value.get();
+   // Acquire a strong reference to a type definition this global could
+   // be referencing.
+   obj->type().AddRef();
+@@ -3386,7 +3388,7 @@ bool WasmGlobalObject::valueSetterImpl(JSContext* cx, const CallArgs& args) {
+   if (!Val::fromJSValue(cx, global->type(), args.get(0), &val)) {
+     return false;
+   }
+-  global->val() = val.get();
++  global->setVal(val);
+ 
+   args.rval().setUndefined();
+   return true;
+@@ -3419,10 +3421,23 @@ bool WasmGlobalObject::isMutable() const {
+ 
+ ValType WasmGlobalObject::type() const { return val().get().type(); }
+ 
+-GCPtrVal& WasmGlobalObject::val() const {
++GCPtrVal& WasmGlobalObject::mutableVal() {
+   return *reinterpret_cast<GCPtrVal*>(getReservedSlot(VAL_SLOT).toPrivate());
+ }
+ 
++const GCPtrVal& WasmGlobalObject::val() const {
++  return *reinterpret_cast<GCPtrVal*>(getReservedSlot(VAL_SLOT).toPrivate());
++}
++
++void WasmGlobalObject::setVal(wasm::HandleVal value) {
++  MOZ_ASSERT(type() == value.get().type());
++  mutableVal() = value;
++}
++
++void* WasmGlobalObject::addressOfCell() const {
++  return (void*)&val().get().cell();
++}
++
+ #ifdef ENABLE_WASM_TYPE_REFLECTIONS
+ /* static */
+ bool WasmGlobalObject::typeImpl(JSContext* cx, const CallArgs& args) {
+diff --git a/js/src/wasm/WasmJS.h b/js/src/wasm/WasmJS.h
+index 10c71b436bde2..27d49701a94f4 100644
+--- a/js/src/wasm/WasmJS.h
++++ b/js/src/wasm/WasmJS.h
+@@ -167,6 +167,8 @@ class WasmGlobalObject : public NativeObject {
+   static bool valueSetterImpl(JSContext* cx, const CallArgs& args);
+   static bool valueSetter(JSContext* cx, unsigned argc, Value* vp);
+ 
++  wasm::GCPtrVal& mutableVal();
++
+  public:
+   static const unsigned RESERVED_SLOTS = 2;
+   static const JSClass class_;
+@@ -182,7 +184,9 @@ class WasmGlobalObject : public NativeObject {
+ 
+   bool isMutable() const;
+   wasm::ValType type() const;
+-  wasm::GCPtrVal& val() const;
++  const wasm::GCPtrVal& val() const;
++  void setVal(wasm::HandleVal value);
++  void* addressOfCell() const;
+ };
+ 
+ // The class of WebAssembly.Instance. Each WasmInstanceObject owns a
+diff --git a/js/src/wasm/WasmModule.cpp b/js/src/wasm/WasmModule.cpp
+index c2de0429d3467..a297e81ad30c3 100644
+--- a/js/src/wasm/WasmModule.cpp
++++ b/js/src/wasm/WasmModule.cpp
+@@ -867,7 +867,7 @@ static bool GetGlobalExport(JSContext* cx,
+   MOZ_RELEASE_ASSERT(!global.isImport());
+   RootedVal globalVal(cx);
+   instanceObj->instance().constantGlobalGet(globalIndex, &globalVal);
+-  globalObj->val() = globalVal;
++  globalObj->setVal(globalVal);
+   return true;
+ }
+ 
+diff --git a/js/src/wasm/WasmValue.h b/js/src/wasm/WasmValue.h
+index 66de69053700f..9a5442fc75bb5 100644
+--- a/js/src/wasm/WasmValue.h
++++ b/js/src/wasm/WasmValue.h
+@@ -224,6 +224,11 @@ class LitVal {
+   Cell& cell() { return cell_; }
+   const Cell& cell() const { return cell_; }
+ 
++  // Updates the type of the LitVal. Does not check that the type is valid for
++  // the actual value, so make sure the type is definitely correct via
++  // validation or something.
++  void unsafeSetType(ValType type) { type_ = type; }
++
+   uint32_t i32() const {
+     MOZ_ASSERT(type_ == ValType::I32);
+     return cell_.i32_;
+@@ -309,11 +314,6 @@ class MOZ_NON_PARAM Val : public LitVal {
+     return cell_.ref_;
+   }
+ 
+-  // Updates the type of the Val. Does not check that the type is valid for the
+-  // actual value, so make sure the type is definitely correct via validation or
+-  // something.
+-  void unsafeSetType(ValType type) { type_ = type; }
+-
+   // Initialize from `loc` which is a rooted location and needs no barriers.
+   void initFromRootedLocation(ValType type, const void* loc);
+   void initFromHeapLocation(ValType type, const void* loc);

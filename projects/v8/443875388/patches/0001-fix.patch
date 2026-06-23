@@ -1,0 +1,32 @@
+From a5f18bb86c3b97b9bfc8f95a0926812a1282ad7c Mon Sep 17 00:00:00 2001
+From: Leszek Swirski <leszeks@chromium.org>
+Date: Fri, 12 Sep 2025 16:48:24 +0200
+Subject: [PATCH] [ignition] CHECK that handler offsets fit in the bitfield
+
+Fixed: 443765373
+Change-Id: I2be7258463c7787311105b7075f3007197cfccfe
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6943611
+Reviewed-by: Toon Verwaest <verwaest@chromium.org>
+Commit-Queue: Toon Verwaest <verwaest@chromium.org>
+Commit-Queue: Leszek Swirski <leszeks@chromium.org>
+Auto-Submit: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102453}
+---
+ src/codegen/handler-table.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/codegen/handler-table.cc b/src/codegen/handler-table.cc
+index e1c1f6aab01..b815ff27f18 100644
+--- a/src/codegen/handler-table.cc
++++ b/src/codegen/handler-table.cc
+@@ -141,6 +141,7 @@ void HandlerTable::SetRangeEnd(int index, int value) {
+ 
+ void HandlerTable::SetRangeHandler(int index, int handler_offset,
+                                    CatchPrediction prediction) {
++  CHECK(HandlerOffsetField::is_valid(handler_offset));
+   int value = HandlerOffsetField::encode(handler_offset) |
+               HandlerWasUsedField::encode(false) |
+               HandlerPredictionField::encode(prediction);
+-- 
+2.43.0
+

@@ -1,0 +1,670 @@
+From 51b324c6d189eeca06b84200d1acbdfba85f5c9b Mon Sep 17 00:00:00 2001
+From: Michael Lippautz <mlippautz@chromium.org>
+Date: Mon, 15 Sep 2025 11:45:03 +0200
+Subject: [PATCH] [heap] Fix processing of JSDispatch handle through RelocInfo
+
+Before this patch any dispatch handles contained in RelocInfo were assumed to
+be kept alive by their corresponding JSFunctions. This was fine as:
+- RelocInfo treated the corresponding JSFunction weakly which meant
+  that the Code would be deoptimized if the JSFunction went away.
+- The top most frame was always strongified all references in case it
+  could not be deoptimized. This meant that JSFunction and the dispatch
+  handle (and instrunction stream) were marked this way.
+
+In a world with sandbox corruptions assuming a liveness witness does
+not hold anymore as attackers can break the link from JSFunction to
+dispatch handle (and thus instructon stream).
+
+This patch implements proper weak handling in RelocInfo's dispatch handles:
+- For regular processing the handles are treated weakly and
+  discovering a dead handle leads to deoptimization of the code objects.
+- For the top most frame the dispatch handle and the instruction
+  stream are strongified.
+
+Despite fixing the sandbox problem this also better follows the
+principle of treating edges individually (weak or strong) without
+considering other liveness witnesses which generally leads to more
+robust code.
+
+Fixed: 443772809
+Change-Id: I4608cc830019c5267dfe49539867a7f0bbb0a144
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6939390
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Commit-Queue: Michael Lippautz <mlippautz@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102520}
+---
+ src/codegen/reloc-info-inl.h               |  16 ++++
+ src/codegen/reloc-info.cc                  |  19 ++--
+ src/codegen/reloc-info.h                   |  16 ++--
+ src/deoptimizer/x64/deoptimizer-x64.cc     |   4 +-
+ src/diagnostics/disassembler.cc            |  20 ++--
+ src/heap/mark-compact-inl.h                |   3 +-
+ src/heap/mark-compact.cc                   | 106 ++++++++++++++-------
+ src/heap/mark-compact.h                    |   2 +-
+ src/heap/marking-visitor-inl.h             |  14 +++
+ src/heap/weak-object-worklists.h           |   7 ++
+ src/objects/code-inl.h                     |   6 ++
+ src/objects/code.h                         |   1 +
+ src/objects/objects-body-descriptors-inl.h |   3 +-
+ src/profiler/heap-snapshot-generator.cc    |   3 +-
+ src/sandbox/js-dispatch-table-inl.h        |   9 ++
+ src/sandbox/js-dispatch-table.cc           |   8 +-
+ src/sandbox/js-dispatch-table.h            |   4 +-
+ test/mjsunit/sandbox/regress-443772809.js  |  53 +++++++++++
+ 18 files changed, 222 insertions(+), 72 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress-443772809.js
+
+diff --git a/src/codegen/reloc-info-inl.h b/src/codegen/reloc-info-inl.h
+index 3ccbaea2d40..ea588a284ba 100644
+--- a/src/codegen/reloc-info-inl.h
++++ b/src/codegen/reloc-info-inl.h
+@@ -63,6 +63,22 @@ RelocIteratorBase<RelocInfoT>::RelocIteratorBase(RelocInfoT reloc_info,
+   next();
+ }
+ 
++Address RelocInfo::target_address_address_for_gc() {
++  DCHECK(IsGCRelocMode(rmode_));
++  if (rmode_ == JS_DISPATCH_HANDLE) {
++    return pc_;
++  }
++  return target_address_address();
++}
++
++uint32_t RelocInfo::target_address_size_for_gc() {
++  DCHECK(IsGCRelocMode(rmode_));
++  if (rmode_ == JS_DISPATCH_HANDLE) {
++    return kJSDispatchHandleSize;
++  }
++  return target_address_size();
++}
++
+ }  // namespace internal
+ }  // namespace v8
+ 
+diff --git a/src/codegen/reloc-info.cc b/src/codegen/reloc-info.cc
+index 17c60b42a7b..56bf51515e4 100644
+--- a/src/codegen/reloc-info.cc
++++ b/src/codegen/reloc-info.cc
+@@ -423,14 +423,17 @@ void RelocInfo::Print(Isolate* isolate, std::ostream& os) {
+       break;
+     case JS_DISPATCH_HANDLE: {
+ #ifdef V8_ENABLE_LEAPTIERING
+-    Tagged<Code> target_code =
+-        IsolateGroup::current()->js_dispatch_table()->GetCode(
+-            js_dispatch_handle());
+-    os << " (" << CodeKindToString(target_code->kind());
+-    if (Builtins::IsBuiltin(target_code)) {
+-      os << " " << Builtins::name(target_code->builtin_id());
+-    }
+-    os << ")  (" << js_dispatch_handle() << ")";
++      JSDispatchHandle handle = js_dispatch_handle();
++      if (handle != kNullJSDispatchHandle) {
++        Tagged<Code> target_code =
++            IsolateGroup::current()->js_dispatch_table()->GetCode(handle);
++        os << " (" << CodeKindToString(target_code->kind());
++        if (Builtins::IsBuiltin(target_code)) {
++          os << " " << Builtins::name(target_code->builtin_id());
++        }
++        os << ")  (" << handle << ")";
++      }
++
+     break;
+ #else
+     UNREACHABLE();
+diff --git a/src/codegen/reloc-info.h b/src/codegen/reloc-info.h
+index 294e0f8c61e..b1794aa551e 100644
+--- a/src/codegen/reloc-info.h
++++ b/src/codegen/reloc-info.h
+@@ -113,7 +113,10 @@ class RelocInfo {
+     // TODO(ishell): rename to NEAR_CODE_TARGET.
+     RELATIVE_CODE_TARGET,  // LAST_CODE_TARGET_MODE
+     COMPRESSED_EMBEDDED_OBJECT,
+-    FULL_EMBEDDED_OBJECT,  // LAST_GCED_ENUM
++    FULL_EMBEDDED_OBJECT,
++    // An integer JSDispatchHandle, referring to an entry in the
++    // JSDispatchTable.
++    JS_DISPATCH_HANDLE,  // LAST_GCED_ENUM
+ 
+     WASM_CALL,  // FIRST_SHAREABLE_RELOC_MODE
+     WASM_STUB_CALL,
+@@ -127,10 +130,6 @@ class RelocInfo {
+     // and PPC.
+     INTERNAL_REFERENCE_ENCODED,
+ 
+-    // An integer JSDispatchHandle, referring to an entry in the
+-    // JSDispatchTable.
+-    JS_DISPATCH_HANDLE,
+-
+     // An off-heap instruction stream target. See:
+     // https://docs.google.com/document/d/1XmiXT54FQ0qqroWzRc8nzrpSSo_xoyFRkVgmonONEJk
+     // TODO(ishell): rename to BUILTIN_ENTRY.
+@@ -163,7 +162,7 @@ class RelocInfo {
+     LAST_REAL_RELOC_MODE = VENEER_POOL,
+     FIRST_EMBEDDED_OBJECT_RELOC_MODE = COMPRESSED_EMBEDDED_OBJECT,
+     LAST_EMBEDDED_OBJECT_RELOC_MODE = FULL_EMBEDDED_OBJECT,
+-    LAST_GCED_ENUM = LAST_EMBEDDED_OBJECT_RELOC_MODE,
++    LAST_GCED_ENUM = JS_DISPATCH_HANDLE,
+     FIRST_BUILTIN_ENTRY_MODE = OFF_HEAP_TARGET,
+     LAST_BUILTIN_ENTRY_MODE = NEAR_BUILTIN_ENTRY,
+     FIRST_SHAREABLE_RELOC_MODE = WASM_CALL,
+@@ -355,6 +354,11 @@ class RelocInfo {
+   // can only be called if rmode_ is JS_DISPATCH_HANDLE.
+   V8_INLINE JSDispatchHandle js_dispatch_handle();
+ 
++  // Returns address and size of a slot for garbage collection reasons. Only
++  // usable if `IsGCRelocMode()` is true.
++  V8_INLINE Address target_address_address_for_gc();
++  V8_INLINE uint32_t target_address_size_for_gc();
++
+   template <typename ObjectVisitor>
+   void Visit(Tagged<InstructionStream> host, ObjectVisitor* visitor);
+ 
+diff --git a/src/deoptimizer/x64/deoptimizer-x64.cc b/src/deoptimizer/x64/deoptimizer-x64.cc
+index bffcf7c07f6..777d8bc58c7 100644
+--- a/src/deoptimizer/x64/deoptimizer-x64.cc
++++ b/src/deoptimizer/x64/deoptimizer-x64.cc
+@@ -50,12 +50,12 @@ void Deoptimizer::ZapCode(Address start, Address end, RelocIterator& it) {
+   for (; !it.done(); it.next()) {
+     RelocInfo* info = it.rinfo();
+     if (RelocInfo::IsGCRelocMode(info->rmode())) {
+-      Address next_hole = info->target_address_address();
++      Address next_hole = info->target_address_address_for_gc();
+       if (next_hole > end) break;
+       while (masm.current_pc() < next_hole) {
+         masm.int3();
+       }
+-      masm.skip_bytes(info->target_address_size());
++      masm.skip_bytes(info->target_address_size_for_gc());
+     }
+   }
+   while (masm.current_pc() < end) {
+diff --git a/src/diagnostics/disassembler.cc b/src/diagnostics/disassembler.cc
+index df19ed42359..f947e96eca2 100644
+--- a/src/diagnostics/disassembler.cc
++++ b/src/diagnostics/disassembler.cc
+@@ -259,15 +259,17 @@ static void PrintRelocInfo(std::ostringstream& out, Isolate* isolate,
+     out << "    ;; external reference (" << reference_name << ")";
+   } else if (rmode == RelocInfo::JS_DISPATCH_HANDLE) {
+ #ifdef V8_ENABLE_LEAPTIERING
+-    out << "    ;; js dispatch handle:0x" << std::hex
+-        << relocinfo->js_dispatch_handle();
+-    Tagged<Code> code = IsolateGroup::current()->js_dispatch_table()->GetCode(
+-        relocinfo->js_dispatch_handle());
+-    CodeKind kind = code->kind();
+-    if (code->is_builtin()) {
+-      out << " Builtin::" << Builtins::name(code->builtin_id());
+-    } else {
+-      out << " " << CodeKindToString(kind);
++    JSDispatchHandle dispatch_handle = relocinfo->js_dispatch_handle();
++    out << "    ;; js dispatch handle:0x" << std::hex << dispatch_handle;
++    if (dispatch_handle != kNullJSDispatchHandle) {
++      Tagged<Code> code = IsolateGroup::current()->js_dispatch_table()->GetCode(
++          relocinfo->js_dispatch_handle());
++      CodeKind kind = code->kind();
++      if (code->is_builtin()) {
++        out << " Builtin::" << Builtins::name(code->builtin_id());
++      } else {
++        out << " " << CodeKindToString(kind);
++      }
+     }
+ #else
+     UNREACHABLE();
+diff --git a/src/heap/mark-compact-inl.h b/src/heap/mark-compact-inl.h
+index 27d757b6b1b..a221c05d6b8 100644
+--- a/src/heap/mark-compact-inl.h
++++ b/src/heap/mark-compact-inl.h
+@@ -25,8 +25,7 @@ namespace v8 {
+ namespace internal {
+ 
+ void MarkCompactCollector::MarkObject(
+-    Tagged<HeapObject> host, Tagged<HeapObject> obj,
+-    MarkingHelper::WorklistTarget target_worklist) {
++    Tagged<HeapObject> obj, MarkingHelper::WorklistTarget target_worklist) {
+   DCHECK(ReadOnlyHeap::Contains(obj) || heap_->Contains(obj));
+   MarkingHelper::TryMarkAndPush(heap_, local_marking_worklists_.get(),
+                                 marking_state_, target_worklist, obj);
+diff --git a/src/heap/mark-compact.cc b/src/heap/mark-compact.cc
+index b2ec64cfccb..983f3c4096f 100644
+--- a/src/heap/mark-compact.cc
++++ b/src/heap/mark-compact.cc
+@@ -981,11 +981,11 @@ class MarkCompactCollector::CustomRootBodyMarkingVisitor final
+         collector_(collector) {}
+ 
+   void VisitPointer(Tagged<HeapObject> host, ObjectSlot p) final {
+-    MarkObject(host, p.load(cage_base()));
++    MarkObject(p.load(cage_base()));
+   }
+ 
+   void VisitMapPointer(Tagged<HeapObject> host) final {
+-    MarkObject(host, host->map(cage_base()));
++    MarkObject(host->map(cage_base()));
+   }
+ 
+   void VisitPointers(Tagged<HeapObject> host, ObjectSlot start,
+@@ -994,13 +994,13 @@ class MarkCompactCollector::CustomRootBodyMarkingVisitor final
+       // The map slot should be handled in VisitMapPointer.
+       DCHECK_NE(host->map_slot(), p);
+       DCHECK(!HasWeakHeapObjectTag(p.load(cage_base())));
+-      MarkObject(host, p.load(cage_base()));
++      MarkObject(p.load(cage_base()));
+     }
+   }
+ 
+   void VisitInstructionStreamPointer(Tagged<Code> host,
+                                      InstructionStreamSlot slot) override {
+-    MarkObject(host, slot.load(code_cage_base()));
++    MarkObject(slot.load(code_cage_base()));
+   }
+ 
+   void VisitPointers(Tagged<HeapObject> host, MaybeObjectSlot start,
+@@ -1013,24 +1013,44 @@ class MarkCompactCollector::CustomRootBodyMarkingVisitor final
+                        RelocInfo* rinfo) override {
+     Tagged<InstructionStream> target =
+         InstructionStream::FromTargetAddress(rinfo->target_address());
+-    MarkObject(host, target);
++    MarkObject(target);
+   }
+ 
+   void VisitEmbeddedPointer(Tagged<InstructionStream> host,
+                             RelocInfo* rinfo) override {
+-    MarkObject(host, rinfo->target_object(cage_base()));
++    MarkObject(rinfo->target_object(cage_base()));
++  }
++
++  void VisitJSDispatchTableEntry(Tagged<HeapObject> host,
++                                 JSDispatchHandle handle) override {
++#ifdef V8_ENABLE_LEAPTIERING
++    JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
++#ifdef DEBUG
++    JSDispatchTable::Space* space =
++        collector_->heap()->js_dispatch_table_space();
++    JSDispatchTable::Space* ro_space = collector_->heap()
++                                           ->isolate()
++                                           ->read_only_heap()
++                                           ->js_dispatch_table_space();
++    jdt->VerifyEntry(handle, space, ro_space);
++#endif  // DEBUG
++    jdt->Mark(handle);
++    MarkObject(jdt->GetCode(handle));
++#endif  // V8_ENABLE_LEAPTIERING
+   }
+ 
+  private:
+-  V8_INLINE void MarkObject(Tagged<HeapObject> host, Tagged<Object> object) {
+-    if (!IsHeapObject(object)) return;
++  V8_INLINE void MarkObject(Tagged<Object> object) {
++    if (!IsHeapObject(object)) {
++      return;
++    }
+     Tagged<HeapObject> heap_object = Cast<HeapObject>(object);
+     const auto target_worklist =
+         MarkingHelper::ShouldMarkObject(collector_->heap(), heap_object);
+     if (!target_worklist) {
+       return;
+     }
+-    collector_->MarkObject(host, heap_object, target_worklist.value());
++    collector_->MarkObject(heap_object, target_worklist.value());
+   }
+ 
+   MarkCompactCollector* const collector_;
+@@ -2303,7 +2323,7 @@ std::pair<size_t, size_t> MarkCompactCollector::ProcessMarkingWorklist(
+           const auto target_worklist =
+               MarkingHelper::ShouldMarkObject(heap_, value);
+           if (target_worklist) {
+-            MarkObject(object, value, target_worklist.value());
++            MarkObject(value, target_worklist.value());
+           }
+         }
+         key_to_values_.erase(it);
+@@ -3085,6 +3105,17 @@ void MarkCompactCollector::ClearNonLiveReferences() {
+ #endif  // !V8_ENABLE_LEAPTIERING
+   }
+ 
++  {
++    // This method may be called from within a DisallowDeoptimizations scope.
++    // Temporarily allow deopts for marking code for deopt. This is not doing
++    // the deopt yet and the actual deopts will be bailed out on later if the
++    // current safepoint is not safe for deopts.
++    // TODO(357636610): Reconsider whether the DisallowDeoptimization scopes are
++    // truly needed.
++    AllowDeoptimization allow_deoptimization(heap_->isolate());
++    MarkDependentCodeForDeoptimization();
++  }
++
+ #ifdef V8_ENABLE_LEAPTIERING
+   {
+     TRACE_GC(heap_->tracer(), GCTracer::Scope::MC_SWEEP_JS_DISPATCH_TABLE);
+@@ -3252,17 +3283,6 @@ void MarkCompactCollector::ClearNonLiveReferences() {
+ 
+   PROFILE(heap_->isolate(), WeakCodeClearEvent());
+ 
+-  {
+-    // This method may be called from within a DisallowDeoptimizations scope.
+-    // Temporarily allow deopts for marking code for deopt. This is not doing
+-    // the deopt yet and the actual deopts will be bailed out on later if the
+-    // current safepoint is not safe for deopts.
+-    // TODO(357636610): Reconsider whether the DisallowDeoptimization scopes are
+-    // truly needed.
+-    AllowDeoptimization allow_deoptimization(heap_->isolate());
+-    MarkDependentCodeForDeoptimization();
+-  }
+-
+   {
+     TRACE_GC(heap_->tracer(), GCTracer::Scope::MC_CLEAR_JOIN_JOB);
+     clear_string_table_job_handle->Join();
+@@ -3280,6 +3300,7 @@ void MarkCompactCollector::ClearNonLiveReferences() {
+   DCHECK(weak_objects_.weak_references_non_trivial.IsEmpty());
+   DCHECK(weak_objects_.weak_references_non_trivial_unmarked.IsEmpty());
+   DCHECK(weak_objects_.weak_objects_in_code.IsEmpty());
++  DCHECK(weak_objects_.weak_dispatch_handles_in_code.IsEmpty());
+   DCHECK(weak_objects_.js_weak_refs.IsEmpty());
+   DCHECK(weak_objects_.weak_cells.IsEmpty());
+   DCHECK(weak_objects_.code_flushing_candidates.IsEmpty());
+@@ -3290,23 +3311,44 @@ void MarkCompactCollector::ClearNonLiveReferences() {
+ }
+ 
+ void MarkCompactCollector::MarkDependentCodeForDeoptimization() {
++  const auto MarkForDeoptimization = [this](Tagged<Code> code) {
++    if (code->embedded_objects_cleared()) {
++      // If embedded objects have been cleared then the code is already
++      // marked for deoptimizations.
++      return;
++    }
++    if (!code->marked_for_deoptimization()) {
++      code->SetMarkedForDeoptimization(heap_->isolate(),
++                                       LazyDeoptimizeReason::kWeakObjects);
++      have_code_to_deoptimize_ = true;
++    }
++    code->ClearEmbeddedObjectsAndJSDispatchHandles(heap_);
++    DCHECK(code->embedded_objects_cleared());
++  };
++
+   HeapObjectAndCode weak_object_in_code;
+   while (local_weak_objects()->weak_objects_in_code_local.Pop(
+       &weak_object_in_code)) {
+-    Tagged<HeapObject> object = weak_object_in_code.heap_object;
+-    Tagged<Code> code = weak_object_in_code.code;
+     if (MarkingHelper::IsUnmarkedAndNotAlwaysLive(
+-            heap_, non_atomic_marking_state_, object) &&
+-        !code->embedded_objects_cleared()) {
+-      if (!code->marked_for_deoptimization()) {
+-        code->SetMarkedForDeoptimization(heap_->isolate(),
+-                                         LazyDeoptimizeReason::kWeakObjects);
+-        have_code_to_deoptimize_ = true;
+-      }
+-      code->ClearEmbeddedObjectsAndJSDispatchHandles(heap_);
+-      DCHECK(code->embedded_objects_cleared());
++            heap_, non_atomic_marking_state_,
++            weak_object_in_code.heap_object)) {
++      MarkForDeoptimization(weak_object_in_code.code);
+     }
+   }
++#ifdef V8_ENABLE_LEAPTIERING
++  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
++  DispatchHandleAndCode dispatch_handle_in_code;
++  while (local_weak_objects()->weak_dispatch_handles_in_code_local.Pop(
++      &dispatch_handle_in_code)) {
++    if (!jdt->IsMarked(dispatch_handle_in_code.dispatch_handle)) {
++      MarkForDeoptimization(dispatch_handle_in_code.code);
++    }
++  }
++
++#else
++  CHECK(local_weak_objects()
++            ->weak_dispatch_handles_in_code_local.IsGlobalEmpty());
++#endif  // V8_ENABLE_LEAPTIERING
+ }
+ 
+ void MarkCompactCollector::ClearPotentialSimpleMapTransition(
+diff --git a/src/heap/mark-compact.h b/src/heap/mark-compact.h
+index 68c81694416..4f00ef4d17f 100644
+--- a/src/heap/mark-compact.h
++++ b/src/heap/mark-compact.h
+@@ -210,7 +210,7 @@ class MarkCompactCollector final {
+   void MarkLiveObjects();
+ 
+   // Marks the object and adds it to the worklist.
+-  V8_INLINE void MarkObject(Tagged<HeapObject> host, Tagged<HeapObject> obj,
++  V8_INLINE void MarkObject(Tagged<HeapObject> obj,
+                             MarkingHelper::WorklistTarget target_worklist);
+ 
+   // Marks the root object and adds it to the worklist.
+diff --git a/src/heap/marking-visitor-inl.h b/src/heap/marking-visitor-inl.h
+index 7a38fce7c26..c5a4a9ff7d0 100644
+--- a/src/heap/marking-visitor-inl.h
++++ b/src/heap/marking-visitor-inl.h
+@@ -19,6 +19,7 @@
+ #include "src/heap/marking.h"
+ #include "src/heap/pretenuring-handler-inl.h"
+ #include "src/heap/spaces.h"
++#include "src/objects/casting.h"
+ #include "src/objects/compressed-slots.h"
+ #include "src/objects/descriptor-array.h"
+ #include "src/objects/heap-object.h"
+@@ -331,6 +332,19 @@ void MarkingVisitorBase<ConcreteVisitor>::VisitJSDispatchTableEntry(
+   jdt->VerifyEntry(handle, space, ro_space);
+ #endif  // DEBUG
+ 
++  if (jdt->IsMarked(handle)) {
++    return;
++  }
++
++  if (Tagged<InstructionStream> istream; TryCast(host, &istream)) {
++    Tagged<Code> code = UncheckedCast<Code>(istream->raw_code(kAcquireLoad));
++    if (code->IsWeakObjectInOptimizedCode(handle)) {
++      local_weak_objects_->weak_dispatch_handles_in_code_local.Push(
++          DispatchHandleAndCode{handle, code});
++      return;
++    }
++  }
++
+   jdt->Mark(handle);
+ 
+   // The code objects referenced from a dispatch table entry are treated as weak
+diff --git a/src/heap/weak-object-worklists.h b/src/heap/weak-object-worklists.h
+index f67ab4f125d..64d872dfab5 100644
+--- a/src/heap/weak-object-worklists.h
++++ b/src/heap/weak-object-worklists.h
+@@ -39,6 +39,11 @@ struct HeapObjectAndCode {
+   Tagged<Code> code;
+ };
+ 
++struct DispatchHandleAndCode {
++  JSDispatchHandle dispatch_handle;
++  Tagged<Code> code;
++};
++
+ class EphemeronHashTable;
+ class JSFunction;
+ class SharedFunctionInfo;
+@@ -72,6 +77,8 @@ class TransitionArray;
+     WeakReferencesNonTrivialUnmarked)                                         \
+   F(TrustedObjectAndSlot, weak_references_trusted, WeakReferencesTrusted)     \
+   F(HeapObjectAndCode, weak_objects_in_code, WeakObjectsInCode)               \
++  F(DispatchHandleAndCode, weak_dispatch_handles_in_code,                     \
++    WeakDispatchHandlesInCode)                                                \
+   F(Tagged<JSWeakRef>, js_weak_refs, JSWeakRefs)                              \
+   F(Tagged<WeakCell>, weak_cells, WeakCells)                                  \
+   F(Tagged<SharedFunctionInfo>, code_flushing_candidates,                     \
+diff --git a/src/objects/code-inl.h b/src/objects/code-inl.h
+index 77c2509af61..8623be8340a 100644
+--- a/src/objects/code-inl.h
++++ b/src/objects/code-inl.h
+@@ -649,6 +649,12 @@ bool Code::IsWeakObjectInOptimizedCode(Tagged<HeapObject> object) {
+          InstanceTypeChecker::IsContext(map_object);
+ }
+ 
++bool Code::IsWeakObjectInOptimizedCode(JSDispatchHandle) {
++  // Dispatch handles are always treated weakly in optimized code.
++  DCHECK(is_optimized_code());
++  return true;
++}
++
+ bool Code::IsWeakObjectInDeoptimizationLiteralArray(Tagged<Object> object) {
+   // Maps must be strong because they can be used as part of the description for
+   // how to materialize an object upon deoptimization, in which case it is
+diff --git a/src/objects/code.h b/src/objects/code.h
+index c64f01d152c..3c20fabd695 100644
+--- a/src/objects/code.h
++++ b/src/objects/code.h
+@@ -318,6 +318,7 @@ class Code : public ExposedTrustedObject {
+   inline bool CanContainWeakObjects();
+   inline bool IsWeakObject(Tagged<HeapObject> object);
+   static inline bool IsWeakObjectInOptimizedCode(Tagged<HeapObject> object);
++  inline bool IsWeakObjectInOptimizedCode(JSDispatchHandle);
+   static inline bool IsWeakObjectInDeoptimizationLiteralArray(
+       Tagged<Object> object);
+ 
+diff --git a/src/objects/objects-body-descriptors-inl.h b/src/objects/objects-body-descriptors-inl.h
+index 8f408fb7c73..2d75692a605 100644
+--- a/src/objects/objects-body-descriptors-inl.h
++++ b/src/objects/objects-body-descriptors-inl.h
+@@ -1309,7 +1309,8 @@ class InstructionStream::BodyDescriptor final : public BodyDescriptorBase {
+       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE) |
+       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE_ENCODED) |
+       RelocInfo::ModeMask(RelocInfo::OFF_HEAP_TARGET) |
+-      RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL);
++      RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL) |
++      RelocInfo::ModeMask(RelocInfo::JS_DISPATCH_HANDLE);
+ 
+   template <typename ObjectVisitor>
+   static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
+diff --git a/src/profiler/heap-snapshot-generator.cc b/src/profiler/heap-snapshot-generator.cc
+index ff0be355851..6ed7e84b25d 100644
+--- a/src/profiler/heap-snapshot-generator.cc
++++ b/src/profiler/heap-snapshot-generator.cc
+@@ -1330,7 +1330,8 @@ class IndexedReferencesExtractor : public ObjectVisitorWithCageBases {
+       int field_index = JSFunction::kDispatchHandleOffset / kTaggedSize;
+       CHECK(generator_->visited_fields_[field_index]);
+       generator_->visited_fields_[field_index] = false;
+-    } else if (IsCode(host) || IsFeedbackCell(host)) {
++    } else if (IsCode(host) || IsFeedbackCell(host) ||
++               IsInstructionStream(host)) {
+       // Nothing to do: the Code object is tracked as part of the JSFunction.
+     } else {
+       UNREACHABLE();
+diff --git a/src/sandbox/js-dispatch-table-inl.h b/src/sandbox/js-dispatch-table-inl.h
+index dc1c71939ab..4541bee2166 100644
+--- a/src/sandbox/js-dispatch-table-inl.h
++++ b/src/sandbox/js-dispatch-table-inl.h
+@@ -283,6 +283,15 @@ void JSDispatchTable::Mark(JSDispatchHandle handle) {
+   at(index).Mark();
+ }
+ 
++bool JSDispatchTable::IsMarked(JSDispatchHandle handle) {
++  const uint32_t index = HandleToIndex(handle);
++  // The read-only space is immortal and always considered alive.
++  if (index < kEndOfReadOnlyIndex) {
++    return true;
++  }
++  return at(index).IsMarked();
++}
++
+ #if defined(DEBUG) || defined(VERIFY_HEAP)
+ void JSDispatchTable::VerifyEntry(JSDispatchHandle handle, Space* space,
+                                   Space* ro_space) {
+diff --git a/src/sandbox/js-dispatch-table.cc b/src/sandbox/js-dispatch-table.cc
+index 4bd0dd02f26..9d19ad55206 100644
+--- a/src/sandbox/js-dispatch-table.cc
++++ b/src/sandbox/js-dispatch-table.cc
+@@ -85,15 +85,9 @@ void JSDispatchTable::InitializePreAllocatedEntry(Space* space,
+                                 parameter_count, space->allocate_black());
+ }
+ 
+-#if V8_VERIFY_WRITE_BARRIERS
+-bool JSDispatchTable::IsMarked(JSDispatchHandle handle) {
+-  return at(HandleToIndex(handle)).IsMarked();
+-}
+-#endif  // V8_VERIFY_WRITE_BARRIERS
+-
+ void JSDispatchTable::PrintEntry(JSDispatchHandle handle) {
+   uint32_t index = HandleToIndex(handle);
+-  i::PrintF("JSDispatchEntry @ %p\n", &at(index));
++  i::PrintF("JSDispatchEntry (handle: %u) @ %p\n", handle.value(), &at(index));
+   i::PrintF("* code %p\n", reinterpret_cast<void*>(GetCode(handle).address()));
+   i::PrintF("* params %d\n", at(HandleToIndex(handle)).GetParameterCount());
+   i::PrintF("* entrypoint %p\n",
+diff --git a/src/sandbox/js-dispatch-table.h b/src/sandbox/js-dispatch-table.h
+index 7c658082c2e..e80eafde4a4 100644
+--- a/src/sandbox/js-dispatch-table.h
++++ b/src/sandbox/js-dispatch-table.h
+@@ -276,6 +276,7 @@ class V8_EXPORT_PRIVATE JSDispatchTable
+   //
+   // This method is atomic and can be called from background threads.
+   inline void Mark(JSDispatchHandle handle);
++  inline bool IsMarked(JSDispatchHandle handle);
+ 
+   // Frees all unmarked entries in the given space.
+   //
+@@ -300,9 +301,6 @@ class V8_EXPORT_PRIVATE JSDispatchTable
+   // The base address of this table, for use in JIT compilers.
+   Address base_address() const { return base(); }
+ 
+-#if V8_VERIFY_WRITE_BARRIERS
+-  bool IsMarked(JSDispatchHandle handle);
+-#endif  // V8_VERIFY_WRITE_BARRIERS
+ #if defined(DEBUG) || defined(VERIFY_HEAP)
+   inline void VerifyEntry(JSDispatchHandle handle, Space* space,
+                           Space* ro_space);
+diff --git a/test/mjsunit/sandbox/regress-443772809.js b/test/mjsunit/sandbox/regress-443772809.js
+new file mode 100644
+index 00000000000..d352e89303a
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress-443772809.js
+@@ -0,0 +1,53 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --allow-natives-syntax --expose-gc --sandbox-testing
++
++const kHeapObjectTag = 1;
++const kDispatchHandleOffset = Sandbox.getFieldOffset(Sandbox.getInstanceTypeIdFor("JS_FUNCTION"), "dispatch_handle");
++
++const memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++const nuke_handle_from_heap_and_hope_nothing_important_is_gone = (dispatch_handle) => {
++  for (let i = 0x40000; i < 0xc0000; i += 4) {
++    if (memory.getUint32(i, true) === dispatch_handle) memory.setUint32(i, 0, true);
++  }
++  for (let i = 0x100000; i < 0x140000; i += 4) {
++    if (memory.getUint32(i, true) === dispatch_handle) memory.setUint32(i, 0, true);
++  }
++}
++
++// From test/mjsunit/sandbox/regress-430960844.js.
++let spray_mod = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 24, 2, 96, 16, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 126, 0, 96, 1, 126, 0, 2, 15, 1, 2, 106, 115, 8, 115, 112, 114, 97, 121, 95, 99, 98, 0, 0, 3, 2, 1, 1, 7, 9, 1, 5, 115, 112, 114, 97, 121, 0, 1, 10, 38, 1, 36, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 32, 0, 16, 0, 11]));
++let { spray } = new WebAssembly.Instance(spray_mod, { js: { spray_cb: () => { } } }).exports;
++
++// Get a clean slate.
++gc({type: "major"});
++
++// This thing's dispatch handle will be uaf'd.
++const victim = eval("() => {}");
++
++const maglev = () => {
++  // Victim below will be called using its dispatch handle which at the time of
++  // Maglev compilation will take no args per its dispatch entry.
++  victim();
++  spray(0x424242424242n);
++};
++%PrepareFunctionForOptimization(maglev);
++maglev();
++%OptimizeMaglevOnNextCall(maglev);
++maglev();
++
++// Remove all heap references to victim and trigger gc to free the handle.
++const dispatch_handle = memory.getUint32(Sandbox.getAddressOf(victim) + kDispatchHandleOffset, true);
++nuke_handle_from_heap_and_hope_nothing_important_is_gone(dispatch_handle);
++gc({type: "major"});
++
++// Reclaim the victim dispatch entry with a different arg count.
++const victim_alias = eval("(a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14) => {}");
++%PrepareFunctionForOptimization(victim_alias);
++victim_alias();
++%OptimizeFunctionOnNextCall(victim_alias);
++victim_alias();
++spray(0x424242424242n);
++maglev();
+-- 
+2.43.0
+

@@ -1,0 +1,245 @@
+From bb8724fd6cc27651ce44165d0b97daefb42bee0d Mon Sep 17 00:00:00 2001
+From: Jakob Kummerow <jkummerow@chromium.org>
+Date: Thu, 24 Jul 2025 16:30:25 +0200
+Subject: [PATCH] [sandbox][wasm] Harden instantiation some more
+
+crrev.com/c/6691457 missed one case where we still read the
+NativeModule pointer from the heap twice.
+
+Fixed: 433407763
+Bug: 336507783
+Change-Id: I6c6d98716c3676fdf1940d13a4065bb038e3f145
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6781481
+Auto-Submit: Jakob Kummerow <jkummerow@chromium.org>
+Reviewed-by: Clemens Backes <clemensb@chromium.org>
+Commit-Queue: Jakob Kummerow <jkummerow@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#101626}
+---
+ src/wasm/module-instantiate.cc                | 41 +++++++++----------
+ src/wasm/wasm-objects.cc                      | 11 ++---
+ src/wasm/wasm-objects.h                       |  3 +-
+ test/common/wasm/wasm-run-utils.cc            |  7 ++--
+ .../interpreter/interpreter-fuzzer-common.cc  |  4 +-
+ 5 files changed, 32 insertions(+), 34 deletions(-)
+
+diff --git a/src/wasm/module-instantiate.cc b/src/wasm/module-instantiate.cc
+index dd1d7a78ff6..4d990528325 100644
+--- a/src/wasm/module-instantiate.cc
++++ b/src/wasm/module-instantiate.cc
+@@ -1234,7 +1234,8 @@ class InstanceBuilder {
+  private:
+   Isolate* isolate_;
+   v8::metrics::Recorder::ContextId context_id_;
+-  NativeModule* native_module_;
++  const std::shared_ptr<NativeModule> native_module_;
++  const base::Vector<const uint8_t> wire_bytes_;
+   const WasmEnabledFeatures enabled_;
+   const WasmModule* const module_;
+   ErrorThrower* thrower_;
+@@ -1266,7 +1267,7 @@ class InstanceBuilder {
+   std::string ImportName(uint32_t index) {
+     const WasmImport& import = module_->import_table[index];
+     const char* wire_bytes_start =
+-        reinterpret_cast<const char*>(native_module_->wire_bytes().data());
++        reinterpret_cast<const char*>(wire_bytes_.data());
+     std::ostringstream oss;
+     oss << "Import #" << index << " \"";
+     oss.write(wire_bytes_start + import.module_name.offset(),
+@@ -1444,7 +1445,8 @@ InstanceBuilder::InstanceBuilder(
+     MaybeDirectHandle<JSArrayBuffer> asmjs_memory_buffer)
+     : isolate_(isolate),
+       context_id_(context_id),
+-      native_module_(module_object->native_module()),
++      native_module_(module_object->shared_native_module()),
++      wire_bytes_(native_module_->wire_bytes()),
+       enabled_(native_module_->enabled_features()),
+       module_(native_module_->module()),
+       thrower_(thrower),
+@@ -1513,17 +1515,17 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
+   //--------------------------------------------------------------------------
+   // Create the WebAssembly.Instance object.
+   //--------------------------------------------------------------------------
+-  TRACE("New module instantiation for %p\n", native_module_);
+-  trusted_data_ =
+-      WasmTrustedInstanceData::New(isolate_, untrusted_module_object_, false);
++  TRACE("New module instantiation for %p\n", native_module_.get());
++  trusted_data_ = WasmTrustedInstanceData::New(
++      isolate_, untrusted_module_object_, native_module_, false);
+   bool shared = module_->has_shared_part;
+   if (shared) {
+     // For now, allocate the shared part in non-shared space. We do not need it
+     // in shared space yet since no shared objects point to it.
+     // TODO(42204563): This will change once we introduce shared globals,
+     // tables, or functions.
+-    shared_trusted_data_ =
+-        WasmTrustedInstanceData::New(isolate_, untrusted_module_object_, false);
++    shared_trusted_data_ = WasmTrustedInstanceData::New(
++        isolate_, untrusted_module_object_, native_module_, false);
+     trusted_data_->set_shared_part(*shared_trusted_data_);
+   }
+ 
+@@ -1875,7 +1877,7 @@ Maybe<bool> InstanceBuilder::Build_Phase1(
+   }
+ 
+   DCHECK(!isolate_->has_exception());
+-  TRACE("Successfully built instance for module %p\n", native_module_);
++  TRACE("Successfully built instance for module %p\n", native_module_.get());
+ 
+ #if V8_ENABLE_DRUMBRAKE
+   // Skip this event because not (yet) supported by Chromium.
+@@ -2103,7 +2105,6 @@ MaybeDirectHandle<Object> InstanceBuilder::LookupImportAsm(
+ // Load data segments into the memory.
+ // TODO(14616): Consider what to do with shared memories.
+ void InstanceBuilder::LoadDataSegments() {
+-  base::Vector<const uint8_t> wire_bytes = native_module_->wire_bytes();
+   for (const WasmDataSegment& segment : module_->data_segments) {
+     uint32_t size = segment.source.length();
+ 
+@@ -2141,7 +2142,7 @@ void InstanceBuilder::LoadDataSegments() {
+ 
+     uint8_t* memory_base = trusted_data_->memory_base(segment.memory_index);
+     std::memcpy(memory_base + dest_offset,
+-                wire_bytes.begin() + segment.source.offset(), size);
++                wire_bytes_.begin() + segment.source.offset(), size);
+   }
+ }
+ 
+@@ -2232,7 +2233,6 @@ void InstanceBuilder::FinalizeExportsObject(
+ }
+ 
+ void InstanceBuilder::SanitizeImports() {
+-  base::Vector<const uint8_t> wire_bytes = native_module_->wire_bytes();
+   const WellKnownImportsList& well_known_imports =
+       module_->type_feedback.well_known_imports;
+   const std::string& magic_string_constants =
+@@ -2245,7 +2245,7 @@ void InstanceBuilder::SanitizeImports() {
+ 
+   if (v8_flags.experimental_wasm_custom_descriptors &&
+       !module_->descriptors_section.is_empty()) {
+-    js_prototypes_setup_.emplace(isolate_, wire_bytes, module_, thrower_,
++    js_prototypes_setup_.emplace(isolate_, wire_bytes_, module_, thrower_,
+                                  sanitized_imports_);
+     js_prototypes_setup_->MaterializeDescriptorOptions(ffi_);
+     if (thrower_->error()) return;
+@@ -2258,10 +2258,10 @@ void InstanceBuilder::SanitizeImports() {
+     if (import.kind == kExternalGlobal && has_magic_string_constants &&
+         import.module_name.length() == magic_string_constants.size() &&
+         std::equal(magic_string_constants.begin(), magic_string_constants.end(),
+-                   wire_bytes.begin() + import.module_name.offset())) {
++                   wire_bytes_.begin() + import.module_name.offset())) {
+       DirectHandle<String> value =
+           WasmModuleObject::ExtractUtf8StringFromModuleBytes(
+-              isolate_, wire_bytes, import.field_name, kNoInternalize);
++              isolate_, wire_bytes_, import.field_name, kNoInternalize);
+       sanitized_imports_[index] = value;
+       continue;
+     }
+@@ -2285,11 +2285,11 @@ void InstanceBuilder::SanitizeImports() {
+ 
+     DirectHandle<String> module_name =
+         WasmModuleObject::ExtractUtf8StringFromModuleBytes(
+-            isolate_, wire_bytes, import.module_name, kInternalize);
++            isolate_, wire_bytes_, import.module_name, kInternalize);
+ 
+     DirectHandle<String> import_name =
+         WasmModuleObject::ExtractUtf8StringFromModuleBytes(
+-            isolate_, wire_bytes, import.field_name, kInternalize);
++            isolate_, wire_bytes_, import.field_name, kInternalize);
+ 
+     MaybeDirectHandle<Object> result =
+         is_asmjs_module(module_)
+@@ -2952,7 +2952,7 @@ void InstanceBuilder::ProcessExports() {
+   for (const WasmExport& exp : module_->export_table) {
+     DirectHandle<String> name =
+         WasmModuleObject::ExtractUtf8StringFromModuleBytes(
+-            isolate_, native_module_->wire_bytes(), exp.name, kInternalize);
++            isolate_, wire_bytes_, exp.name, kInternalize);
+     DirectHandle<JSAny> value;
+     switch (exp.kind) {
+       case kExternalFunction: {
+@@ -3362,10 +3362,7 @@ void InstanceBuilder::LoadTableSegments() {
+       return;
+     }
+ 
+-    base::Vector<const uint8_t> module_bytes =
+-        trusted_data_->native_module()->wire_bytes();
+-    Decoder decoder(module_bytes);
+-    decoder.consume_bytes(elem_segment.elements_wire_bytes_offset);
++    Decoder decoder(wire_bytes_ + elem_segment.elements_wire_bytes_offset);
+ 
+     bool is_function_table =
+         IsSubtypeOf(module_->tables[table_index].type, kWasmFuncRef, module_);
+diff --git a/src/wasm/wasm-objects.cc b/src/wasm/wasm-objects.cc
+index e8a6ed0fcd1..706c7e4cfd7 100644
+--- a/src/wasm/wasm-objects.cc
++++ b/src/wasm/wasm-objects.cc
+@@ -1681,13 +1681,10 @@ DirectHandle<Tuple2> WasmTrustedInstanceData::GetInterpreterObject(
+ 
+ DirectHandle<WasmTrustedInstanceData> WasmTrustedInstanceData::New(
+     Isolate* isolate, DirectHandle<WasmModuleObject> module_object,
+-    bool shared) {
+-  // Read the link to the {std::shared_ptr<NativeModule>} once from the
+-  // `module_object` and use it to initialize the fields of the
+-  // `WasmTrustedInstanceData`. It will then be stored in a `TrustedManaged` in
+-  // the `WasmTrustedInstanceData` where it is safe from manipulation.
+-  std::shared_ptr<wasm::NativeModule> native_module =
+-      module_object->shared_native_module();
++    std::shared_ptr<wasm::NativeModule> native_module, bool shared) {
++  // We don't read the NativeModule from the WasmModuleObject here to guard
++  // against swapping attacks.
++  DCHECK_EQ(native_module.get(), module_object->native_module());
+ 
+   // Do first allocate all objects that will be stored in instance fields,
+   // because otherwise we would have to allocate when the instance is not fully
+diff --git a/src/wasm/wasm-objects.h b/src/wasm/wasm-objects.h
+index 08e4f115648..d8276019a2e 100644
+--- a/src/wasm/wasm-objects.h
++++ b/src/wasm/wasm-objects.h
+@@ -674,7 +674,8 @@ class V8_EXPORT_PRIVATE WasmTrustedInstanceData : public ExposedTrustedObject {
+ #endif  // V8_ENABLE_DRUMBRAKE
+ 
+   static DirectHandle<WasmTrustedInstanceData> New(
+-      Isolate*, DirectHandle<WasmModuleObject>, bool shared);
++      Isolate*, DirectHandle<WasmModuleObject>,
++      std::shared_ptr<wasm::NativeModule>, bool shared);
+ 
+   WasmCodePointer GetCallTarget(uint32_t func_index);
+ 
+diff --git a/test/common/wasm/wasm-run-utils.cc b/test/common/wasm/wasm-run-utils.cc
+index 18928dd5438..8999664fce6 100644
+--- a/test/common/wasm/wasm-run-utils.cc
++++ b/test/common/wasm/wasm-run-utils.cc
+@@ -457,11 +457,12 @@ DirectHandle<WasmInstanceObject> TestingModuleBuilder::InitInstanceObject() {
+   }
+ 
+   DirectHandle<WasmModuleObject> module_object =
+-      WasmModuleObject::New(isolate_, std::move(native_module), script);
+-  native_module_ = module_object->native_module();
++      WasmModuleObject::New(isolate_, native_module, script);
++  native_module_ = native_module.get();
+ 
+   DirectHandle<WasmTrustedInstanceData> trusted_data =
+-      WasmTrustedInstanceData::New(isolate_, module_object, false);
++      WasmTrustedInstanceData::New(isolate_, module_object,
++                                   std::move(native_module), false);
+   // TODO(42204563): Avoid crashing if the instance object is not available.
+   CHECK(trusted_data->has_instance_object());
+   DirectHandle<WasmInstanceObject> instance_object(
+diff --git a/test/fuzzer/wasm/interpreter/interpreter-fuzzer-common.cc b/test/fuzzer/wasm/interpreter/interpreter-fuzzer-common.cc
+index 5c5b5d914bd..7772dfca608 100644
+--- a/test/fuzzer/wasm/interpreter/interpreter-fuzzer-common.cc
++++ b/test/fuzzer/wasm/interpreter/interpreter-fuzzer-common.cc
+@@ -276,7 +276,9 @@ Handle<JSObject> CreateImportObjectInternal(
+         const WasmGlobal& global =
+             module_object->native_module()->module()->globals[import.index];
+         DirectHandle<WasmTrustedInstanceData> trusted_data =
+-            WasmTrustedInstanceData::New(isolate, module_object, false);
++            WasmTrustedInstanceData::New(isolate, module_object,
++                                         module_object->shared_native_module(),
++                                         false);
+         MaybeDirectHandle<WasmGlobalObject> maybe_global_obj =
+             WasmGlobalObject::New(isolate, trusted_data,
+                                   MaybeHandle<JSArrayBuffer>(),
+-- 
+2.43.0
+

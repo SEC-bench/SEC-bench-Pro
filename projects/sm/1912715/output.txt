@@ -1,0 +1,57 @@
+[13] Assertion failure: this->is<T>(), at /src/gecko-dev/js/src/gc/Cell.h:193
+#01: ???[/out/js +0x2fb5ded]
+#02: ???[/out/js +0x3573e9c]
+#03: ???[/out/js +0x3573bda]
+#04: ???[/out/js +0x2ed2d48]
+#05: ???[/out/js +0x2ef4fe0]
+#06: ???[/out/js +0x2ea202e]
+#07: ???[/out/js +0x2e84dea]
+#08: ???[/out/js +0x2e8b865]
+#09: ???[/out/js +0x2e8c21a]
+#10: ???[/out/js +0x3232a4b]
+#11: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x3232ed0]
+#12: ???[/out/js +0x2cf0e6b]
+#13: ???[/out/js +0x2cef691]
+#14: ???[/out/js +0x2c6cd7d]
+#15: ???[/out/js +0x2c5e81c]
+#16: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#17: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#18: _start[/out/js +0x2b60775]
+#19: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x58379a5b7e1e bp 0x7fff862cc290 sp 0x7fff862cc280 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x58379a5b7e1e in js::GetterSetter* js::gc::Cell::as<js::GetterSetter, void>() /src/gecko-dev/js/src/gc/Cell.h:193:5
+    #1 0x58379a5b7e1e in js::NativeObject::getGetterSetter(unsigned int) const /src/gecko-dev/js/src/vm/NativeObject.h:1213:39
+    #2 0x58379ab75e9b in js::NativeObject::getGetter(js::PropertyInfoBase<unsigned int>) const /src/gecko-dev/js/src/vm/NativeObject.h:1226:12
+    #3 0x58379ab75e9b in js::NativeObject::hasGetter(js::PropertyInfoBase<unsigned int>) const /src/gecko-dev/js/src/vm/NativeObject.h:1235:41
+    #4 0x58379ab75e9b in bool GetExistingProperty<(js::AllowGC)1>(JSContext*, js::MaybeRooted<JS::Value, (js::AllowGC)1>::HandleType, js::MaybeRooted<js::NativeObject*, (js::AllowGC)1>::HandleType, js::MaybeRooted<JS::PropertyKey, (js::AllowGC)1>::HandleType, js::PropertyInfoBase<unsigned int>, js::MaybeRooted<JS::Value, (js::AllowGC)1>::MutableHandleType) /src/gecko-dev/js/src/vm/NativeObject.cpp:2163:45
+    #5 0x58379ab75bd9 in js::NativeGetExistingProperty(JSContext*, JS::Handle<JSObject*>, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, js::PropertyInfoBase<unsigned int>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/NativeObject.cpp:2178:10
+    #6 0x58379a4d4d47 in bool js::FetchName<(js::GetNameMode)0>(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSObject*>, JS::Handle<js::PropertyName*>, js::PropertyResult const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:146:12
+    #7 0x58379a4f6fdf in bool js::GetEnvironmentName<(js::GetNameMode)0>(JSContext*, JS::Handle<JSObject*>, JS::Handle<js::PropertyName*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:198:10
+    #8 0x58379a4a402d in GetNameOperation(JSContext*, JS::Handle<JSObject*>, JS::Handle<js::PropertyName*>, JSOp, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:263:10
+    #9 0x58379a4a402d in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3565:12
+    #10 0x58379a486de9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:459:13
+    #11 0x58379a48d864 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:846:13
+    #12 0x58379a48e219 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:878:10
+    #13 0x58379a834a4a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:495:10
+    #14 0x58379a834ecf in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:519:10
+    #15 0x58379a2f2e6a in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1195:10
+    #16 0x58379a2f1690 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #17 0x58379a26ed7c in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11293:10
+    #18 0x58379a26ed7c in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11545:12
+    #19 0x58379a26081b in main /src/gecko-dev/js/src/shell/js.cpp:12071:12
+    #20 0x7203d27131c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x7203d271328a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #22 0x58379a162774 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2b60774) (BuildId: b41f80013576f6e510a627b128afc307)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00006e03ca200770  rcx = 0x0000583798125fc0  rdx = 0x0000000000000000  
+rdi = 0x000058379e441690  rsi = 0x00007fff862cc238  rbp = 0x00007fff862cc290  rsp = 0x00007fff862cc280  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00006ff3d1be0080  r13 = 0x00000ffff0c59858  r14 = 0x0000000000000000  r15 = 0x00007fff862cc3f0  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Cell.h:193:5 in js::GetterSetter* js::gc::Cell::as<js::GetterSetter, void>()
+==13==ABORTING

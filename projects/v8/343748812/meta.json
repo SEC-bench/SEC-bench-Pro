@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:343748812",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/arm64.debug.asan/d8",
+  "command_options": "--wasm-staging",
+  "target_source_files": [
+    "src/wasm/baseline/liftoff-assembler.cc"
+  ],
+  "target_subdir": [
+    "src/wasm/baseline"
+  ],
+  "target_vulnerability_type": "Incorrect code generation",
+  "error_type": "DCHECK",
+  "description": "The root cause is a bug in `LiftoffAssembler::DropValue()` in `src/wasm/baseline/liftoff-assembler.cc`. When a WebAssembly exception value is dropped from the Liftoff baseline compiler's virtual stack state during `try/catch` handling, the old implementation simply used `std::copy` to shift the remaining `VarState` slots down by one position without recalculating their spill offsets. This breaks the invariant that stack slot offsets must be contiguous and properly aligned. In particular, alignment-requiring types such as `kS128` (SIMD 128-bit, needing 16-byte alignment) that follow the dropped exception slot retain their original (now incorrect) offsets instead of being recomputed via `NextSpillOffset`. The mismatch is detected by `ValidateCacheState()` as `DCHECK_EQ(offset, var.offset())` failing (e.g., computed offset 128 vs stored offset 112). In a release build (where DCHECKs are disabled), the Liftoff-compiled WebAssembly code would use the incorrect stack offsets, causing multiple stack slots to overlap in memory, potentially enabling stack memory corruption. The fix renames `DropValue` to `DropExceptionValueAtOffset` and adds logic to recompute and compact the offsets of all remaining slots (and physically move stack-resident values if necessary) after the exception slot is removed. This bug is triggered by compiling a WebAssembly module with `try/catch` blocks, where the catch state is not reached, causing the implicit exception reference slot to be dropped while aligned value types (e.g., `v128`) remain on the virtual stack above it.",
+  "vrp": 7000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "target-image-cherry-pick-diff",
+      "evidence_lineno": 431,
+      "evidence_text": "[https://crrev.com/c/5596273](<https://crrev.com/c/5596273>) approved for merge; please merge to branch 12.6 at your earliest convenience / by EOD tomorrow, Thursday, 13 June so this fix can be included in the next M126 Stable update -- thanks!",
+      "url": "https://crrev.com/c/5596273",
+      "cl": 5596273,
+      "commit": "910cb91733dc47b8f4a3dc9f1ca640b728f97aad",
+      "description": "Target-image diff generated after cherry-picking the validated review CL into the vulnerable image checkout.",
+      "source_url": "https://crrev.com/c/5596273",
+      "source_cl": 5596273,
+      "source_commit": "910cb91733dc47b8f4a3dc9f1ca640b728f97aad",
+      "source_ref": "refs/changes/73/5596273/2",
+      "source_patchset": 2
+    }
+  ]
+}

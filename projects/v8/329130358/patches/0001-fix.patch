@@ -1,0 +1,68 @@
+From b93975a48c722c2e5fe9b39437738eb2e23dac74 Mon Sep 17 00:00:00 2001
+From: Andreas Haas <ahaas@chromium.org>
+Date: Mon, 18 Mar 2024 15:25:15 +0100
+Subject: [PATCH] [wasm][gc] Scan the code field of the WasmInternalFunction
+
+The code field in the WasmInternalFunction is a code pointer since
+https://crrev.com/c/5110559, so it has to be scanned explicitly.
+
+Bug: 329130358
+Change-Id: Ifc7a7cddb245e46fb9c006e560073a8d7ac65389
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5374907
+Commit-Queue: Andreas Haas <ahaas@chromium.org>
+Reviewed-by: Clemens Backes <clemensb@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#92878}
+---
+ src/objects/objects-body-descriptors-inl.h    |  1 +
+ .../mjsunit/regress/wasm/regress-329130358.js | 27 +++++++++++++++++++
+ 2 files changed, 28 insertions(+)
+ create mode 100644 test/mjsunit/regress/wasm/regress-329130358.js
+
+diff --git a/src/objects/objects-body-descriptors-inl.h b/src/objects/objects-body-descriptors-inl.h
+index e2b7b891fa1..d2dc6546aa7 100644
+--- a/src/objects/objects-body-descriptors-inl.h
++++ b/src/objects/objects-body-descriptors-inl.h
+@@ -795,6 +795,7 @@ class WasmInternalFunction::BodyDescriptor final : public BodyDescriptorBase {
+     v->VisitExternalPointer(
+         obj, obj->RawExternalPointerField(kCallTargetOffset,
+                                           kWasmInternalFunctionCallTargetTag));
++    IterateCodePointer(obj, kCodeOffset, v, IndirectPointerMode::kStrong);
+   }
+ 
+   static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
+diff --git a/test/mjsunit/regress/wasm/regress-329130358.js b/test/mjsunit/regress/wasm/regress-329130358.js
+new file mode 100644
+index 00000000000..d5231768989
+--- /dev/null
++++ b/test/mjsunit/regress/wasm/regress-329130358.js
+@@ -0,0 +1,27 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++// Flags: --expose-gc --wasm-wrapper-tiering-budget=1 --experimental-wasm-type-reflection
++
++d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
++
++const builder = new WasmModuleBuilder();
++const type = builder.addType(kSig_i_i);
++const global = builder.addImportedGlobal('m', 'val', kWasmAnyFunc);
++
++builder.addFunction('main', type)
++    .addBody([
++      kExprLocalGet, 0, kExprGlobalGet, global, kGCPrefix, kExprRefCast, type,
++      kExprCallRef, type
++    ])
++    .exportFunc();
++
++function foo() {
++  gc();
++}
++const func =
++    new WebAssembly.Function({parameters: ['i32'], results: ['i32']}, foo);
++
++let instance = builder.instantiate({m: {val: func}});
++instance.exports.main(3);
++instance.exports.main(3);
+-- 
+2.43.0
+

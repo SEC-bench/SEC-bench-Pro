@@ -1,0 +1,65 @@
+From 0264cf850afd91cdd3956066e0b00b982566f684 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Mon, 8 Dec 2025 13:11:30 +0000
+Subject: [PATCH] Bug 2003588 - Continue to allow creation of CCWs to debugger
+ instances after CCWs have been nuked r=jandem
+
+It turns out that disallowing this breaks the checks in Compartment::wrap. I
+don't fully understand what the implications of this are but it seems fine to
+continue to allow creating these if we don't nuke them in the first place.
+
+Differential Revision: https://phabricator.services.mozilla.com/D275046
+---
+ js/src/jit-test/tests/debug/bug-2003588.js | 9 +++++++++
+ js/src/jit-test/tests/debug/bug-2003809.js | 8 ++++++++
+ js/src/proxy/CrossCompartmentWrapper.cpp   | 6 ++++++
+ 3 files changed, 23 insertions(+)
+ create mode 100644 js/src/jit-test/tests/debug/bug-2003588.js
+ create mode 100644 js/src/jit-test/tests/debug/bug-2003809.js
+
+diff --git a/js/src/jit-test/tests/debug/bug-2003588.js b/js/src/jit-test/tests/debug/bug-2003588.js
+new file mode 100644
+index 0000000000000..98ecaaeea8bfd
+--- /dev/null
++++ b/js/src/jit-test/tests/debug/bug-2003588.js
+@@ -0,0 +1,9 @@
++var x = newGlobal({ newCompartment: true });
++var y = Debugger(x);
++y.x = y;
++y.onDebuggerStatement = function(w) {
++  nukeAllCCWs();
++  w.environment.getVariable("x");
++}
++x.eval('function f(z) { with(z) { debugger } }');
++x.f(y);
+diff --git a/js/src/jit-test/tests/debug/bug-2003809.js b/js/src/jit-test/tests/debug/bug-2003809.js
+new file mode 100644
+index 0000000000000..4cb93564bcec9
+--- /dev/null
++++ b/js/src/jit-test/tests/debug/bug-2003809.js
+@@ -0,0 +1,8 @@
++var x = newGlobal({ newCompartment: true });
++Debugger(x).onNewScript = function f(z) { m = z };
++x.eval("function g(){}");
++m.setBreakpoint(0, {});
++nukeAllCCWs();
++recomputeWrappers();
++gc();
++
+diff --git a/js/src/proxy/CrossCompartmentWrapper.cpp b/js/src/proxy/CrossCompartmentWrapper.cpp
+index 1d8013bb008f5..bf423c332e07e 100644
+--- a/js/src/proxy/CrossCompartmentWrapper.cpp
++++ b/js/src/proxy/CrossCompartmentWrapper.cpp
+@@ -478,6 +478,12 @@ JS_PUBLIC_API bool js::AllowNewWrapper(JS::Compartment* target, JSObject* obj) {
+ 
+   MOZ_ASSERT(obj->compartment() != target);
+ 
++  // Wrappers for debugger objects are not nuked and we must continue to allow
++  // them to be created or we will break the invariants in Compartment::wrap.
++  if (MOZ_UNLIKELY(obj->is<DebuggerInstanceObject>())) {
++    return true;
++  }
++
+   if (target->nukedOutgoingWrappers ||
+       obj->nonCCWRealm()->nukedIncomingWrappers) {
+     return false;

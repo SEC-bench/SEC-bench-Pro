@@ -1,0 +1,43 @@
+[13] Assertion failure: !generatorObj->isClosed(), at /src/gecko-dev/js/src/debugger/Debugger.cpp:2046
+#01: ???[/out/js +0x3512c0a]
+#02: ???[/out/js +0x351026d]
+#03: ???[/out/js +0x43b7b9c]
+#04: ???[/out/js +0x4f55773]
+#05: ???[/out/js +0x4f33db4]
+#06: ???[/out/js +0x4f354ae]
+#07: ???[/out/js +0x4f36f1f]
+#08: js::ForwardingProxyHandler::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x4f05373]
+#09: js::CrossCompartmentWrapper::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const[/out/js +0x4ed53d5]
+#10: ???[/out/js +0x4ee444d]
+#11: ???[/out/js +0x4f35b0e]
+#12: ???[/out/js +0x4006113]
+#13: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5bc7f073ac36 bp 0x7fff7a164db0 sp 0x7fff7a164ce0 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5bc7f073ac36 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x5bc7f073ac36 in js::Completion::fromJSFramePop(JSContext*, js::AbstractFramePtr, unsigned char const*, bool) /src/gecko-dev/js/src/debugger/Debugger.cpp:2046:7
+    #2 0x5bc7f073826c in js::DebugAPI::slowPathOnLeaveFrame(JSContext*, js::AbstractFramePtr, unsigned char const*, bool) /src/gecko-dev/js/src/debugger/Debugger.cpp:1186:16
+    #3 0x5bc7f15dfb9b in js::DebugAPI::onLeaveFrame(JSContext*, js::AbstractFramePtr, unsigned char const*, bool) /src/gecko-dev/js/src/debugger/DebugAPI-inl.h:83:10
+    #4 0x5bc7f217d772 in HandleError(JSContext*, js::InterpreterRegs&) /src/gecko-dev/js/src/vm/Interpreter.cpp:1326:8
+    #5 0x5bc7f217d772 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:4483:11
+    #6 0x5bc7f215bdb3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #7 0x5bc7f215d4ad in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:618:13
+    #8 0x5bc7f215ef1e in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:685:8
+    #9 0x5bc7f212d372 in js::ForwardingProxyHandler::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/Wrapper.cpp:166:10
+    #10 0x5bc7f20fd3d4 in js::CrossCompartmentWrapper::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) const /src/gecko-dev/js/src/proxy/CrossCompartmentWrapper.cpp:230:19
+    #11 0x5bc7f210c44c in js::Proxy::call(JSContext*, JS::Handle<JSObject*>, JS::CallArgs const&) /src/gecko-dev/js/src/proxy/Proxy.cpp:703:19
+    #12 0x5bc7f215db0d in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:566:14
+    #13 0x5bc7f122e112 in js::jit::DoCallFallback(JSContext*, js::jit::BaselineFrame*, js::jit::ICFallbackStub*, unsigned int, JS::Value*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/jit/BaselineIC.cpp:1698:10
+    #14 0x2319d7b82e1e  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00000fffef42c9a0  rcx = 0x00000000000007fe  rdx = 0x0000000000000000  
+rdi = 0x00005bc7f422cb50  rsi = 0x00007fff7a164c98  rbp = 0x00007fff7a164db0  rsp = 0x00007fff7a164ce0  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007aa1850e0098  r13 = 0x00007fff7a164e70  r14 = 0x00007fff7a164d20  r15 = 0x000011028d402ec8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

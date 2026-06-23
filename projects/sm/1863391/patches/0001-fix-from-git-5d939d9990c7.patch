@@ -1,0 +1,113 @@
+commit 5d939d9990c719ba0dfe4c757843c753dcaf5352
+Author: Yoshi Cheng-Hao Huang <allstars.chh@gmail.com>
+Date:   Mon Nov 13 18:43:46 2023 +0000
+
+    Bug 1863391 - Use Symbol::hash to get hashes. r=jonco
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D192969
+
+diff --git a/js/src/gc/Barrier.h b/js/src/gc/Barrier.h
+index 91babff9a44d..40e02007ed5b 100644
+--- a/js/src/gc/Barrier.h
++++ b/js/src/gc/Barrier.h
+@@ -1152,27 +1152,6 @@ struct StableCellHasher<HeapPtr<T>> {
+   }
+ };
+ 
+-// NB: The specialization works based on pointer equality and not on JS Value
+-// semantics, and it will assert if the Value's isGCThing() is false.
+-template <>
+-struct StableCellHasher<HeapPtr<Value>> {
+-  using Key = HeapPtr<Value>;
+-  using Lookup = Value;
+-
+-  static bool maybeGetHash(const Lookup& l, HashNumber* hashOut) {
+-    return StableCellHasher<gc::Cell*>::maybeGetHash(l.toGCThing(), hashOut);
+-  }
+-  static bool ensureHash(const Lookup& l, HashNumber* hashOut) {
+-    return StableCellHasher<gc::Cell*>::ensureHash(l.toGCThing(), hashOut);
+-  }
+-  static HashNumber hash(const Lookup& l) {
+-    return StableCellHasher<gc::Cell*>::hash(l.toGCThing());
+-  }
+-  static bool match(const Key& k, const Lookup& l) {
+-    return StableCellHasher<gc::Cell*>::match(k.toGCThing(), l.toGCThing());
+-  }
+-};
+-
+ template <typename T>
+ struct StableCellHasher<WeakHeapPtr<T>> {
+   using Key = WeakHeapPtr<T>;
+diff --git a/js/src/gc/WeakMap-inl.h b/js/src/gc/WeakMap-inl.h
+index 7bfcbe21b8ee..e154057c60c2 100644
+--- a/js/src/gc/WeakMap-inl.h
++++ b/js/src/gc/WeakMap-inl.h
+@@ -419,6 +419,12 @@ bool WeakMap<K, V>::checkMarking() const {
+ }
+ #endif
+ 
++inline HashNumber GetHash(JS::Symbol* sym) { return sym->hash(); }
++
++inline bool HashMatch(JS::Symbol* key, JS::Symbol* lookup) {
++  return key->hash() == lookup->hash();
++}
++
+ }  // namespace js
+ 
+ #endif /* gc_WeakMap_inl_h */
+diff --git a/js/src/gc/WeakMap.h b/js/src/gc/WeakMap.h
+index 94b15fcf642c..a8286451a002 100644
+--- a/js/src/gc/WeakMap.h
++++ b/js/src/gc/WeakMap.h
+@@ -352,6 +352,51 @@ class ObjectWeakMap {
+ #endif
+ };
+ 
++// Get the hash from the Symbol.
++[[nodiscard]] HashNumber GetHash(JS::Symbol* sym);
++
++// Return true if the hashes of two Symbols match.
++[[nodiscard]] bool HashMatch(JS::Symbol* key, JS::Symbol* lookup);
++
++// NB: The specialization works based on pointer equality and not on JS Value
++// semantics, and it will assert if the Value's isGCThing() is false.
++//
++// When the JS Value is of type JS::Symbol, we cannot access uniqueIds when it
++// runs on the worker thread, so we get the hashes from the Symbols directly
++// instead.
++template <>
++struct StableCellHasher<HeapPtr<Value>> {
++  using Key = HeapPtr<Value>;
++  using Lookup = Value;
++
++  static bool maybeGetHash(const Lookup& l, HashNumber* hashOut) {
++    if (l.isSymbol()) {
++      *hashOut = GetHash(l.toSymbol());
++      return true;
++    }
++    return StableCellHasher<gc::Cell*>::maybeGetHash(l.toGCThing(), hashOut);
++  }
++  static bool ensureHash(const Lookup& l, HashNumber* hashOut) {
++    if (l.isSymbol()) {
++      *hashOut = GetHash(l.toSymbol());
++      return true;
++    }
++    return StableCellHasher<gc::Cell*>::ensureHash(l.toGCThing(), hashOut);
++  }
++  static HashNumber hash(const Lookup& l) {
++    if (l.isSymbol()) {
++      return GetHash(l.toSymbol());
++    }
++    return StableCellHasher<gc::Cell*>::hash(l.toGCThing());
++  }
++  static bool match(const Key& k, const Lookup& l) {
++    if (l.isSymbol()) {
++      return HashMatch(k.toSymbol(), l.toSymbol());
++    }
++    return StableCellHasher<gc::Cell*>::match(k.toGCThing(), l.toGCThing());
++  }
++};
++
+ } /* namespace js */
+ 
+ #endif /* gc_WeakMap_h */

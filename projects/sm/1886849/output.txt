@@ -1,0 +1,39 @@
+Array built
+trained
+len1: 512
+target2 idx: 15
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==12==ERROR: AddressSanitizer: SEGV on unknown address 0x414141414140 (pc 0x5c6fb53a3445 bp 0x7ffe4ab7d0b0 sp 0x7ffe4ab7cfa0 T0)
+==12==The signal is caused by a WRITE memory access.
+    #0 0x5c6fb53a3445 in js::jit::AtomicStore64Unsynchronized(unsigned long*, unsigned long) /src/gecko-dev/obj-debug-asan/js/src/jit/AtomicOperationsGenerated.h:145:17
+    #1 0x5c6fb53a3445 in void js::jit::AtomicOperations::storeSafeWhenRacy<unsigned long>(unsigned long*, unsigned long) /src/gecko-dev/js/src/jit/shared/AtomicOperations-shared-jit.h:455:1
+    #2 0x5c6fb53a3445 in void js::jit::AtomicOperations::storeSafeWhenRacy<unsigned long>(SharedMem<unsigned long*>, unsigned long) /src/gecko-dev/js/src/jit/AtomicOperations.h:232:12
+    #3 0x5c6fb53a3445 in (anonymous namespace)::TypedArrayObjectTemplate<unsigned long>::setIndex(js::TypedArrayObject&, unsigned long, unsigned long) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:839:5
+    #4 0x5c6fb53a3445 in (anonymous namespace)::TypedArrayObjectTemplate<unsigned long>::setElement(JSContext*, JS::Handle<js::TypedArrayObject*>, unsigned long, JS::Handle<JS::Value>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:1182:5
+    #5 0x5c6fb4fdc242 in SetExistingProperty(JSContext*, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::Handle<js::NativeObject*>, js::PropertyResult const&, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2613:16
+    #6 0x5c6fb4ffe182 in bool js::NativeSetProperty<(js::QualifiedBool)1>(JSContext*, JS::Handle<js::NativeObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::ObjectOpResult&) /src/gecko-dev/js/src/vm/NativeObject.cpp:2689:14
+    #7 0x5c6fb4921908 in SetObjectElementOperation(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::PropertyKey>, JS::Handle<JS::Value>, JS::Handle<JS::Value>, bool) /src/gecko-dev/js/src/vm/Interpreter.cpp:1593:10
+    #8 0x5c6fb4921908 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:2899:12
+    #9 0x5c6fb4905dd9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:451:13
+    #10 0x5c6fb490c8a4 in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:838:13
+    #11 0x5c6fb490d259 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:870:10
+    #12 0x5c6fb4c9b70a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #13 0x5c6fb4c9bb8f in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #14 0x5c6fb4780cfa in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1196:10
+    #15 0x5c6fb477f520 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #16 0x5c6fb46fe5ac in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11125:10
+    #17 0x5c6fb46fe5ac in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11384:12
+    #18 0x5c6fb46f0d38 in main /src/gecko-dev/js/src/shell/js.cpp:11892:12
+    #19 0x73eff55391c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #20 0x73eff553928a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #21 0x5c6fb45f3e04 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2af6e04) (BuildId: d4afdeee8993a83a9a7cc57a15282b9c)
+
+==12==Register values:
+rax = 0x0000414141414140  rbx = 0x0000000000000000  rcx = 0x0000000000000000  rdx = 0x0000000000000000  
+rdi = 0x00001e2f4953c298  rsi = 0x0000000000000003  rbp = 0x00007ffe4ab7d0b0  rsp = 0x00007ffe4ab7cfa0  
+ r8 = 0x00000fffc956f9d4   r9 = 0x0000000000000000  r10 = 0x00000fffc956f9d6  r11 = 0x0000000000000000  
+r12 = 0x00007ffe4ab7d150  r13 = 0x0000000000000539  r14 = 0x00000fffc956f9f8  r15 = 0x0000196fae61eda8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/js/src/jit/AtomicOperationsGenerated.h:145:17 in js::jit::AtomicStore64Unsynchronized(unsigned long*, unsigned long)
+==12==ABORTING

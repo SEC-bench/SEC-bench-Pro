@@ -1,0 +1,44 @@
+From 10cf92abc256d6f918accc819b3468a04724a287 Mon Sep 17 00:00:00 2001
+From: Jakob Kummerow <jkummerow@chromium.org>
+Date: Wed, 25 Sep 2024 11:40:26 +0200
+Subject: [PATCH] [wasm] Fix inaccurate comment
+
+We do call Finish() after Fail(). The comment that incorrectly claims
+otherwise seems to date back to crrev.com/c/4132966.
+
+Change-Id: Id2f44717c2ed4a4468627070b0a75caa7adb1782
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5890745
+Commit-Queue: Clemens Backes <clemensb@chromium.org>
+Reviewed-by: Clemens Backes <clemensb@chromium.org>
+Commit-Queue: Jakob Kummerow <jkummerow@chromium.org>
+Auto-Submit: Jakob Kummerow <jkummerow@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#96275}
+---
+ src/wasm/streaming-decoder.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/wasm/streaming-decoder.cc b/src/wasm/streaming-decoder.cc
+index f3745b4c055..12ff803e4f5 100644
+--- a/src/wasm/streaming-decoder.cc
++++ b/src/wasm/streaming-decoder.cc
+@@ -196,7 +196,7 @@ class V8_EXPORT_PRIVATE AsyncStreamingDecoder : public StreamingDecoder {
+   }
+ 
+   void Fail() {
+-    // {Fail} cannot be called after {Finish}, {Abort}, {Fail}, or
++    // {Fail} cannot be called after {Finish}, {Abort}, or
+     // {NotifyCompilationDiscarded}.
+     DCHECK_EQ(processor_ == nullptr, failed_processor_ != nullptr);
+     if (processor_ != nullptr) failed_processor_ = std::move(processor_);
+@@ -283,7 +283,7 @@ size_t AsyncStreamingDecoder::DecodingState::ReadBytes(
+ 
+ void AsyncStreamingDecoder::Finish(bool can_use_compiled_module) {
+   TRACE_STREAMING("Finish\n");
+-  // {Finish} cannot be called after {Finish}, {Abort}, {Fail}, or
++  // {Finish} cannot be called after {Finish}, {Abort}, or
+   // {NotifyCompilationDiscarded}.
+   CHECK_EQ(processor_ == nullptr, failed_processor_ != nullptr);
+ 
+-- 
+2.43.0
+

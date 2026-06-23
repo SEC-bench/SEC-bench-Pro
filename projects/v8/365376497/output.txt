@@ -1,0 +1,46 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x79f7a3d70a3c (pc 0x55e7f4944066 bp 0x7ffe202bd270 sp 0x7ffe202bd270 T0)
+==13==The signal is caused by a READ memory access.
+    #0 0x55e7f4944066 in __cxx_atomic_load<int> third_party/libc++/src/include/__atomic/cxx_atomic_impl.h:311:10
+    #1 0x55e7f4944066 in load third_party/libc++/src/include/__atomic/atomic_base.h:55:12
+    #2 0x55e7f4944066 in atomic_load_explicit<int> third_party/libc++/src/include/__atomic/atomic.h:325:15
+    #3 0x55e7f4944066 in Relaxed_Load src/base/atomicops.h:245:10
+    #4 0x55e7f4944066 in Relaxed_Load<unsigned int> src/base/atomic-utils.h:87:9
+    #5 0x55e7f4944066 in Relaxed_Load_Map_Word src/objects/tagged-field-inl.h:201:26
+    #6 0x55e7f4944066 in map_word src/objects/objects-inl.h:1448:10
+    #7 0x55e7f4944066 in map src/objects/objects-inl.h:1275:10
+    #8 0x55e7f4944066 in IsSymbol src/objects/heap-object-inl.h:32:1
+    #9 0x55e7f4944066 in IsSymbol src/objects/heap-object-inl.h:32:1
+    #10 0x55e7f4944066 in IsSymbol src/objects/objects-inl.h:119:1
+    #11 0x55e7f4944066 in IsPublicSymbol src/objects/objects-inl.h:198:10
+    #12 0x55e7f4944066 in v8::Value::IsSymbol() const src/api/api.cc:3690:10
+    #13 0x55e7f48923b5 in v8::(anonymous namespace)::WriteToFile(char const*, _IO_FILE*, v8::Isolate*, v8::debug::ConsoleCallArguments const&) src/d8/d8-console.cc:28:14
+    #14 0x55e7f4a63ef9 in v8::internal::(anonymous namespace)::ConsoleCall(v8::internal::Isolate*, v8::internal::BuiltinArguments const&, void (v8::debug::ConsoleDelegate::*)(v8::debug::ConsoleCallArguments const&, v8::debug::ConsoleContext const&)) src/builtins/builtins-console.cc:168:3
+    #15 0x55e7f4a5d3d9 in Builtin_Impl_ConsoleLog src/builtins/builtins-console.cc:207:1
+    #16 0x55e7f4a5d3d9 in v8::internal::Builtin_ConsoleLog(int, unsigned long*, v8::internal::Isolate*) src/builtins/builtins-console.cc:207:1
+    #17 0x55e7f85c5bf5 in Builtins_CEntry_Return1_ArgvOnStack_BuiltinExit setup-isolate-deserialize.cc
+    #18 0x55e7f852189d in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #19 0x55e7f851f45b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #20 0x55e7f851f19e in Builtins_JSEntry setup-isolate-deserialize.cc
+    #21 0x55e7f4dae94a in Call src/execution/simulator.h:187:12
+    #22 0x55e7f4dae94a in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:420:22
+    #23 0x55e7f4daff16 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>) src/execution/execution.cc:517:10
+    #24 0x55e7f492e049 in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2138:7
+    #25 0x55e7f48bad0a in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1007:44
+    #26 0x55e7f48e5453 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4850:10
+    #27 0x55e7f48f02b8 in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5784:37
+    #28 0x55e7f48ef9b6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5693:18
+    #29 0x55e7f48f2958 in v8::Shell::Main(int, char**) src/d8/d8.cc:6546:18
+    #30 0x7eff53dcd1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #31 0x7eff53dcd28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #32 0x55e7f47b3024 in _start (/src/v8/out/x64.asan/d8+0x10b5024) (BuildId: 397b1e547ee82837)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007ffe202bd280  rcx = 0x00007d4f52ff2008  rdx = 0x0000000000000000  
+rdi = 0x000079f7a3d70a3c  rsi = 0x00007e0f52fe1000  rbp = 0x00007ffe202bd270  rsp = 0x00007ffe202bd270  
+ r8 = 0x00007fffffffff01   r9 = 0x0000000000001f01  r10 = 0x00007d4f52ff38f0  r11 = 0x0000000000000000  
+r12 = 0x00007eff53fa75c0  r13 = 0x00007aff51c64828  r14 = 0x00007e0f52fe1000  r15 = 0x00007ffe202bd530  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV third_party/libc++/src/include/__atomic/cxx_atomic_impl.h:311:10 in __cxx_atomic_load<int>
+==13==ABORTING

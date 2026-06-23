@@ -1,0 +1,42 @@
+From ada64fca6f4e88ab59b45f6e866523a3c460c511 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Wed, 15 May 2024 08:20:36 +0000
+Subject: [PATCH] Bug 1895086 - Suppress GC during JSObject::swap r=jandem
+
+We already suppress GC for part of this, but not for the part where we call
+JSObject::setIsUsedAsPrototype. This can GC (which was surprising to me) and so
+we can sweep before the pre-write barrier which comes after this.
+
+The simplest and safest thing is to suppress GC for the whole method.
+
+Differential Revision: https://phabricator.services.mozilla.com/D209813
+---
+ js/src/vm/JSObject.cpp | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/js/src/vm/JSObject.cpp b/js/src/vm/JSObject.cpp
+index 81345676e28de..663b9c2260c87 100644
+--- a/js/src/vm/JSObject.cpp
++++ b/js/src/vm/JSObject.cpp
+@@ -1215,6 +1215,10 @@ void JSObject::swap(JSContext* cx, HandleObject a, HandleObject b,
+   MOZ_RELEASE_ASSERT(js::ObjectMayBeSwapped(a));
+   MOZ_RELEASE_ASSERT(js::ObjectMayBeSwapped(b));
+ 
++  // Don't allow a GC which may observe intermediate state or run before we
++  // execute all necessary barriers.
++  gc::AutoSuppressGC nogc(cx);
++
+   if (!Watchtower::watchObjectSwap(cx, a, b)) {
+     oomUnsafe.crash("watchObjectSwap");
+   }
+@@ -1305,10 +1309,6 @@ void JSObject::swap(JSContext* cx, HandleObject a, HandleObject b,
+       a->as<ProxyObject>().setInlineValueArray();
+     }
+   } else {
+-    // Avoid GC in here to avoid confusing the tracing code with our
+-    // intermediate state.
+-    gc::AutoSuppressGC suppress(cx);
+-
+     // When the objects have different sizes, they will have different numbers
+     // of fixed slots before and after the swap, so the slots for native objects
+     // will need to be rearranged. Remember the original values from the

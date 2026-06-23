@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1878261",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/JitFrames.cpp"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --baseline-eager",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Bug 1878261 (Crash [@ JS::Compartment::wrap] with Debugger and interrupt callback). sec-high; fix landed in git dcc38792dc66. RCA fields TBD by rca agent (run git show dcc38792dc66 inside vuln image). Auto-staged 2026-05.",
+  "fix_commits": [
+    "dcc38792dc66"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-dcc38792dc66.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1878261 fix",
+      "source_commit": "dcc38792dc66",
+      "commit": "dcc38792dc66",
+      "url": "https://github.com/mozilla/gecko-dev/commit/dcc38792dc66",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/dcc38792dc66"
+    }
+  ],
+  "vrp": null
+}

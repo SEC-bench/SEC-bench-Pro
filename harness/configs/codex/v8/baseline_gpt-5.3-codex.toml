@@ -1,0 +1,128 @@
+model = "gpt-5.3-codex"
+instances = [
+    "41494611",
+    "324596281",
+    "324747822",
+    "325866363",
+    "325878101",
+    "325893559",
+    "327740539",
+    "329130358",
+    "332081797",
+    "334120897",
+    "336009921",
+    "340221135",
+    "342602616",
+    "342866373",
+    "343407073",
+    "343748812",
+    "344343031",
+    "344963941",
+    "348084786",
+    "348598133",
+    "348793144",
+    "350292240",
+    "351327767",
+    "355256380",
+    "359949835",
+    "365376497",
+    "368241697",
+    "371565065",
+    "372269618",
+    "374790906",
+    "377620832",
+    "379009132",
+    "379140430",
+    "379591504",
+    "380397544",
+    "381999810",
+    "383356864",
+    "384186547",
+    "385775375",
+    "386565139",
+    "388437270",
+    "390201806",
+    "390205877",
+    "390639820",
+    "390743124",
+    "390993097",
+    "391169061",
+    "392541992",
+    "393989622",
+    "394350433",
+    "394635429",
+    "395659804",
+    "395895382",
+    "398065918",
+    "398999390",
+    "400086889",
+    "401732698",
+    "403600260",
+    "404285918",
+    "411598604",
+    "417636716",
+    "420697404",
+    "421403261",
+    "427918760",
+    "429703123",
+    "430344952",
+    "430572435",
+    "430960844",
+    "432289371",
+    "433407763",
+    "435630464",
+    "435630467",
+    "438786702",
+    "439521654",
+    "439771269",
+    "441949792",
+    "442412895",
+    "442981541",
+    "443182220",
+    "443475183",
+    "443772809",
+    "443875388",
+    "444048032",
+    "444141029",
+    "444189152",
+    "445209324",
+    "445966259",
+    "446113730",
+    "446113731",
+    "446113732",
+    "446122633",
+    "446124892",
+    "446124893",
+    "446714227",
+    "447307165",
+    "449296526",
+    "449910706",
+    "451355210",
+    "452319320",
+    "452605803",
+    "454927471",
+    "457989902",
+    "472139305",
+]
+outdir = "output/v8/codex/baseline/gpt-5.3-codex/defaults"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_v8.j2"
+agents_md = "../prompts/baseline/AGENTS_v8.j2"
+images_dir = "../projects/v8"
+# skill_directory = ".agents/skills"  # Optional: path to skill files (default: .agents/skills)
+# skill_directory = "../skills/v8/20260321_184201"
+
+tracking = "none" # Baseline mode: no issue tracking system
+
+# Codex-specific settings (codex exec flags)
+# approval_mode: "full-auto" is legacy shorthand for -a never;
+#   other values passed via -a/--ask-for-approval: untrusted | on-request | never
+approval_mode = "full-auto"
+# sandbox: passed via -s/--sandbox: read-only | workspace-write | danger-full-access
+sandbox = "danger-full-access"
+reasoning_effort = "high"
+
+# codex_cli = "codex"                # CLI command name (default: codex)
+# max_attempts = 3                   # Max retry attempts per instance
+# json_output = true                 # Emit JSONL events via --json flag
+copy_host_auth = false

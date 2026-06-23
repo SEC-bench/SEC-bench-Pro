@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-30T05:30:00Z — 2025-Q3 batch on bug 1987624 (sec-high, 2025-Sep)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `AddressSanitizer: heap-use-after-free` READ at `js::wasm::Decoder::read<unsigned int>` (WasmBinary.h:316) via `DecodeModuleEnvironment` (WasmValidate.cpp:3903) — exactly the crash site the report cites
+  - root cause: GetBufferSource caller pattern in WasmJS.cpp could capture a stale pointer into a moved/resized SharedArrayBuffer or externref-backed buffer; the decoder then read past the freed buffer when validating module bytes.
+  - PoC: extracted inline from Report.md (8 lines, collector heuristic missed the .js attachment because there wasn't one).
+  - flags: `--fuzzing-safe --ion-offthread-compile=off` (default).
+  - report stated "opt build"; debug+ASAN build also triggers (UAF caught earlier than the unchecked read).
+  - fixed image (git c89c1e356e68 "wasm: Refactor GetBufferSource", Phabricator D264478, 119-line WasmJS.cpp refactor) blocks PoC 5/5.

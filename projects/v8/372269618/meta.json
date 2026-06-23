@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:372269618",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--turboshaft-wasm --disable-in-process-stack-traces",
+  "target_source_files": [
+    "src/wasm/wasm-js.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "A type confusion vulnerability exists in V8's WebAssembly JavaScript API implementation in DefaultReferenceValue() (src/wasm/wasm-js.cc). The function incorrectly returns JavaScript undefined as the default value for externref (kExtern) and nullexternref (kNoExtern) reference types, instead of returning null. According to the wasm-gc specification, only null values are permitted as default values for reference types. Because undefined is not a valid wasm value, this discrepancy causes type confusion: optimizing compilers (TurboFan, TurboShaft) may falsely treat code paths as unreachable and miscompile them, and a nullexternref holding undefined can be misinterpreted as another reference type such as kExternString. In the reported proof-of-concept, the undefined value is confused into a kExternString with a fake length of 0x7ff80000, allowing out-of-bounds reads via String.prototype.charCodeAt until a guard page is hit, resulting in a segfault. The bug was introduced by commit 2e357c4 in M112 which added wasm null support.",
+  "vrp": 55000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 479,
+      "evidence_text": "[https://crrev.com/c/5922878](<https://crrev.com/c/5922878>) approved for merge to M130, please merge to 13.0 at your earliest convenience / before EOD tomorrow 17 October so this fix can be included in the next Stable channel update -- thanks!",
+      "url": "https://crrev.com/c/5922878",
+      "cl": 5922878,
+      "commit": "e7ccf0af1bdddd20dc58e1790a94739dba0209a3",
+      "description": "Local patch exported from https://crrev.com/c/5922878 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/5922878",
+      "source_cl": 5922878,
+      "source_commit": "e7ccf0af1bdddd20dc58e1790a94739dba0209a3",
+      "source_ref": "refs/changes/78/5922878/2",
+      "source_patchset": 2
+    }
+  ]
+}

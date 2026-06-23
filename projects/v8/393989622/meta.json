@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:393989622",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--single-threaded --sandbox-fuzzing --allow-natives-syntax --expose-gc",
+  "target_source_files": [
+    "src/objects/intl-objects.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Heap buffer overflow",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The vulnerability is in Intl::ToICUUnicodeString (src/objects/intl-objects.cc). The function reads the string length from V8 heap memory via string->length() as a uint32_t, which is attacker-controlled in the V8 sandbox model. Although the code includes a comment noting this concern for the kShortStringSize comparison, the length is not validated against the actual underlying data size before being forwarded to ICU. For two-byte strings, GetUCharBufferFromFlat returns a direct pointer to the string's internal buffer without any bounds verification. When icu::UnicodeString(uchar_buffer + offset, length - offset) is called with a corrupted length near INT32_MAX (e.g., 0x7FFFFFFB), ICU's doAppend allocates a buffer via cloneArrayIfNeeded. Due to ICU's kMaxCapacity ceiling (0x7FFFFFF5), the resulting buffer capacity (fCapacity = 0x7FFFFFF6) is less than the requested srcLength. ICU then calls us_arrayCopy with srcLength as the count, copying srcLength * 2 bytes into the undersized buffer and causing a heap-buffer-overflow (OOB write). Triggering condition: an attacker who already has a V8 sandbox primitive to corrupt a String object's length field to a value near INT32_MAX can trigger the bug by calling String.prototype.localeCompare() on that string.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "V8-local patch for the ICU UnicodeString::cloneArrayIfNeeded fixes from ICU CLs 6302545 and 6310736.",
+      "context": "cross-repo-icu-backport",
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/chromium/deps/icu/+/6302545",
+        "https://chromium-review.googlesource.com/c/chromium/deps/icu/+/6310736"
+      ],
+      "source_cls": [
+        6302545,
+        6310736
+      ],
+      "source_url": "https://chromium-review.googlesource.com/c/chromium/deps/icu/+/6310736",
+      "source_commit": "d30b7b0bb3829f2e220df403ed461a1ede78b774",
+      "evidence_text": "ICU UnicodeString cloneArrayIfNeeded heap buffer overflow fixes from ICU CLs 6302545 and 6310736.",
+      "source_cl": 6310736
+    }
+  ]
+}

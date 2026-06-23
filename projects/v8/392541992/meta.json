@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:392541992",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--single-threaded --sandbox-fuzzing --allow-natives-syntax --expose-gc",
+  "target_source_files": [
+    "src/objects/value-serializer.cc"
+  ],
+  "target_subdir": [
+    "src/objects"
+  ],
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A heap-use-after-free vulnerability exists in V8's ValueSerializer::ExpandBuffer (src/objects/value-serializer.cc). The PoC manipulates a string's length field (via the memory corruption API) to a large negative value (`0xffffffd5` = -43 as int32_t). When `WriteTwoByteString` computes the byte length as `chars.length() * sizeof(uc16)`, the negative length is implicitly converted to `size_t`, yielding a huge value (~`0xffffffffffffffaa`). In `ReserveRawBytes`, adding the current buffer position yields a `required_capacity` near `UINT64_MAX - 63`. In `ExpandBuffer`, the computation `std::max(required_capacity, buffer_capacity_ * 2) + 64` overflows to 0, so `base::Realloc(buffer_, 0)` is called, which on Linux is equivalent to `free(buffer_)` and returns NULL. In the failure branch (`new_buffer == NULL`), the code sets `out_of_memory_ = true` but does not update `buffer_` (leaving it as a dangling pointer to freed heap memory) and does not update `buffer_capacity_`. Subsequent calls to `ReserveRawBytes` for small writes that fit within the now-stale `buffer_capacity_` skip the `ExpandBuffer` check entirely and return a pointer into the freed buffer region. `WriteRawBytes` then performs a `memcpy` into this freed memory, causing the UAF. The vulnerability is triggered during structured serialization of error objects: `WriteJSError` writes the error's `stack` string (via `WriteString` -> `WriteTwoByteString` -> `WriteRawBytes`), which triggers the overflowing `ExpandBuffer` and frees the buffer; then `WriteJSError` continues by calling `WriteVarint(ErrorTag::kEnd)`, whose `WriteRawBytes` call writes to the freed buffer region.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "4d8f79a7f783a61ec5327c8af7fbd42572b55ca2 [base] Disallow base::Realloc() with zero size",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6218209",
+      "cl": 6218209,
+      "commit": "4d8f79a7f783a61ec5327c8af7fbd42572b55ca2",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6218209 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6218209",
+      "source_cl": 6218209,
+      "source_commit": "4d8f79a7f783a61ec5327c8af7fbd42572b55ca2",
+      "source_ref": "refs/changes/09/6218209/2",
+      "source_patchset": 2
+    }
+  ]
+}

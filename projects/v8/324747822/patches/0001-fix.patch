@@ -1,0 +1,858 @@
+From 8f1c8131bd1766368e9d006d0bc6b6210dd96303 Mon Sep 17 00:00:00 2001
+From: Jakob Kummerow <jkummerow@chromium.org>
+Date: Mon, 4 Mar 2024 16:50:53 +0100
+Subject: [PATCH] Merged: [wasm-imported-strings][turbofan] Use
+ HeapType::kExternString
+
+and: [wasm] Introduce new heap type 'imported string'
+
+(cherry picked from commit cfe1cccfb86ca4c21e21cff47712894c2a83c61a)
+(cherry picked from commit 841c7c1117f8f40cf17fb24a33255f05477d315a)
+
+Fixed: b/326091470, b/324747822
+Change-Id: Ia7ad389697b6a75d0af6d0130942b572e0243d73
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5339904
+Reviewed-by: Darius Mercadier <dmercadier@chromium.org>
+Commit-Queue: Jakob Kummerow <jkummerow@chromium.org>
+Cr-Commit-Position: refs/branch-heads/12.2@{#42}
+Cr-Branched-From: 6eb5a9616aa6f8c705217aeb7c7ab8c037a2f676-refs/heads/12.2.281@{#1}
+Cr-Branched-From: 44cf56d850167c6988522f8981730462abc04bcc-refs/heads/main@{#91934}
+---
+ .../turboshaft/wasm-gc-type-reducer.h         | 15 +++--
+ .../turboshaft/wasm-lowering-reducer.h        |  6 +-
+ src/compiler/wasm-compiler.cc                 | 12 ++--
+ src/compiler/wasm-gc-lowering.cc              |  6 +-
+ src/compiler/wasm-gc-operator-reducer.cc      | 18 +----
+ src/wasm/graph-builder-interface.cc           | 22 +++---
+ src/wasm/turboshaft-graph-interface.cc        | 67 ++++++++++++-------
+ src/wasm/value-type.h                         |  9 +++
+ src/wasm/wasm-subtyping.cc                    | 36 ++++++----
+ src/wasm/wasm-subtyping.h                     |  6 --
+ .../mjsunit/regress/wasm/regress-326091470.js | 32 +++++++++
+ test/unittests/wasm/subtyping-unittest.cc     | 63 +++++++++++++----
+ 12 files changed, 192 insertions(+), 100 deletions(-)
+ create mode 100644 test/mjsunit/regress/wasm/regress-326091470.js
+
+diff --git a/src/compiler/turboshaft/wasm-gc-type-reducer.h b/src/compiler/turboshaft/wasm-gc-type-reducer.h
+index eaa21906944..08968654c73 100644
+--- a/src/compiler/turboshaft/wasm-gc-type-reducer.h
++++ b/src/compiler/turboshaft/wasm-gc-type-reducer.h
+@@ -136,7 +136,9 @@ class WasmGCTypeReducer : public Next {
+     if (ShouldSkipOptimizationStep()) goto no_change;
+ 
+     wasm::ValueType type = analyzer_.GetInputType(op_idx);
+-    if (type != wasm::ValueType() && type != wasm::kWasmBottom) {
++    if (type != wasm::ValueType() && !type.is_uninhabited()) {
++      DCHECK(wasm::IsSameTypeHierarchy(type.heap_type(),
++                                       cast_op.config.to.heap_type(), module_));
+       bool to_nullable = cast_op.config.to.is_nullable();
+       if (wasm::IsHeapSubtypeOf(type.heap_type(), cast_op.config.to.heap_type(),
+                                 module_, module_)) {
+@@ -154,8 +156,7 @@ class WasmGCTypeReducer : public Next {
+       }
+       if (wasm::HeapTypesUnrelated(type.heap_type(),
+                                    cast_op.config.to.heap_type(), module_,
+-                                   module_) &&
+-          !wasm::IsImplicitInternalization(type, cast_op.config.to, module_)) {
++                                   module_)) {
+         // A cast between unrelated types can only succeed if the argument is
+         // null. Otherwise, it always fails.
+         V<Word32> non_trapping_condition =
+@@ -190,7 +191,9 @@ class WasmGCTypeReducer : public Next {
+     if (ShouldSkipOptimizationStep()) goto no_change;
+ 
+     wasm::ValueType type = analyzer_.GetInputType(op_idx);
+-    if (type != wasm::ValueType() && type != wasm::kWasmBottom) {
++    if (type != wasm::ValueType() && !type.is_uninhabited()) {
++      DCHECK(wasm::IsSameTypeHierarchy(
++          type.heap_type(), type_check.config.to.heap_type(), module_));
+       bool to_nullable = type_check.config.to.is_nullable();
+       if (wasm::IsHeapSubtypeOf(type.heap_type(),
+                                 type_check.config.to.heap_type(), module_,
+@@ -208,9 +211,7 @@ class WasmGCTypeReducer : public Next {
+       }
+       if (wasm::HeapTypesUnrelated(type.heap_type(),
+                                    type_check.config.to.heap_type(), module_,
+-                                   module_) &&
+-          !wasm::IsImplicitInternalization(type, type_check.config.to,
+-                                           module_)) {
++                                   module_)) {
+         if (to_nullable && type.is_nullable()) {
+           return __ IsNull(__ MapToNewGraph(type_check.object()), type);
+         } else {
+diff --git a/src/compiler/turboshaft/wasm-lowering-reducer.h b/src/compiler/turboshaft/wasm-lowering-reducer.h
+index 5426d0f2291..27c336b19f5 100644
+--- a/src/compiler/turboshaft/wasm-lowering-reducer.h
++++ b/src/compiler/turboshaft/wasm-lowering-reducer.h
+@@ -597,7 +597,8 @@ class WasmLoweringReducer : public Next {
+         result = __ HasInstanceType(object, WASM_STRUCT_TYPE);
+         break;
+       }
+-      if (to_rep == wasm::HeapType::kString) {
++      if (to_rep == wasm::HeapType::kString ||
++          to_rep == wasm::HeapType::kExternString) {
+         V<Word32> instance_type =
+             __ LoadInstanceTypeField(__ LoadMapField(object));
+         result = __ Uint32LessThan(instance_type,
+@@ -673,7 +674,8 @@ class WasmLoweringReducer : public Next {
+                      OpIndex::Invalid(), TrapId::kTrapIllegalCast);
+         break;
+       }
+-      if (to_rep == wasm::HeapType::kString) {
++      if (to_rep == wasm::HeapType::kString ||
++          to_rep == wasm::HeapType::kExternString) {
+         V<Word32> instance_type =
+             __ LoadInstanceTypeField(__ LoadMapField(object));
+         __ TrapIfNot(__ Uint32LessThan(instance_type,
+diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
+index d5ad11bb9f3..5d7d03536d4 100644
+--- a/src/compiler/wasm-compiler.cc
++++ b/src/compiler/wasm-compiler.cc
+@@ -6960,15 +6960,13 @@ Node* WasmGraphBuilder::SetType(Node* node, wasm::ValueType type) {
+     // The exception is imported strings support, which may special-case
+     // values that are officially externref-typed as being known to be strings.
+ #if DEBUG
+-    static constexpr wasm::ValueType kRefString =
+-        wasm::ValueType::Ref(wasm::HeapType::kString);
+     static constexpr wasm::ValueType kRefExtern =
+         wasm::ValueType::Ref(wasm::HeapType::kExtern);
+-    DCHECK(
+-        (compiler::NodeProperties::GetType(node).AsWasm().type == type) ||
+-        (enabled_features_.has_imported_strings() &&
+-         compiler::NodeProperties::GetType(node).AsWasm().type == kRefString &&
+-         (type == wasm::kWasmExternRef || type == kRefExtern)));
++    DCHECK((compiler::NodeProperties::GetType(node).AsWasm().type == type) ||
++           (enabled_features_.has_imported_strings() &&
++            compiler::NodeProperties::GetType(node).AsWasm().type ==
++                wasm::kWasmRefExternString &&
++            (type == wasm::kWasmExternRef || type == kRefExtern)));
+ #endif
+   }
+   return node;
+diff --git a/src/compiler/wasm-gc-lowering.cc b/src/compiler/wasm-gc-lowering.cc
+index 2f3fde70cfd..845d8e5d901 100644
+--- a/src/compiler/wasm-gc-lowering.cc
++++ b/src/compiler/wasm-gc-lowering.cc
+@@ -261,7 +261,8 @@ Reduction WasmGCLowering::ReduceWasmTypeCheckAbstract(Node* node) {
+       result = gasm_.HasInstanceType(object, WASM_STRUCT_TYPE);
+       break;
+     }
+-    if (to_rep == wasm::HeapType::kString) {
++    if (to_rep == wasm::HeapType::kString ||
++        to_rep == wasm::HeapType::kExternString) {
+       Node* instance_type = gasm_.LoadInstanceType(gasm_.LoadMap(object));
+       result = gasm_.Uint32LessThan(instance_type,
+                                     gasm_.Uint32Constant(FIRST_NONSTRING_TYPE));
+@@ -441,7 +442,8 @@ Reduction WasmGCLowering::ReduceWasmTypeCastAbstract(Node* node) {
+       UpdateSourcePosition(gasm_.effect(), node);
+       break;
+     }
+-    if (to_rep == wasm::HeapType::kString) {
++    if (to_rep == wasm::HeapType::kString ||
++        to_rep == wasm::HeapType::kExternString) {
+       Node* instance_type = gasm_.LoadInstanceType(gasm_.LoadMap(object));
+       gasm_.TrapUnless(
+           gasm_.Uint32LessThan(instance_type,
+diff --git a/src/compiler/wasm-gc-operator-reducer.cc b/src/compiler/wasm-gc-operator-reducer.cc
+index 50836b26b57..a4401b184db 100644
+--- a/src/compiler/wasm-gc-operator-reducer.cc
++++ b/src/compiler/wasm-gc-operator-reducer.cc
+@@ -138,13 +138,6 @@ wasm::TypeInModule WasmGCOperatorReducer::ObjectTypeFromContext(
+     type_from_state = state.LookupState(object);
+   }
+   if (!type_from_state.IsSet()) return type_from_node;
+-  // When abstract casts have performed implicit internalization (see
+-  // {ReduceWasmTypeCastAbstract} below), we may encounter the results
+-  // of that here.
+-  if (IsImplicitInternalization(type_from_node.type, type_from_state.type.type,
+-                                type_from_state.type.module)) {
+-    return type_from_state.type;
+-  }
+   return wasm::Intersection(type_from_node, type_from_state.type);
+ }
+ 
+@@ -472,12 +465,7 @@ Reduction WasmGCOperatorReducer::ReduceWasmTypeCastAbstract(Node* node) {
+     }
+   }
+ 
+-  // This can never result from user code, only from internal shortcuts,
+-  // e.g. when using externrefs as strings.
+-  const bool implicit_internalize =
+-      IsImplicitInternalization(config.from, config.to, object_type.module);
+-  if (!implicit_internalize &&
+-      wasm::HeapTypesUnrelated(object_type.type.heap_type(),
++  if (wasm::HeapTypesUnrelated(object_type.type.heap_type(),
+                                config.to.heap_type(), object_type.module,
+                                object_type.module)) {
+     gasm_.InitializeEffectControl(effect, control);
+@@ -501,9 +489,7 @@ Reduction WasmGCOperatorReducer::ReduceWasmTypeCastAbstract(Node* node) {
+                                      {object_type.type, config.to}));
+ 
+   wasm::TypeInModule new_type =
+-      implicit_internalize
+-          ? wasm::TypeInModule{config.to, module_}
+-          : wasm::Intersection(object_type, {config.to, module_});
++      wasm::Intersection(object_type, {config.to, module_});
+ 
+   return UpdateNodeAndAliasesTypes(node, GetState(control), node, new_type,
+                                    false);
+diff --git a/src/wasm/graph-builder-interface.cc b/src/wasm/graph-builder-interface.cc
+index 25bccd2a852..57a5f55f307 100644
+--- a/src/wasm/graph-builder-interface.cc
++++ b/src/wasm/graph-builder-interface.cc
+@@ -739,7 +739,7 @@ class WasmGraphBuildingInterface {
+   TFNode* ExternRefToString(FullDecoder* decoder, const Value value,
+                             bool null_succeeds = false) {
+     wasm::ValueType target_type =
+-        null_succeeds ? kWasmStringRef : kWasmRefString;
++        null_succeeds ? kWasmRefNullExternString : kWasmRefExternString;
+     WasmTypeCheckConfig config{value.type, target_type};
+     TFNode* string =
+         builder_->RefCastAbstract(value.node, config, decoder->position());
+@@ -768,7 +768,7 @@ class WasmGraphBuildingInterface {
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringTest: {
+-        WasmTypeCheckConfig config{args[0].type, kWasmRefString};
++        WasmTypeCheckConfig config{args[0].type, kWasmRefExternString};
+         result = builder_->RefTestAbstract(args[0].node, config);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+@@ -777,7 +777,7 @@ class WasmGraphBuildingInterface {
+         TFNode* string = ExternRefToString(decoder, args[0]);
+         TFNode* view = builder_->StringAsWtf16(
+             string, compiler::kWithoutNullCheck, decoder->position());
+-        builder_->SetType(view, kWasmRefString);
++        builder_->SetType(view, kWasmRefExternString);
+         result = builder_->StringViewWtf16GetCodeUnit(
+             view, compiler::kWithoutNullCheck, args[1].node,
+             decoder->position());
+@@ -788,7 +788,7 @@ class WasmGraphBuildingInterface {
+         TFNode* string = ExternRefToString(decoder, args[0]);
+         TFNode* view = builder_->StringAsWtf16(
+             string, compiler::kWithoutNullCheck, decoder->position());
+-        builder_->SetType(view, kWasmRefString);
++        builder_->SetType(view, kWasmRefExternString);
+         result = builder_->StringCodePointAt(view, compiler::kWithoutNullCheck,
+                                              args[1].node, decoder->position());
+         decoder->detected_->Add(kFeature_imported_strings);
+@@ -809,7 +809,7 @@ class WasmGraphBuildingInterface {
+         result = builder_->StringConcat(
+             head_string, compiler::kWithoutNullCheck, tail_string,
+             compiler::kWithoutNullCheck, decoder->position());
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       }
+@@ -826,19 +826,19 @@ class WasmGraphBuildingInterface {
+       }
+       case WKI::kStringFromCharCode:
+         result = builder_->StringFromCharCode(args[0].node);
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringFromCodePoint:
+         result = builder_->StringFromCodePoint(args[0].node);
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringFromWtf16Array:
+         result = builder_->StringNewWtf16Array(
+             args[0].node, NullCheckFor(args[0].type), args[1].node,
+             args[2].node, decoder->position());
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringFromUtf8Array:
+@@ -846,7 +846,7 @@ class WasmGraphBuildingInterface {
+             unibrow::Utf8Variant::kLossyUtf8, args[0].node,
+             NullCheckFor(args[0].type), args[1].node, args[2].node,
+             decoder->position());
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringIntoUtf8Array: {
+@@ -876,11 +876,11 @@ class WasmGraphBuildingInterface {
+         TFNode* string = ExternRefToString(decoder, args[0]);
+         TFNode* view = builder_->StringAsWtf16(
+             string, compiler::kWithoutNullCheck, decoder->position());
+-        builder_->SetType(view, kWasmRefString);
++        builder_->SetType(view, kWasmRefExternString);
+         result = builder_->StringViewWtf16Slice(
+             view, compiler::kWithoutNullCheck, args[1].node, args[2].node,
+             decoder->position());
+-        builder_->SetType(result, kWasmRefString);
++        builder_->SetType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       }
+diff --git a/src/wasm/turboshaft-graph-interface.cc b/src/wasm/turboshaft-graph-interface.cc
+index 78742f5f8cc..e0a7a56a64d 100644
+--- a/src/wasm/turboshaft-graph-interface.cc
++++ b/src/wasm/turboshaft-graph-interface.cc
+@@ -1047,14 +1047,14 @@ class TurboshaftGraphBuildingInterface {
+   }
+ 
+   V<Word32> IsExternRefString(const Value value) {
+-    compiler::WasmTypeCheckConfig config{value.type, kWasmRefString};
++    compiler::WasmTypeCheckConfig config{value.type, kWasmRefExternString};
+     V<Map> rtt = OpIndex::Invalid();
+     return __ WasmTypeCheck(value.op, rtt, config);
+   }
+ 
+   V<String> ExternRefToString(const Value value, bool null_succeeds = false) {
+     wasm::ValueType target_type =
+-        null_succeeds ? kWasmStringRef : kWasmRefString;
++        null_succeeds ? kWasmRefNullExternString : kWasmRefExternString;
+     compiler::WasmTypeCheckConfig config{value.type, target_type};
+     V<Map> rtt = OpIndex::Invalid();
+     return V<String>::Cast(__ WasmTypeCast(value.op, rtt, config));
+@@ -1064,7 +1064,7 @@ class TurboshaftGraphBuildingInterface {
+     if (__ generating_unreachable_operations()) return false;
+     const WasmTypeCastOp* cast =
+         __ output_graph().Get(value.op).TryCast<WasmTypeCastOp>();
+-    return cast && cast->config.to == kWasmRefString;
++    return cast && cast->config.to == kWasmRefExternString;
+   }
+ 
+   V<Word32> GetStringIndexOf(FullDecoder* decoder, V<String> string,
+@@ -1134,7 +1134,7 @@ class TurboshaftGraphBuildingInterface {
+         BuiltinCallDescriptor::StringToLowerCaseIntl>(
+         decoder, __ NoContextConstant(), {string});
+     BuildModifyThreadInWasmFlag(decoder, true);
+-    return __ AnnotateWasmType(result, kWasmRefString);
++    return result;
+   }
+ #endif
+ 
+@@ -1381,6 +1381,19 @@ class TurboshaftGraphBuildingInterface {
+                             GetExternalArrayType(op_type));
+   }
+ 
++  // Adds a wasm type annotation to the graph and replaces any extern type with
++  // the extern string type.
++  V<String> AnnotateAsString(OpIndex value, wasm::ValueType type) {
++    DCHECK(type.is_reference_to(HeapType::kString) ||
++           type.is_reference_to(HeapType::kExternString) ||
++           type.is_reference_to(HeapType::kExtern));
++    if (type.is_reference_to(HeapType::kExtern)) {
++      type =
++          ValueType::RefMaybeNull(HeapType::kExternString, type.nullability());
++    }
++    return __ AnnotateWasmType(value, type);
++  }
++
+   bool HandleWellKnownImport(FullDecoder* decoder, uint32_t index,
+                              const Value args[], Value returns[]) {
+     if (!decoder->module_) return false;  // Only needed for tests.
+@@ -1439,7 +1452,7 @@ class TurboshaftGraphBuildingInterface {
+             BuiltinCallDescriptor::StringAdd_CheckNone>(
+             decoder, V<Context>::Cast(native_context),
+             {head_string, tail_string});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       }
+@@ -1458,7 +1471,7 @@ class TurboshaftGraphBuildingInterface {
+         V<Word32> capped = __ Word32BitwiseAnd(args[0].op, 0xFFFF);
+         result = CallBuiltinThroughJumptable<
+             BuiltinCallDescriptor::WasmStringFromCodePoint>(decoder, {capped});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       }
+@@ -1467,7 +1480,7 @@ class TurboshaftGraphBuildingInterface {
+         result = CallBuiltinThroughJumptable<
+             BuiltinCallDescriptor::WasmStringFromCodePoint>(decoder,
+                                                             {args[0].op});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringFromWtf16Array:
+@@ -1475,13 +1488,13 @@ class TurboshaftGraphBuildingInterface {
+             BuiltinCallDescriptor::WasmStringNewWtf16Array>(
+             decoder,
+             {V<WasmArray>::Cast(NullCheck(args[0])), args[1].op, args[2].op});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringFromUtf8Array:
+-        result =
+-            StringNewWtf8ArrayImpl(decoder, unibrow::Utf8Variant::kLossyUtf8,
+-                                   args[0], args[1], args[2]);
++        result = StringNewWtf8ArrayImpl(
++            decoder, unibrow::Utf8Variant::kLossyUtf8, args[0], args[1],
++            args[2], kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       case WKI::kStringIntoUtf8Array: {
+@@ -1514,7 +1527,7 @@ class TurboshaftGraphBuildingInterface {
+         result = CallBuiltinThroughJumptable<
+             BuiltinCallDescriptor::WasmStringViewWtf16Slice>(
+             decoder, {V<String>::Cast(view), args[1].op, args[2].op});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+       }
+@@ -1533,7 +1546,7 @@ class TurboshaftGraphBuildingInterface {
+         BuildModifyThreadInWasmFlag(decoder, false);
+         result = CallBuiltinThroughJumptable<
+             BuiltinCallDescriptor::WasmFloat64ToString>(decoder, {args[0].op});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = AnnotateAsString(result, returns[0].type);
+         BuildModifyThreadInWasmFlag(decoder, true);
+         decoder->detected_->Add(
+             returns[0].type.is_reference_to(wasm::HeapType::kString)
+@@ -1545,7 +1558,7 @@ class TurboshaftGraphBuildingInterface {
+         result =
+             CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmIntToString>(
+                 decoder, {args[0].op, args[1].op});
+-        result = __ AnnotateWasmType(result, kWasmRefString);
++        result = AnnotateAsString(result, returns[0].type);
+         BuildModifyThreadInWasmFlag(decoder, true);
+         decoder->detected_->Add(
+             returns[0].type.is_reference_to(wasm::HeapType::kString)
+@@ -1555,7 +1568,7 @@ class TurboshaftGraphBuildingInterface {
+       case WKI::kParseFloat: {
+         if (args[0].type.is_nullable()) {
+           Label<Float64> done(&asm_);
+-          GOTO_IF(__ IsNull(args[0].op, wasm::kWasmStringRef), done,
++          GOTO_IF(__ IsNull(args[0].op, args[0].type), done,
+                   __ Float64Constant(std::numeric_limits<double>::quiet_NaN()));
+ 
+           BuildModifyThreadInWasmFlag(decoder, false);
+@@ -1582,7 +1595,7 @@ class TurboshaftGraphBuildingInterface {
+ 
+         // If string is null, throw.
+         if (args[0].type.is_nullable()) {
+-          IF (__ IsNull(string, wasm::kWasmStringRef)) {
++          IF (__ IsNull(string, args[0].type)) {
+             CallBuiltinThroughJumptable<
+                 BuiltinCallDescriptor::ThrowIndexOfCalledOnNull>(decoder, {});
+             __ Unreachable();
+@@ -1593,8 +1606,8 @@ class TurboshaftGraphBuildingInterface {
+         // If search is null, replace it with "null".
+         if (args[1].type.is_nullable()) {
+           Label<String> search_done_label(&asm_);
+-          GOTO_IF_NOT(__ IsNull(search, wasm::kWasmStringRef),
+-                      search_done_label, search);
++          GOTO_IF_NOT(__ IsNull(search, args[1].type), search_done_label,
++                      search);
+           GOTO(search_done_label, LOAD_ROOT(null_string));
+           BIND(search_done_label, search_value);
+           search = search_value;
+@@ -1626,7 +1639,7 @@ class TurboshaftGraphBuildingInterface {
+ #if V8_INTL_SUPPORT
+         V<String> string = args[0].op;
+         if (args[0].type.is_nullable()) {
+-          IF (__ IsNull(string, wasm::kWasmStringRef)) {
++          IF (__ IsNull(string, args[0].type)) {
+             CallBuiltinThroughJumptable<
+                 BuiltinCallDescriptor::ThrowToLowerCaseCalledOnNull>(decoder,
+                                                                      {});
+@@ -1635,6 +1648,7 @@ class TurboshaftGraphBuildingInterface {
+           END_IF
+         }
+         result = CallStringToLowercase(decoder, string);
++        __ AnnotateWasmType(result, kWasmRefString);
+         decoder->detected_->Add(kFeature_stringref);
+         break;
+ #else
+@@ -1651,6 +1665,7 @@ class TurboshaftGraphBuildingInterface {
+         }
+         V<String> string = args[0].op;
+         result = CallStringToLowercase(decoder, string);
++        __ AnnotateWasmType(result, kWasmRefExternString);
+         decoder->detected_->Add(kFeature_imported_strings);
+         break;
+ #else
+@@ -3239,7 +3254,7 @@ class TurboshaftGraphBuildingInterface {
+   V<Tagged> StringNewWtf8ArrayImpl(FullDecoder* decoder,
+                                    const unibrow::Utf8Variant variant,
+                                    const Value& array, const Value& start,
+-                                   const Value& end) {
++                                   const Value& end, ValueType result_type) {
+     // Special case: shortcut a sequence "array from data segment" + "string
+     // from wtf8 array" to directly create a string from the segment.
+     V<Tagged> call;
+@@ -3271,16 +3286,20 @@ class TurboshaftGraphBuildingInterface {
+           {start.op, end.op, V<WasmArray>::Cast(NullCheck(array)),
+            __ SmiConstant(Smi::FromInt(static_cast<int32_t>(variant)))});
+     }
+-    bool null_on_invalid = variant == unibrow::Utf8Variant::kUtf8NoTrap;
+-    return __ AnnotateWasmType(
+-        call, null_on_invalid ? kWasmStringRef : kWasmRefString);
++    DCHECK_IMPLIES(variant == unibrow::Utf8Variant::kUtf8NoTrap,
++                   result_type.is_nullable());
++    // The builtin returns a WasmNull for kUtf8NoTrap, so nullable values in
++    // combination with extern strings are not supported.
++    DCHECK_NE(result_type, wasm::kWasmExternRef);
++    return AnnotateAsString(call, result_type);
+   }
+ 
+   void StringNewWtf8Array(FullDecoder* decoder,
+                           const unibrow::Utf8Variant variant,
+                           const Value& array, const Value& start,
+                           const Value& end, Value* result) {
+-    result->op = StringNewWtf8ArrayImpl(decoder, variant, array, start, end);
++    result->op = StringNewWtf8ArrayImpl(decoder, variant, array, start, end,
++                                        result->type);
+   }
+ 
+   void StringNewWtf16(FullDecoder* decoder, const MemoryIndexImmediate& imm,
+diff --git a/src/wasm/value-type.h b/src/wasm/value-type.h
+index 6ad2b04c5c2..8a4fe2015c3 100644
+--- a/src/wasm/value-type.h
++++ b/src/wasm/value-type.h
+@@ -66,6 +66,9 @@ class HeapType {
+     kArray,                   // shorthand: g
+     kAny,                     //
+     kExtern,                  // shorthand: a.
++    kExternString,            // Internal type for optimization purposes.
++                              // Subtype of extern.
++                              // Used by the js-builtin-strings proposal.
+     kExn,                     //
+     kString,                  // shorthand: w.
+     kStringViewWtf8,          // shorthand: x.
+@@ -172,6 +175,8 @@ class HeapType {
+         return std::string("array");
+       case kExtern:
+         return std::string("extern");
++      case kExternString:
++        return std::string("<extern_string>");
+       case kAny:
+         return std::string("any");
+       case kString:
+@@ -745,6 +750,10 @@ constexpr ValueType kWasmStructRef = ValueType::RefNull(HeapType::kStruct);
+ constexpr ValueType kWasmArrayRef = ValueType::RefNull(HeapType::kArray);
+ constexpr ValueType kWasmStringRef = ValueType::RefNull(HeapType::kString);
+ constexpr ValueType kWasmRefString = ValueType::Ref(HeapType::kString);
++constexpr ValueType kWasmRefNullExternString =
++    ValueType::RefNull(HeapType::kExternString);
++constexpr ValueType kWasmRefExternString =
++    ValueType::Ref(HeapType::kExternString);
+ constexpr ValueType kWasmStringViewWtf8 =
+     ValueType::RefNull(HeapType::kStringViewWtf8);
+ constexpr ValueType kWasmStringViewWtf16 =
+diff --git a/src/wasm/wasm-subtyping.cc b/src/wasm/wasm-subtyping.cc
+index c9f6b6eca00..3b2e740d786 100644
+--- a/src/wasm/wasm-subtyping.cc
++++ b/src/wasm/wasm-subtyping.cc
+@@ -115,6 +115,7 @@ HeapType::Representation NullSentinelImpl(HeapType type,
+       return HeapType::kNone;
+     case HeapType::kExtern:
+     case HeapType::kNoExtern:
++    case HeapType::kExternString:
+       return HeapType::kNoExtern;
+     case HeapType::kExn:
+     case HeapType::kNoExn:
+@@ -215,6 +216,8 @@ V8_NOINLINE V8_EXPORT_PRIVATE bool IsHeapSubtypeOfImpl(
+       return super_heap == HeapType::kAny;
+     case HeapType::kExtern:
+       return super_heap == HeapType::kExtern;
++    case HeapType::kExternString:
++      return super_heap == sub_heap || super_heap == HeapType::kExtern;
+     case HeapType::kExn:
+       return super_heap == HeapType::kExn;
+     case HeapType::kI31:
+@@ -239,11 +242,13 @@ V8_NOINLINE V8_EXPORT_PRIVATE bool IsHeapSubtypeOfImpl(
+       }
+       return super_heap != HeapType::kFunc && super_heap != HeapType::kNoFunc &&
+              super_heap != HeapType::kExtern &&
++             super_heap != HeapType::kExternString &&
+              super_heap != HeapType::kNoExtern &&
+              super_heap != HeapType::kExn && super_heap != HeapType::kNoExn;
+     case HeapType::kNoExtern:
+       return super_heap == HeapType::kNoExtern ||
+-             super_heap == HeapType::kExtern;
++             super_heap == HeapType::kExtern ||
++             super_heap == HeapType::kExternString;
+     case HeapType::kNoExn:
+       return super_heap == HeapType::kExn || super_heap == HeapType::kNoExn;
+     case HeapType::kNoFunc:
+@@ -273,6 +278,7 @@ V8_NOINLINE V8_EXPORT_PRIVATE bool IsHeapSubtypeOfImpl(
+     case HeapType::kI31:
+       return false;
+     case HeapType::kExtern:
++    case HeapType::kExternString:
+     case HeapType::kExn:
+       return false;
+     case HeapType::kString:
+@@ -407,6 +413,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kAny;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -434,6 +441,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kAny;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -462,6 +470,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kAny;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -489,6 +498,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kAny;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -517,6 +527,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kAny;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -544,6 +555,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+         case HeapType::kString:
+           return heap2.representation();
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kFunc:
+@@ -565,13 +577,21 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+                  ? heap2.representation()
+                  : HeapType::kBottom;
+     case HeapType::kNoExtern:
+-      return heap2 == HeapType::kExtern || heap2 == HeapType::kNoExtern
++      return heap2 == HeapType::kExtern || heap2 == HeapType::kNoExtern ||
++                     heap2 == HeapType::kExternString
+                  ? heap2.representation()
+                  : HeapType::kBottom;
+     case HeapType::kExtern:
+-      return heap2 == HeapType::kExtern || heap2 == HeapType::kNoExtern
++      return heap2 == HeapType::kExtern || heap2 == HeapType::kNoExtern ||
++                     heap2 == HeapType::kExternString
+                  ? HeapType::kExtern
+                  : HeapType::kBottom;
++    case HeapType::kExternString:
++      return heap2 == HeapType::kExtern ? HeapType::kExtern
++             : (heap2 == HeapType::kNoExtern ||
++                heap2 == HeapType::kExternString)
++                 ? HeapType::kExternString
++                 : HeapType::kBottom;
+     case HeapType::kNoExn:
+       return heap2 == HeapType::kExn || heap2 == HeapType::kNoExn
+                  ? heap1.representation()
+@@ -593,6 +613,7 @@ HeapType::Representation CommonAncestorWithGeneric(HeapType heap1,
+           return HeapType::kString;
+         case HeapType::kFunc:
+         case HeapType::kExtern:
++        case HeapType::kExternString:
+         case HeapType::kNoExtern:
+         case HeapType::kNoFunc:
+         case HeapType::kStringViewIter:
+@@ -697,15 +718,6 @@ bool IsSameTypeHierarchy(HeapType type1, HeapType type2,
+   return NullSentinelImpl(type1, module) == NullSentinelImpl(type2, module);
+ }
+ 
+-bool IsImplicitInternalization(wasm::ValueType from, wasm::ValueType to,
+-                               const wasm::WasmModule* to_module) {
+-  return from.is_object_reference() &&
+-         from.heap_representation() == wasm::HeapType::kExtern &&
+-         to.is_object_reference() &&
+-         wasm::IsHeapSubtypeOf(to.heap_type(),
+-                               wasm::HeapType(wasm::HeapType::kAny), to_module);
+-}
+-
+ }  // namespace wasm
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/src/wasm/wasm-subtyping.h b/src/wasm/wasm-subtyping.h
+index f9ffb57279a..b247a8ddf28 100644
+--- a/src/wasm/wasm-subtyping.h
++++ b/src/wasm/wasm-subtyping.h
+@@ -173,12 +173,6 @@ ValueType ToNullSentinel(TypeInModule type);
+ bool IsSameTypeHierarchy(HeapType type1, HeapType type2,
+                          const WasmModule* module);
+ 
+-// Returns if the cast performs an implicit any.convert_extern, i.e. it crosses
+-// the type hiearchy boundary from extern to any.
+-// This can happen as a result e.g. when mapping imported strings to stringref.
+-bool IsImplicitInternalization(wasm::ValueType from, wasm::ValueType to,
+-                               const wasm::WasmModule* to_module);
+-
+ }  // namespace wasm
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/test/mjsunit/regress/wasm/regress-326091470.js b/test/mjsunit/regress/wasm/regress-326091470.js
+new file mode 100644
+index 00000000000..092231ec27b
+--- /dev/null
++++ b/test/mjsunit/regress/wasm/regress-326091470.js
+@@ -0,0 +1,32 @@
++// Copyright 2024 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --experimental-wasm-imported-strings --experimental-wasm-inlining
++// Flags: --allow-natives-syntax
++
++d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
++
++let kRefExtern = wasmRefType(kWasmExternRef);
++let kSig_e_i = makeSig([kWasmI32], [kRefExtern]);
++
++const builder = new WasmModuleBuilder();
++
++let kStringFromCharCode =
++    builder.addImport('wasm:js-string', 'fromCharCode', kSig_e_i);
++
++let callee = builder.addFunction('callee', makeSig([kRefExtern], [kRefExtern]));
++callee.addBody([kExprLocalGet, 0]);
++
++builder.addFunction('main', makeSig([], [kRefExtern])).exportFunc().addBody([
++  ...wasmI32Const(65),
++  kExprCallFunction, kStringFromCharCode,
++  kExprCallFunction, callee.index,
++]);
++
++let instance = builder.instantiate({}, {builtins: ["js-string"]});
++let main = instance.exports.main;
++
++for (let i = 0; i < 10; i++) main();
++%WasmTierUpFunction(main);
++assertEquals("A", main());
+diff --git a/test/unittests/wasm/subtyping-unittest.cc b/test/unittests/wasm/subtyping-unittest.cc
+index fe3dec5e5b9..4c48f8cbabd 100644
+--- a/test/unittests/wasm/subtyping-unittest.cc
++++ b/test/unittests/wasm/subtyping-unittest.cc
+@@ -137,16 +137,17 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+   constexpr ValueType numeric_types[] = {kWasmI32, kWasmI64, kWasmF32, kWasmF64,
+                                          kWasmS128};
+   constexpr ValueType ref_types[] = {
+-      kWasmFuncRef,   kWasmEqRef,           // --
+-      kWasmStructRef, kWasmArrayRef,        // --
+-      kWasmI31Ref,    kWasmAnyRef,          // --
+-      kWasmExternRef, kWasmNullExternRef,   // --
+-      kWasmNullRef,   kWasmNullFuncRef,     // --
+-      kWasmStringRef, kWasmStringViewIter,  // --
+-      kWasmExnRef,    kWasmNullExnRef,      // --
+-      refNull(0),     ref(0),               // struct
+-      refNull(2),     ref(2),               // array
+-      refNull(11),    ref(11)               // signature
++      kWasmFuncRef,     kWasmEqRef,         kWasmStructRef,
++      kWasmArrayRef,    kWasmI31Ref,        kWasmAnyRef,
++      kWasmExternRef,   kWasmNullExternRef, kWasmNullRef,
++      kWasmNullFuncRef, kWasmStringRef,     kWasmStringViewIter,
++      kWasmExnRef,      kWasmNullExnRef,    kWasmRefNullExternString,
++      refNull(0),   // struct
++      ref(0),       // struct
++      refNull(2),   // array
++      ref(2),       // array
++      refNull(11),  // signature
++      ref(11)       // signature
+   };
+ 
+ // Some macros to help managing types and modules.
+@@ -202,8 +203,9 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+     }
+ 
+     for (ValueType ref_type : ref_types) {
+-      const bool is_extern =
+-          ref_type == kWasmExternRef || ref_type == kWasmNullExternRef;
++      const bool is_extern = ref_type == kWasmExternRef ||
++                             ref_type == kWasmNullExternRef ||
++                             ref_type == kWasmRefNullExternString;
+       const bool is_any_func = ref_type == kWasmFuncRef ||
+                                ref_type == kWasmNullFuncRef ||
+                                ref_type == refNull(11) || ref_type == ref(11);
+@@ -384,7 +386,7 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+       }
+       if (type == kWasmFuncRef || type == kWasmNullFuncRef || type == ref(11) ||
+           type == refNull(11) || type == kWasmExternRef ||
+-          type == kWasmNullExternRef) {
++          type == kWasmNullExternRef || type == kWasmRefNullExternString) {
+         // func and extern types don't share the same type hierarchy as anyref.
+         INTERSECTION(type, kWasmAnyRef, kWasmBottom);
+         continue;
+@@ -419,6 +421,21 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+     UNION(kWasmI31Ref.AsNonNull(), kWasmArrayRef, kWasmEqRef);
+     UNION(kWasmAnyRef, kWasmNullRef, kWasmAnyRef);
+     UNION(kWasmExternRef, kWasmNullExternRef, kWasmExternRef);
++    UNION(kWasmRefNullExternString, kWasmNullExternRef,
++          kWasmRefNullExternString);
++    UNION(kWasmRefNullExternString.AsNonNull(), kWasmNullExternRef,
++          kWasmRefNullExternString);
++    UNION(kWasmRefNullExternString, kWasmExternRef, kWasmExternRef);
++    UNION(kWasmRefNullExternString, kWasmAnyRef, kWasmBottom);
++    UNION(kWasmRefNullExternString, kWasmFuncRef, kWasmBottom);
++    // Imported strings and stringref represent the same values. Still, they are
++    // in different type hierarchies and therefore incompatible (e.g. due to
++    // different null representation).
++    // (There is no interoperability between stringref and imported strings as
++    // they are competing proposals.)
++    UNION(kWasmRefNullExternString, kWasmStringRef, kWasmBottom);
++    UNION(kWasmRefNullExternString.AsNonNull(), kWasmStringRef.AsNonNull(),
++          kWasmBottom);
+     UNION(kWasmFuncRef, kWasmNullFuncRef, kWasmFuncRef);
+     UNION(kWasmFuncRef, kWasmStructRef, kWasmBottom);
+     UNION(kWasmFuncRef, kWasmArrayRef, kWasmBottom);
+@@ -449,6 +466,19 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+     INTERSECTION(kWasmNullExternRef, kWasmNullRef, kWasmBottom);
+     INTERSECTION(kWasmNullExternRef, kWasmExternRef, kWasmNullExternRef);
+     INTERSECTION(kWasmNullExternRef, kWasmExternRef.AsNonNull(), kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmEqRef, kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmAnyRef, kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmFuncRef.AsNonNull(),
++                 kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmNullRef, kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmNullExternRef,
++                 kWasmNullExternRef);
++    INTERSECTION(kWasmRefNullExternString.AsNonNull(), kWasmNullExternRef,
++                 kWasmBottom);
++    INTERSECTION(kWasmRefNullExternString, kWasmExternRef,
++                 kWasmRefNullExternString);
++    INTERSECTION(kWasmRefNullExternString, kWasmExternRef.AsNonNull(),
++                 kWasmRefNullExternString.AsNonNull());
+ 
+     INTERSECTION(kWasmFuncRef, kWasmEqRef, kWasmBottom);
+     INTERSECTION(kWasmFuncRef, kWasmStructRef, kWasmBottom);
+@@ -539,11 +569,18 @@ TEST_F(WasmSubtypingTest, Subtyping) {
+     INTERSECTION(kWasmNullRef, struct_type, kWasmBottom);
+     INTERSECTION(kWasmNullRef, array_type, kWasmBottom);
+     INTERSECTION(kWasmNullRef, function_type, kWasmBottom);
++    INTERSECTION(kWasmNullRef, struct_type.AsNullable(), kWasmNullRef);
++    INTERSECTION(kWasmNullRef, array_type.AsNullable(), kWasmNullRef);
++    INTERSECTION(kWasmNullRef, function_type.AsNullable(), kWasmBottom);
+ 
+     UNION(struct_type, kWasmStringRef, kWasmAnyRef);
+     UNION(array_type, kWasmStringRef, kWasmAnyRef);
+     UNION(function_type, kWasmStringRef, kWasmBottom);
+ 
++    UNION(struct_type, kWasmRefNullExternString, kWasmBottom);
++    UNION(array_type, kWasmRefNullExternString, kWasmBottom);
++    UNION(function_type, kWasmRefNullExternString, kWasmBottom);
++
+     // Indexed types of different kinds.
+     UNION(struct_type, array_type, kWasmEqRef.AsNonNull());
+     INTERSECTION(struct_type, array_type, kWasmBottom);
+-- 
+2.43.0
+

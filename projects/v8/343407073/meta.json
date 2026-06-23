@@ -1,0 +1,35 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:343407073",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/wasm/wasm-objects.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A V8 sandbox bypass vulnerability exists in the WebAssembly dispatch table mechanism that allows control-flow hijacking within the WASM RWX memory region. The root cause is that WasmTrustedInstanceData::module_object() (wasm-objects-inl.h:279) reads through the untrusted WasmInstanceObject::module_object field, which resides inside the V8 sandbox and is attacker-controlled. An attacker with sandbox write access can (1) modify the function_index field in WasmExportedFunctionData (a Smi stored in the sandbox) to an arbitrary value, and (2) swap the module_object pointer in a WasmInstanceObject to point to a different WasmModule with a larger function table. When the manipulated exported function is placed into a WASM Table via table.set(), SetFunctionTableEntry in wasm-objects.cc reads the manipulated func_index and module, passes the SBXCHECK_LT bounds check (because the swapped module has more functions), then calls GetCallTarget(func_index) which computes the dispatch table call target as jump_table_start() + JumpTableOffset(swapped_native_module, manipulated_func_index). Since jump_table_start is from the original trusted instance data while the offset is derived from the swapped module and attacker-chosen index, this effectively lets the attacker place an arbitrary call target within the WASM jump table region into the dispatch table. When the table entry is invoked via an indirect call, execution is redirected to the attacker-controlled address within the RWX WASM memory, achieving a full V8 sandbox escape and control-flow hijacking.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Conflict-resolved local compatibility backport for this vulnerable V8 checkout.",
+      "context": "landed-commit-backport",
+      "evidence_lineno": 0,
+      "evidence_text": "Report follow-up identifies CL 5484107 / cf9373a0 as the fix. A conflict-resolved local compatibility patch is used for deterministic validation on this checkout.",
+      "source_url": "https://crrev.com/c/5484107",
+      "url": "https://crrev.com/c/5484107",
+      "source_cl": 5484107,
+      "cl": 5484107,
+      "source_commit": "cf9373a0d6760146534b096cee60675a3ea09ad7",
+      "commit": "cf9373a0d6760146534b096cee60675a3ea09ad7"
+    }
+  ]
+}

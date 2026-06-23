@@ -1,0 +1,39 @@
+From 84c0b167d973cdeba2f57004fd4d500e70a8b992 Mon Sep 17 00:00:00 2001
+From: Victor Gomes <victorgomes@chromium.org>
+Date: Thu, 11 Sep 2025 10:19:34 +0200
+Subject: [PATCH] [maglev] SBXCHECK input count is less than max allowed
+
+Change-Id: I37dc612929243de4aac90d73c4e5e8724abf648e
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6939005
+Commit-Queue: Leszek Swirski <leszeks@chromium.org>
+Auto-Submit: Victor Gomes <victorgomes@chromium.org>
+Reviewed-by: Leszek Swirski <leszeks@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#102402}
+---
+ src/maglev/maglev-ir.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/maglev/maglev-ir.h b/src/maglev/maglev-ir.h
+index f841c842a20..5edcffa3138 100644
+--- a/src/maglev/maglev-ir.h
++++ b/src/maglev/maglev-ir.h
+@@ -47,6 +47,7 @@
+ #include "src/objects/smi.h"
+ #include "src/objects/tagged-index.h"
+ #include "src/roots/roots.h"
++#include "src/sandbox/check.h"
+ #include "src/sandbox/js-dispatch-table.h"
+ #include "src/utils/utils.h"
+ #include "src/zone/zone.h"
+@@ -2644,6 +2645,8 @@ class NodeBase : public ZoneObject {
+         EagerDeoptInfoSize(Derived::kProperties) +
+         LazyDeoptInfoSize(Derived::kProperties);
+ 
++    SBXCHECK_LE(input_count, kMaxInputs);
++
+     static_assert(IsAligned(size_before_inputs, alignof(ValueNode*)));
+     size_t size_before_node =
+         size_before_inputs + input_count * sizeof(ValueNode*);
+-- 
+2.43.0
+

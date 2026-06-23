@@ -1,0 +1,32 @@
+commit dcc38792dc66df2390272530cbffa7695280e5ee
+Author: André Bargull <andre.bargull@gmail.com>
+Date:   Tue Feb 6 07:28:45 2024 +0000
+
+    Bug 1878261: Prefer local variables over fromMarkedLocation. r=iain
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D200673
+
+diff --git a/js/src/jit/JitFrames.cpp b/js/src/jit/JitFrames.cpp
+index 9f5a9fa782d6..1d7e63efd57a 100644
+--- a/js/src/jit/JitFrames.cpp
++++ b/js/src/jit/JitFrames.cpp
+@@ -498,12 +498,15 @@ static bool ProcessTryNotesBaseline(JSContext* cx, const JSJitFrameIter& frame,
+         }
+ 
+         // Drop the exception instead of leaking cross compartment data.
+-        if (!cx->getPendingException(
+-                MutableHandleValue::fromMarkedLocation(&rfe->exception)) ||
+-            !cx->getPendingExceptionStack(
+-                MutableHandleValue::fromMarkedLocation(&rfe->exceptionStack))) {
++        RootedValue exception(cx);
++        RootedValue exceptionStack(cx);
++        if (!cx->getPendingException(&exception) ||
++            !cx->getPendingExceptionStack(&exceptionStack)) {
+           rfe->exception = UndefinedValue();
+           rfe->exceptionStack = NullValue();
++        } else {
++          rfe->exception = exception;
++          rfe->exceptionStack = exceptionStack;
+         }
+         cx->clearPendingException();
+         return true;

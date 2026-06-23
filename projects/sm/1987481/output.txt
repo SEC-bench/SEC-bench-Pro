@@ -1,0 +1,32 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==10==ERROR: AddressSanitizer: SEGV on unknown address 0x0000790433b7 (pc 0x61a4a3c60c57 bp 0x7ffe77000fb0 sp 0x7ffe77000f10 T0)
+==10==The signal is caused by a READ memory access.
+    #0 0x61a4a3c60c57 in IsWriteableAddress(void*) /src/gecko-dev/js/src/gc/Nursery.cpp:1012:11
+    #1 0x61a4a3c60c57 in js::Nursery::forwardBufferPointer(unsigned long*) /src/gecko-dev/js/src/gc/Nursery.cpp:1041:5
+    #2 0x61a4a4b6c1ad in js::jit::UpdateIonJSFrameForMinorGC(JSRuntime*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:1152:15
+    #3 0x61a4a4b6c1ad in js::jit::UpdateJitActivationsForMinorGC(JSRuntime*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1528:11
+    #4 0x61a4a3c65c8d in js::Nursery::doCollection(js::gc::AutoGCSession&, JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1742:3
+    #5 0x61a4a3c63ed8 in js::Nursery::collect(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/Nursery.cpp:1459:31
+    #6 0x61a4a3b8e432 in js::gc::GCRuntime::collectNursery(JS::GCOptions, JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:5072:13
+    #7 0x61a4a3b6369f in js::gc::GCRuntime::minorGC(JS::GCReason, js::gcstats::PhaseKind) /src/gecko-dev/js/src/gc/GC.cpp:5043:3
+    #8 0x61a4a3b2169d in void* js::gc::CellAllocator::RetryNurseryAlloc<(js::AllowGC)1>(JSContext*, JS::TraceKind, js::gc::AllocKind, unsigned long, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator.cpp:107:23
+    #9 0x61a4a269672c in void* js::gc::CellAllocator::AllocNurseryOrTenuredCell<(JS::TraceKind)0, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:217:12
+    #10 0x61a4a269605d in js::NativeObject* js::gc::CellAllocator::NewObject<js::NativeObject, (js::AllowGC)1>(JSContext*, js::gc::AllocKind, js::gc::Heap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator-inl.h:112:16
+    #11 0x61a4a2b21b6a in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator-inl.h:35:12
+    #12 0x61a4a2b21b6a in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, js::gc::Heap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext-inl.h:359:10
+    #13 0x61a4a2b21b6a in JSFunction::create(JSContext*, js::gc::AllocKind, js::gc::Heap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/JSFunction-inl.h:64:28
+    #14 0x61a4a2b0ca96 in NewFunctionClone(JSContext*, JS::Handle<JSFunction*>, JS::Handle<JSObject*>, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/JSFunction.cpp:1901:23
+    #15 0x61a4a2b0c195 in js::CloneFunctionReuseScript(JSContext*, JS::Handle<JSFunction*>, JS::Handle<JSObject*>, JS::Handle<JSObject*>, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/JSFunction.cpp:1933:23
+    #16 0x61a4a26e1296 in js::Lambda(JSContext*, JS::Handle<JSFunction*>, JS::Handle<JSObject*>, js::gc::Heap, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/Interpreter.cpp:4663:13
+    #17 0x61a4a26e3bf1 in js::LambdaOptimizedFallback(JSContext*, JS::Handle<JSFunction*>, JS::Handle<JSObject*>, js::gc::Heap) /src/gecko-dev/js/src/vm/Interpreter.cpp:4649:19
+    #18 0x27ec5dc16f3d  (<unknown module>)
+
+==10==Register values:
+rax = 0x000000000f208676  rbx = 0x00000fffcee003bf  rcx = 0x000010004edf81ea  rdx = 0x0000000000000020  
+rdi = 0x00000000790433b7  rsi = 0x00007be43cee2f28  rbp = 0x00007ffe77000fb0  rsp = 0x00007ffe77000f10  
+ r8 = 0x00000fffcee001e7   r9 = 0x00007ffe77000f57  r10 = 0x00000fffcee001ea  r11 = 0x000010004edf81e0  
+r12 = 0x00007ffe77001df8  r13 = 0x0000325af693ffaa  r14 = 0x00007be43cee2ef8  r15 = 0x00ffffffffffffff  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/gc/Nursery.cpp:1012:11 in IsWriteableAddress(void*)
+==10==ABORTING

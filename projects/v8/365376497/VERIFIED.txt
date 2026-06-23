@@ -1,0 +1,12 @@
+Verified against the original collector report in `../../collector/output/general/Blink/JavaScript/WebAssembly/365376497/Report.md`.
+
+Collector artifacts checked:
+- `poc.js`
+- `poc_crash_comment_6.js`
+- `exploit.js`
+
+The local `poc.js` matches the collector crash variant `poc_crash_comment_6.js`. Reproduced with:
+
+`out/x64.asan/d8 --wasm-staging --disable-in-process-stack-traces /testcase/poc.js`
+
+`output.txt` captures an ASan SEGV in `third_party/libc++/src/include/__atomic/cxx_atomic_impl.h` while dereferencing the corrupted tagged pointer during `console.log`, matching the report's JSPI lazy-deopt type confusion crash variant.

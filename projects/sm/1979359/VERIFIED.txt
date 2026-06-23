@@ -1,0 +1,8 @@
+VERIFIED at 2026-05-29T05:50:00Z — 2025-Q3 import on bug 1979359 (sec-high csectype-bounds, 2025-Aug)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: aIndex < mLength, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:591`
+  - exact bounds assertion match against report's `Vector.h:591`
+  - root cause: GCRuntime::isSymbolReferencedByUncollectedZone consulted atomsUsedByUncollectedZones bitmap without a range check; symbols allocated after a GC slice began fell outside the bitmap → OOB read during WeakMap<Value, Value>::markEntry
+  - PoC swapped: original report's testcase used `WeakMap.getOrInsert` which requires --enable-upsert (not available as runtime flag in our build); used jcoppeard's equivalent reduced PoC from comment 5 (uses `map.set` instead, same failure mode confirmed by reporter)
+  - flags: `--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --enable-symbols-as-weakmap-keys` (nightly-only feature)
+  - fixed image (git 56674d4f9366 "Add range check in GCRuntime::isSymbolReferencedByUncollectedZone") blocks PoC 5/5

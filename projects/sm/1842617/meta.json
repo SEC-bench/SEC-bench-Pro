@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1842617",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MacroAssembler.cpp"
+    ],
+    "target_subdir": [
+        "js/src/jit"
+    ],
+    "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off --baseline-eager",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Type confusion",
+    "error_type": "ASAN_CRASH",
+    "description": "MacroAssembler branchTestObjShapeList — Missing Empty-List Check on Post-GC Shape Folding Allows Stale-Shape-Pointer Match and SetDynamicSlot Corruption. Bug 1842617 (sec-high). In js/src/jit/MacroAssembler.cpp, the function branchTestObjShapeList generates a do-while loop that unconditionally reads the first element of a shape list without checking if the list is empty. After stub folding (introduced in bug 1837620), GC can collect all shapes from the list, leaving it empty. When a dictionary shape is later allocated at the same address as a previously collected shape, the stale pointer comparison in the empty list passes spuriously. The JIT then executes a SetDynamicSlot operation on the global object using the wrong shape assumption, overwriting the dictionary shape's free-list slot value. This corrupts the NativeObject slot allocator, leading to a crash in allocDictionarySlot or an exploitable memory corruption where an attacker could control slot contents. The fix (changeset 5af60a416884) adds an empty-list check to branchTestObjShapeList, converting the do-while into a while loop that correctly handles the zero-element case.",
+    "fix_commits": [
+        "3450c044be862b04778daa8a3535efb3782255e1"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-check-for-empty-shape-list-in.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1842617: Check for empty shape list in",
+            "source_commit": "3450c044be862b04778daa8a3535efb3782255e1",
+            "commit": "3450c044be862b04778daa8a3535efb3782255e1",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/3450c044be862b04778daa8a3535efb3782255e1",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/3450c044be862b04778daa8a3535efb3782255e1",
+            "phabricator": "D183192"
+        }
+    ],
+    "vrp": null
+}

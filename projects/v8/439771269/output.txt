@@ -1,0 +1,18 @@
+Received signal 11 SEGV_ACCERR 7a3800000000
+
+==== C stack trace ===============================
+
+out/x64.asan/d8(___interceptor_backtrace+0x46)[0x55c69bbe18a6]
+out/x64.asan/d8(+0x87a6872)[0x55c6a1fad872]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7f7841285330]
+out/x64.asan/d8(+0x54be7ae)[0x55c69ecc57ae]
+out/x64.asan/d8(+0x5689a66)[0x55c69ee90a66]
+out/x64.asan/d8(+0x567f041)[0x55c69ee86041]
+out/x64.asan/d8(+0x567dfc2)[0x55c69ee84fc2]
+out/x64.asan/d8(+0x567d7fa)[0x55c69ee847fa]
+out/x64.asan/d8(+0x567ccc4)[0x55c69ee83cc4]
+out/x64.asan/d8(+0x5792ecd)[0x55c69ef99ecd]
+out/x64.asan/d8(+0x57fc0b0)[0x55c69f0030b0]
+out/x64.asan/d8(+0x8373ad0)[0x55c6a1b7aad0]
+[end of stack trace]
+Segmentation fault

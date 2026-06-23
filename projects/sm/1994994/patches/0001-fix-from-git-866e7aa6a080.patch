@@ -1,0 +1,113 @@
+From 866e7aa6a080b70bbbb6790b26f39c4c774e1cfa Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Thu, 23 Oct 2025 14:53:02 +0000
+Subject: [PATCH] Bug 1994994: Apply upstream irregexp patch r=dminor
+
+Differential Revision: https://phabricator.services.mozilla.com/D269118
+---
+ js/src/irregexp/imported/regexp-bytecode-generator.cc |  3 +--
+ js/src/irregexp/imported/regexp-compiler.cc           |  7 ++++++-
+ js/src/irregexp/imported/regexp-compiler.h            | 10 ++++++++++
+ js/src/irregexp/imported/regexp-macro-assembler.cc    |  2 +-
+ js/src/jit-test/tests/regexp/bug1994994.js            |  8 ++++++++
+ 5 files changed, 26 insertions(+), 4 deletions(-)
+ create mode 100644 js/src/jit-test/tests/regexp/bug1994994.js
+
+diff --git a/js/src/irregexp/imported/regexp-bytecode-generator.cc b/js/src/irregexp/imported/regexp-bytecode-generator.cc
+index 6efd8790e9c1..8a3e9884f778 100644
+--- a/js/src/irregexp/imported/regexp-bytecode-generator.cc
++++ b/js/src/irregexp/imported/regexp-bytecode-generator.cc
+@@ -191,8 +191,7 @@ void RegExpBytecodeGenerator::LoadCurrentCharacterImpl(int cp_offset,
+     check_bounds = false;  // Load below doesn't need to check.
+   }
+ 
+-  DCHECK_LE(kMinCPOffset, cp_offset);
+-  DCHECK_GE(kMaxCPOffset, cp_offset);
++  CHECK(base::IsInRange(cp_offset, kMinCPOffset, kMaxCPOffset));
+   int bytecode;
+   if (check_bounds) {
+     if (characters == 4) {
+diff --git a/js/src/irregexp/imported/regexp-compiler.cc b/js/src/irregexp/imported/regexp-compiler.cc
+index 54700b777083..b525f96b8c40 100644
+--- a/js/src/irregexp/imported/regexp-compiler.cc
++++ b/js/src/irregexp/imported/regexp-compiler.cc
+@@ -2308,6 +2308,7 @@ void AssertionNode::BacktrackIfPrevious(
+   // If we've already checked that we are not at the start of input, it's okay
+   // to load the previous character without bounds checks.
+   const bool can_skip_bounds_check = !may_be_at_or_before_subject_string_start;
++  static_assert(Trace::kCPOffsetSlack == 1);
+   assembler->LoadCurrentCharacter(new_trace.cp_offset() - 1, non_word,
+                                   can_skip_bounds_check);
+   EmitWordCheck(assembler, word, non_word, backtrack_if_previous == kIsNonWord);
+@@ -2562,6 +2563,7 @@ void TextNode::Emit(RegExpCompiler* compiler, Trace* trace) {
+   }
+ 
+   bool first_elt_done = false;
++  static_assert(Trace::kCPOffsetSlack == 1);
+   int bound_checked_to = trace->cp_offset() - 1;
+   bound_checked_to += trace->bound_checked_up_to();
+ 
+@@ -2606,7 +2608,10 @@ void Trace::AdvanceCurrentPositionInTrace(int by, RegExpCompiler* compiler) {
+   // characters by means of mask and compare.
+   quick_check_performed_.Advance(by, compiler->one_byte());
+   cp_offset_ += by;
+-  if (cp_offset_ > RegExpMacroAssembler::kMaxCPOffset) {
++  static_assert(RegExpMacroAssembler::kMaxCPOffset ==
++                -RegExpMacroAssembler::kMinCPOffset);
++  if (std::abs(cp_offset_) + kCPOffsetSlack >
++      RegExpMacroAssembler::kMaxCPOffset) {
+     compiler->SetRegExpTooBig();
+     cp_offset_ = 0;
+   }
+diff --git a/js/src/irregexp/imported/regexp-compiler.h b/js/src/irregexp/imported/regexp-compiler.h
+index 92d2487afa5c..4d9be84dcf0c 100644
+--- a/js/src/irregexp/imported/regexp-compiler.h
++++ b/js/src/irregexp/imported/regexp-compiler.h
+@@ -275,7 +275,17 @@ class Trace {
+   };
+   void Flush(RegExpCompiler* compiler, RegExpNode* successor,
+              FlushMode mode = kFlushFull);
++
++  // Some callers add/subtract 1 from cp_offset, assuming that the result is
++  // still valid. That's obviously not the case when our `cp_offset` is only
++  // checked against kMinCPOffset/kMaxCPOffset, so we need to apply the some
++  // slack.
++  // TODO(jgruber): It would be better if all callers checked against limits
++  // themselves when doing so; but unfortunately not all callers have
++  // abort-compilation mechanisms.
++  static constexpr int kCPOffsetSlack = 1;
+   int cp_offset() const { return cp_offset_; }
++
+   // Does any trace in the chain have an action?
+   bool has_any_actions() const { return has_any_actions_; }
+   // Does this particular trace object have an action?
+diff --git a/js/src/irregexp/imported/regexp-macro-assembler.cc b/js/src/irregexp/imported/regexp-macro-assembler.cc
+index 89527dff46cf..85ed4d6178fd 100644
+--- a/js/src/irregexp/imported/regexp-macro-assembler.cc
++++ b/js/src/irregexp/imported/regexp-macro-assembler.cc
+@@ -256,7 +256,7 @@ void NativeRegExpMacroAssembler::LoadCurrentCharacterImpl(
+   // path requires a large number of characters, but not the reverse.
+   DCHECK_GE(eats_at_least, characters);
+ 
+-  DCHECK(base::IsInRange(cp_offset, kMinCPOffset, kMaxCPOffset));
++  CHECK(base::IsInRange(cp_offset, kMinCPOffset, kMaxCPOffset));
+   if (check_bounds) {
+     if (cp_offset >= 0) {
+       CheckPosition(cp_offset + eats_at_least - 1, on_end_of_input);
+diff --git a/js/src/jit-test/tests/regexp/bug1994994.js b/js/src/jit-test/tests/regexp/bug1994994.js
+new file mode 100644
+index 000000000000..328db00b5cdb
+--- /dev/null
++++ b/js/src/jit-test/tests/regexp/bug1994994.js
+@@ -0,0 +1,8 @@
++const length = 32767;
++const pattern_body = "^" + "a".repeat(length);
++const pattern = new RegExp("(?<=" + pattern_body + ")", "m");
++let caught = undefined;
++try {
++  pattern.exec("");
++} catch (e) { caught = e; }
++assertEq(caught?.message, "regexp too big");
+-- 
+2.43.0
+

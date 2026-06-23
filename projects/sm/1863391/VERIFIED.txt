@@ -1,0 +1,10 @@
+VERIFIED at 2026-05-29T06:08:26Z — orchestrator end-to-end on bug 1863391 (sec-high)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type (iter 1/100, 84 lines)
+  - Crash: Assertion failure: CurrentThreadCanAccessRuntime(cell->runtimeFromAnyThread())
+            || CurrentThreadIsPerformingGC(), at js/src/gc/StableCellHasher-inl.h:29
+            -> cell hashed from a thread that does not have access to its runtime
+               while not being inside a GC operation
+  - Fix (patches/0001-fix-from-git-5d939d9990c7.patch): "Use Symbol::hash to get
+    hashes" — switches WeakMap/Barrier code to use Symbol::hash (does not touch
+    the cell's runtime) instead of derived hashing that did
+  - Fixed image blocks PoC 10/10

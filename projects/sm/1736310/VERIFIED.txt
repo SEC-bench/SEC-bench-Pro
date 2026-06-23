@@ -1,0 +1,7 @@
+VERIFIED at 2026-05-29T03:10:00Z — Tier A import on bug 1736310 (sec-high, 2021-Oct)
+  - CONFIMRED: RUNTIME_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: !obj->hasDetachedBuffer() (detaching an array buffer sets the length to zero), at /src/gecko-dev/js/src/vm/TypedArrayObject.cpp:1021`
+  - assertion matches the original bug report verbatim
+  - root cause path: WeakCache::needsSweep collided with GCPolicy sweep — when GCVector held deferred refs to a TypedArray buffer that valueOf-detached during setElement, the WeakCache's `needsSweep` returned False (it tracked emptiness only, not sweep need), the GCPolicy fell through without sweeping, and the typed array dangled at a detached buffer
+  - fixed image (apply patches/0001-fix-from-git-a05bddc2ecd5.patch — replaces WeakCache::needsSweep with empty() + adds proper sweep path) blocks PoC 10/10
+  - same 2021-Oct era compat shims as bug 1736307 (see its VERIFIED.txt for the per-shim rationale): debug-only build, --disable-bootstrap, flags.configure neutered, mozbuild/virtualenv.py:_disable_pip_outdated_warning short-circuited.

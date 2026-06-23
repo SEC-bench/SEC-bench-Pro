@@ -1,0 +1,38 @@
+[13] Assertion failure: aIndex < mLength, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585
+#01: ???[/out/js +0x662385b]
+#02: ???[/out/js +0x6627a2e]
+#03: ???[/out/js +0x6625e5d]
+#04: ???[/out/js +0x665148c]
+#05: ???[/out/js +0x66a2454]
+#06: ???[/out/js +0x686aadd]
+#07: ???[/out/js +0x686f2c8]
+#08: ???[/out/js +0x67e286e]
+#09: ???[/out/js +0x67e1759]
+#10: ???[/out/js +0x68eeed6]
+#11: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: ILL on unknown address 0x5639d7d8f885 (pc 0x5639d7d8f885 bp 0x7ffd2ed614f0 sp 0x7ffd2ed61400 T0)
+    #0 0x5639d7d8f885 in mozilla::Vector<js::wasm::AllocSitePatch, 0ul, js::SystemAllocPolicy>::operator[](unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585:5
+    #1 0x5639d7d8f885 in js::wasm::BaseCompiler::loadAllocSiteInstanceData(unsigned int) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:7372:3
+    #2 0x5639d7d93a2d in bool js::wasm::BaseCompiler::emitStructAlloc<false>(unsigned int, js::wasm::RegRef*, bool*, js::wasm::RegPtr*, unsigned int) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:7723:24
+    #3 0x5639d7d91e5c in js::wasm::BaseCompiler::emitStructNew() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:7783:8
+    #4 0x5639d7dbd48b in js::wasm::BaseCompiler::emitBody() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:11083:13
+    #5 0x5639d7e0e453 in js::wasm::BaseCompiler::emitFunction() /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:12249:8
+    #6 0x5639d7e0e453 in js::wasm::BaselineCompileFunctions(js::wasm::CodeMetadata const&, js::wasm::CompilerEnvironment const&, js::LifoAlloc&, mozilla::Vector<js::wasm::FuncCompileInput, 8ul, js::SystemAllocPolicy> const&, js::wasm::CompiledCode*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmBaselineCompile.cpp:12427:12
+    #7 0x5639d7fd6adc in ExecuteCompileTask(js::wasm::CompileTask*, mozilla::UniquePtr<char [], JS::FreePolicy>*) /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:609:12
+    #8 0x5639d7fdb2c7 in js::wasm::ModuleGenerator::locallyCompileCurrentTask() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:696:8
+    #9 0x5639d7fdb2c7 in js::wasm::ModuleGenerator::finishFuncDefs() /src/gecko-dev/js/src/wasm/WasmGenerator.cpp:833:24
+    #10 0x5639d7f4e86d in bool DecodeCodeSection<js::wasm::Decoder, js::wasm::ModuleGenerator>(js::wasm::CodeMetadata const&, js::wasm::Decoder&, js::wasm::ModuleGenerator&) /src/gecko-dev/js/src/wasm/WasmCompile.cpp
+    #11 0x5639d7f4d758 in js::wasm::CompileBuffer(js::wasm::CompileArgs const&, js::wasm::BytecodeBufferOrSource const&, mozilla::UniquePtr<char [], JS::FreePolicy>*, mozilla::Vector<mozilla::UniquePtr<char [], JS::FreePolicy>, 0ul, js::SystemAllocPolicy>*, JS::OptimizedEncodingListener*) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:1001:10
+    #12 0x5639d805aed5 in js::WasmModuleObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1656:25
+    #13 0x101d2cedf278  (<unknown module>)
+
+==13==Register values:
+rax = 0x000079aa3c6d5000  rbx = 0x00000fffa5dac638  rcx = 0x0000000000000000  rdx = 0x00007daa3e1b7000  
+rdi = 0x000079aa3c6d5000  rsi = 0x0000000000000001  rbp = 0x00007ffd2ed614f0  rsp = 0x00007ffd2ed61400  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007fffffffff01  r11 = 0x0000000000000201  
+r12 = 0x00007ffd2ed61b00  r13 = 0x0000000000000050  r14 = 0x0000000000000000  r15 = 0x0000000000000000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ILL /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585:5 in mozilla::Vector<js::wasm::AllocSitePatch, 0ul, js::SystemAllocPolicy>::operator[](unsigned long)
+==13==ABORTING

@@ -1,0 +1,27 @@
+From 40d2c7e1787000809f7c4268fe2a95f8a62a198f Mon Sep 17 00:00:00 2001
+From: Krishna Ravishankar <krishna.ravi732@gmail.com>
+Date: Fri, 24 Oct 2025 21:59:23 -0400
+Subject: [PATCH] [sandbox] SBXCHECK builtin is enabled in
+ CallKnownJSFunction::GenerateCode
+
+---
+ src/maglev/maglev-ir.cc | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/maglev/maglev-ir.cc b/src/maglev/maglev-ir.cc
+index c1903f860be..128a457b65e 100644
+--- a/src/maglev/maglev-ir.cc
++++ b/src/maglev/maglev-ir.cc
+@@ -6340,7 +6340,8 @@ void CallKnownJSFunction::GenerateCode(MaglevAssembler* masm,
+     // generate valid calls here (with matching signatures).
+     SBXCHECK_EQ(expected_parameter_count_,
+                 Builtins::GetFormalParameterCount(builtin));
+-
++    SBXCHECK(!Builtins::IsDisabled(builtin));
++    
+     __ CallBuiltin(builtin);
+   } else {
+ #if V8_ENABLE_LEAPTIERING
+-- 
+2.43.0
+

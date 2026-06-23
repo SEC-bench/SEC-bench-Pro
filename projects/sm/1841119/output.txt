@@ -1,0 +1,161 @@
+/testcase/poc.js:13:1 ReferenceError: f is not defined
+Stack:
+  @/testcase/poc.js:13:1
+=================================================================
+==13==ERROR: AddressSanitizer: heap-use-after-free on address 0x6d45c31e8a73 at pc 0x63d712fb3f7b bp 0x7ffee3295190 sp 0x7ffee3295188
+READ of size 1 at 0x6d45c31e8a73 thread T0
+    #0 0x63d712fb3f7a in js::wasm::TypeDef::kind() const /src/gecko-dev/js/src/wasm/WasmTypeDef.h:699:37
+    #1 0x63d712fb3f7a in js::wasm::RefType::hierarchy() const /src/gecko-dev/js/src/wasm/WasmTypeDef.h:1311:26
+    #2 0x63d713a086a3 in js::wasm::RefType::isFuncHierarchy() const /src/gecko-dev/js/src/wasm/WasmTypeDef.h:1336:10
+    #3 0x63d713a086a3 in js::wasm::Table::isFunction() const /src/gecko-dev/js/src/wasm/WasmTable.h:77:47
+    #4 0x63d713a086a3 in js::wasm::Table::gcMallocBytes() const /src/gecko-dev/js/src/wasm/WasmTable.cpp:496:7
+    #5 0x63d71386deb9 in js::WasmTableObject::finalize(JS::GCContext*, JSObject*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:2771:37
+    #6 0x63d71251a423 in JSClass::doFinalize(JS::GCContext*, JSObject*) const /src/gecko-dev/obj-debug-asan/dist/include/js/Class.h:649:5
+    #7 0x63d71251a423 in JSObject::finalize(JS::GCContext*) /src/gecko-dev/js/src/vm/JSObject-inl.h:99:12
+    #8 0x63d71251923c in unsigned long js::gc::Arena::finalize<JSObject>(JS::GCContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Sweeping.cpp:133:10
+    #9 0x63d712505d81 in bool FinalizeTypedArenas<JSObject>(JS::GCContext*, js::gc::ArenaList&, js::gc::SortedArenaList&, js::gc::AllocKind, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:205:29
+    #10 0x63d7124e0b94 in js::gc::GCRuntime::foregroundFinalize(JS::GCContext*, JS::Zone*, js::gc::AllocKind, js::SliceBudget&, js::gc::SortedArenaList&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1768:8
+    #11 0x63d7124e28cc in js::gc::GCRuntime::finalizeAllocKind(JS::GCContext*, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1969:8
+    #12 0x63d712538248 in sweepaction::SweepActionForEach<ContainerIter<mozilla::EnumSet<js::gc::AllocKind, unsigned long>>, mozilla::EnumSet<js::gc::AllocKind, unsigned long>>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #13 0x63d7125498f8 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2160:23
+    #14 0x63d71253704d in sweepaction::SweepActionForEach<js::gc::SweepGroupZonesIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #15 0x63d7125498f8 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2160:23
+    #16 0x63d712535308 in sweepaction::SweepActionForEach<js::gc::SweepGroupsIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #17 0x63d7124e4b27 in js::gc::GCRuntime::performSweepActions(js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2337:53
+    #18 0x63d71233f0f4 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3679:11
+    #19 0x63d712345c89 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4190:3
+    #20 0x63d712348cc7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4381:9
+    #21 0x63d7122ec995 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4458:3
+    #22 0x63d7116c1ca6 in JSRuntime::destroyRuntime() /src/gecko-dev/js/src/vm/Runtime.cpp:265:8
+    #23 0x63d711384394 in js::DestroyContext(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:221:7
+    #24 0x63d710d09bab in main::$_2::operator()() const /src/gecko-dev/js/src/shell/js.cpp:11392:41
+    #25 0x63d710d09bab in mozilla::ScopeExit<main::$_2>::~ScopeExit() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/ScopeExit.h:106:7
+    #26 0x63d710d09bab in main /src/gecko-dev/js/src/shell/js.cpp:11513:1
+    #27 0x7005c3dcd1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #28 0x7005c3dcd28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x63d710c0d058 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x293f058) (BuildId: 6656b3f20e6158c4fd18b55cf4b82083)
+
+0x6d45c31e8a73 is located 51 bytes inside of 400-byte region [0x6d45c31e8a40,0x6d45c31e8bd0)
+freed by thread T0 here:
+    #0 0x63d710cae2a6 in free /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x63d713a2f335 in js_free(void*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:418:3
+    #2 0x63d713a2f335 in void js_delete<js::wasm::RecGroup>(js::wasm::RecGroup const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:566:5
+    #3 0x63d713a2f335 in js::AtomicRefCounted<js::wasm::RecGroup>::Release() const /src/gecko-dev/obj-debug-asan/dist/include/js/RefCounted.h:81:7
+    #4 0x63d713a2f335 in mozilla::RefPtrTraits<js::wasm::RecGroup>::Release(js::wasm::RecGroup*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:54:40
+    #5 0x63d713a2f335 in RefPtr<js::wasm::RecGroup const>::ConstRemovingRefPtrTraits<js::wasm::RecGroup const>::Release(js::wasm::RecGroup const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:428:7
+    #6 0x63d713a2f335 in RefPtr<js::wasm::RecGroup const>::~RefPtr() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:85:7
+    #7 0x63d713a2f335 in mozilla::detail::HashTableEntry<RefPtr<js::wasm::RecGroup const> const>::destroyStoredT() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:1076:11
+    #8 0x63d713a2f335 in mozilla::detail::EntrySlot<RefPtr<js::wasm::RecGroup const> const>::clearLive() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:1160:13
+    #9 0x63d713a359a7 in mozilla::detail::HashTable<RefPtr<js::wasm::RecGroup const> const, mozilla::HashSet<RefPtr<js::wasm::RecGroup const>, RecGroupHashPolicy, js::SystemAllocPolicy>::SetHashPolicy, js::SystemAllocPolicy>::remove(mozilla::detail::EntrySlot<RefPtr<js::wasm::RecGroup const> const>&) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:1922:13
+    #10 0x63d713a359a7 in mozilla::detail::HashTable<RefPtr<js::wasm::RecGroup const> const, mozilla::HashSet<RefPtr<js::wasm::RecGroup const>, RecGroupHashPolicy, js::SystemAllocPolicy>::SetHashPolicy, js::SystemAllocPolicy>::remove(mozilla::detail::HashTable<RefPtr<js::wasm::RecGroup const> const, mozilla::HashSet<RefPtr<js::wasm::RecGroup const>, RecGroupHashPolicy, js::SystemAllocPolicy>::SetHashPolicy, js::SystemAllocPolicy>::Ptr) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:2248:5
+    #11 0x63d713a28b5c in mozilla::HashSet<RefPtr<js::wasm::RecGroup const>, RecGroupHashPolicy, js::SystemAllocPolicy>::remove(mozilla::detail::HashTable<RefPtr<js::wasm::RecGroup const> const, mozilla::HashSet<RefPtr<js::wasm::RecGroup const>, RecGroupHashPolicy, js::SystemAllocPolicy>::SetHashPolicy, js::SystemAllocPolicy>::Ptr) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/HashTable.h:644:33
+    #12 0x63d713a28b5c in TypeIdSet::clearRecGroup(RefPtr<js::wasm::RecGroup const>*) /src/gecko-dev/js/src/wasm/WasmTypeDef.cpp:523:14
+    #13 0x63d713a0b66c in js::wasm::TypeContext::~TypeContext() /src/gecko-dev/js/src/wasm/WasmTypeDef.cpp:558:13
+    #14 0x63d7136f187a in void js_delete<js::wasm::TypeContext>(js::wasm::TypeContext const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:565:9
+    #15 0x63d7136f187a in js::AtomicRefCounted<js::wasm::TypeContext>::Release() const /src/gecko-dev/obj-debug-asan/dist/include/js/RefCounted.h:81:7
+    #16 0x63d7136f187a in mozilla::RefPtrTraits<js::wasm::TypeContext>::Release(js::wasm::TypeContext*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:54:40
+    #17 0x63d7136f187a in RefPtr<js::wasm::TypeContext const>::ConstRemovingRefPtrTraits<js::wasm::TypeContext const>::Release(js::wasm::TypeContext const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:428:7
+    #18 0x63d7136f187a in RefPtr<js::wasm::TypeContext const>::~RefPtr() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:85:7
+    #19 0x63d7136f187a in js::wasm::Metadata::~Metadata() /src/gecko-dev/js/src/wasm/WasmCode.h:415:31
+    #20 0x63d71380c445 in void js_delete<js::wasm::Metadata>(js::wasm::Metadata const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:565:9
+    #21 0x63d71380c445 in js::AtomicRefCounted<js::wasm::Metadata>::Release() const /src/gecko-dev/obj-debug-asan/dist/include/js/RefCounted.h:81:7
+    #22 0x63d71380c445 in mozilla::RefPtrTraits<js::wasm::Metadata>::Release(js::wasm::Metadata*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:54:40
+    #23 0x63d71380c445 in RefPtr<js::wasm::Metadata const>::ConstRemovingRefPtrTraits<js::wasm::Metadata const>::Release(js::wasm::Metadata const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:428:7
+    #24 0x63d71380c445 in RefPtr<js::wasm::Metadata const>::~RefPtr() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:85:7
+    #25 0x63d71380c445 in js::wasm::Code::~Code() /src/gecko-dev/js/src/wasm/WasmCode.h:764:7
+    #26 0x63d71397f966 in void js_delete<js::wasm::Code>(js::wasm::Code const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:565:9
+    #27 0x63d71397f966 in js::AtomicRefCounted<js::wasm::Code>::Release() const /src/gecko-dev/obj-debug-asan/dist/include/js/RefCounted.h:81:7
+    #28 0x63d71397f966 in mozilla::RefPtrTraits<js::wasm::Code>::Release(js::wasm::Code*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:54:40
+    #29 0x63d71397f966 in RefPtr<js::wasm::Code const>::ConstRemovingRefPtrTraits<js::wasm::Code const>::Release(js::wasm::Code const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:428:7
+    #30 0x63d71397f966 in RefPtr<js::wasm::Code const>::~RefPtr() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:85:7
+    #31 0x63d71397f966 in js::wasm::Module::~Module() /src/gecko-dev/js/src/wasm/WasmModule.cpp:148:1
+    #32 0x63d71391f549 in void js_delete<JS::WasmModule>(JS::WasmModule const*) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:565:9
+    #33 0x63d71391f549 in js::AtomicRefCounted<JS::WasmModule>::Release() const /src/gecko-dev/obj-debug-asan/dist/include/js/RefCounted.h:81:7
+    #34 0x63d71391f549 in void JS::GCContext::release<js::wasm::Module const>(js::gc::Cell*, js::wasm::Module const*, unsigned long, js::MemoryUse) /src/gecko-dev/js/src/gc/GCContext-inl.h:27:8
+    #35 0x63d71251a423 in JSClass::doFinalize(JS::GCContext*, JSObject*) const /src/gecko-dev/obj-debug-asan/dist/include/js/Class.h:649:5
+    #36 0x63d71251a423 in JSObject::finalize(JS::GCContext*) /src/gecko-dev/js/src/vm/JSObject-inl.h:99:12
+    #37 0x63d71251923c in unsigned long js::gc::Arena::finalize<JSObject>(JS::GCContext*, js::gc::AllocKind, unsigned long) /src/gecko-dev/js/src/gc/Sweeping.cpp:133:10
+    #38 0x63d712505d81 in bool FinalizeTypedArenas<JSObject>(JS::GCContext*, js::gc::ArenaList&, js::gc::SortedArenaList&, js::gc::AllocKind, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:205:29
+    #39 0x63d7124e0b94 in js::gc::GCRuntime::foregroundFinalize(JS::GCContext*, JS::Zone*, js::gc::AllocKind, js::SliceBudget&, js::gc::SortedArenaList&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1768:8
+    #40 0x63d7124e28cc in js::gc::GCRuntime::finalizeAllocKind(JS::GCContext*, js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:1969:8
+    #41 0x63d712538248 in sweepaction::SweepActionForEach<ContainerIter<mozilla::EnumSet<js::gc::AllocKind, unsigned long>>, mozilla::EnumSet<js::gc::AllocKind, unsigned long>>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #42 0x63d7125498f8 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2160:23
+    #43 0x63d71253704d in sweepaction::SweepActionForEach<js::gc::SweepGroupZonesIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #44 0x63d7125498f8 in sweepaction::SweepActionSequence::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2160:23
+    #45 0x63d712535308 in sweepaction::SweepActionForEach<js::gc::SweepGroupsIter, JSRuntime*>::run(js::gc::SweepAction::Args&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2195:19
+    #46 0x63d7124e4b27 in js::gc::GCRuntime::performSweepActions(js::SliceBudget&) /src/gecko-dev/js/src/gc/Sweeping.cpp:2337:53
+    #47 0x63d71233f0f4 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3679:11
+    #48 0x63d712345c89 in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4190:3
+    #49 0x63d712348cc7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4381:9
+    #50 0x63d7122ec995 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4458:3
+    #51 0x63d7116c1ca6 in JSRuntime::destroyRuntime() /src/gecko-dev/js/src/vm/Runtime.cpp:265:8
+    #52 0x63d711384394 in js::DestroyContext(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:221:7
+    #53 0x63d710d09bab in main::$_2::operator()() const /src/gecko-dev/js/src/shell/js.cpp:11392:41
+    #54 0x63d710d09bab in mozilla::ScopeExit<main::$_2>::~ScopeExit() /src/gecko-dev/obj-debug-asan/dist/include/mozilla/ScopeExit.h:106:7
+    #55 0x63d710d09bab in main /src/gecko-dev/js/src/shell/js.cpp:11513:1
+    #56 0x7005c3dcd1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #57 0x7005c3dcd28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #58 0x63d710c0d058 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x293f058) (BuildId: 6656b3f20e6158c4fd18b55cf4b82083)
+
+previously allocated by thread T0 here:
+    #0 0x63d710cae544 in malloc /builds/worker/fetches/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3
+    #1 0x63d713708378 in js_arena_malloc(unsigned long, unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:370:10
+    #2 0x63d713708378 in js_malloc(unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/Utility.h:374:10
+    #3 0x63d713708378 in js::wasm::RecGroup::allocate(unsigned int) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:931:37
+    #4 0x63d713706208 in js::wasm::TypeContext::startRecGroup(unsigned int) /src/gecko-dev/js/src/wasm/WasmTypeDef.h:1135:24
+    #5 0x63d713a155b1 in DecodeTypeSection(js::wasm::Decoder&, js::wasm::ModuleEnvironment*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:1787:44
+    #6 0x63d713a155b1 in js::wasm::DecodeModuleEnvironment(js::wasm::Decoder&, js::wasm::ModuleEnvironment*) /src/gecko-dev/js/src/wasm/WasmValidate.cpp:2921:8
+    #7 0x63d71377d5ce in js::wasm::CompileBuffer(js::wasm::CompileArgs const&, js::wasm::ShareableBytes const&, mozilla::UniquePtr<char [], JS::FreePolicy>*, mozilla::Vector<mozilla::UniquePtr<char [], JS::FreePolicy>, 0ul, js::SystemAllocPolicy>*, JS::OptimizedEncodingListener*) /src/gecko-dev/js/src/wasm/WasmCompile.cpp:719:29
+    #8 0x63d71385fed0 in js::WasmModuleObject::construct(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/wasm/WasmJS.cpp:1455:7
+    #9 0x63d710f656a7 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:486:13
+    #10 0x63d710f7b90a in CallJSNativeConstructor(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:502:8
+    #11 0x63d710f216f1 in InternalConstruct(JSContext*, js::AnyConstructArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:708:14
+    #12 0x63d710f3c2a6 in js::ConstructFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:755:10
+    #13 0x63d710f3c2a6 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3380:16
+    #14 0x63d710f1cfb9 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:458:13
+    #15 0x63d710f23a9d in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:845:13
+    #16 0x63d710f24449 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:877:10
+    #17 0x63d7111ef25a in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:494:10
+    #18 0x63d7111ef73b in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:518:10
+    #19 0x63d710d921cb in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1219:10
+    #20 0x63d710d90915 in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #21 0x63d710d145d9 in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:10848:10
+    #22 0x63d710d145d9 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:11072:12
+    #23 0x63d710d09b20 in main /src/gecko-dev/js/src/shell/js.cpp:11504:12
+    #24 0x7005c3dcd1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #25 0x7005c3dcd28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #26 0x63d710c0d058 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x293f058) (BuildId: 6656b3f20e6158c4fd18b55cf4b82083)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/gecko-dev/js/src/wasm/WasmTypeDef.h:699:37 in js::wasm::TypeDef::kind() const
+Shadow bytes around the buggy address:
+  0x6d45c31e8780: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02
+  0x6d45c31e8800: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+  0x6d45c31e8880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6d45c31e8900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6d45c31e8980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 fa
+=>0x6d45c31e8a00: fa fa fa fa fa fa fa fa fd fd fd fd fd fd[fd]fd
+  0x6d45c31e8a80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6d45c31e8b00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x6d45c31e8b80: fd fd fd fd fd fd fd fd fd fd fa fa fa fa fa fa
+  0x6d45c31e8c00: fa fa fa fa fa fa fa fa fd fd fd fd fd fd fd fd
+  0x6d45c31e8c80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==13==ABORTING

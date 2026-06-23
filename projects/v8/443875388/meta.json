@@ -1,0 +1,38 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:443875388",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/codegen/handler-table.h",
+    "src/codegen/handler-table.cc"
+  ],
+  "target_subdir": [
+    "src/codegen"
+  ],
+  "command_options": "",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Integer truncation",
+  "error_type": "DCHECK",
+  "description": "An integer truncation vulnerability exists in V8's bytecode exception handler table. `HandlerTable::SetRangeHandler` in `src/codegen/handler-table.cc` encodes each catch handler's bytecode offset into the 28-bit `HandlerOffsetField` without enforcing that the offset fits in 28 bits in release builds. A sufficiently large async generator function with hundreds of thousands of `yield*` operations can push the catch block past the 28-bit limit, silently truncating the stored handler offset. When an exception is later thrown, V8 consults the corrupted handler table and jumps to the truncated bytecode offset instead of the real catch block, transferring execution into attacker-controlled bytecode and enabling arbitrary bytecode execution and, ultimately, code execution.",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "history-search",
+      "evidence_lineno": 0,
+      "evidence_text": "a5f18bb86c3b97b9bfc8f95a0926812a1282ad7c [ignition] CHECK that handler offsets fit in the bitfield",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6943611",
+      "cl": 6943611,
+      "commit": "a5f18bb86c3b97b9bfc8f95a0926812a1282ad7c",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6943611 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6943611",
+      "source_cl": 6943611,
+      "source_commit": "a5f18bb86c3b97b9bfc8f95a0926812a1282ad7c",
+      "source_ref": "refs/changes/11/6943611/2",
+      "source_patchset": 2
+    }
+  ]
+}

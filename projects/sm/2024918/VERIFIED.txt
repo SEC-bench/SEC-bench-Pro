@@ -1,0 +1,6 @@
+VERIFIED at 2026-05-28T08:37:14Z — orchestrator end-to-end on bug 2024918 (Mythos-discovered)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash site: js::jit::WasmStructMemoryView::assertSuccess @ js/src/jit/ScalarReplacement.cpp:3648
+                js::jit::ScalarReplacement @ ScalarReplacement.cpp:4302 (matches target_source_files)
+  - fixed image (apply patches/0001-fix-from-git-1c39b127b06b.patch) blocks PoC 10/10
+  - discovery_origin: claude-mythos-preview (first AI-discovered SM instance)

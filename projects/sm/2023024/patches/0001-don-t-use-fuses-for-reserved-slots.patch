@@ -1,0 +1,25 @@
+From 0d8fa127358980af62ad70abdcba632f0c683a91 Mon Sep 17 00:00:00 2001
+From: Iain Ireland <iireland@mozilla.com>
+Date: Mon, 16 Mar 2026 16:07:16 +0000
+Subject: [PATCH] Bug 2023024: Don't use fuses for reserved slots r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D287740
+---
+ js/src/jit/CacheIR.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/js/src/jit/CacheIR.cpp b/js/src/jit/CacheIR.cpp
+index 932644ae1ae5a..e3afc26f68182 100644
+--- a/js/src/jit/CacheIR.cpp
++++ b/js/src/jit/CacheIR.cpp
+@@ -2248,6 +2248,10 @@ bool IRGenerator::canOptimizeConstantDataProperty(NativeObject* holder,
+     return false;
+   }
+ 
++  if (MOZ_UNLIKELY(prop.slot() < JSCLASS_RESERVED_SLOTS(holder->getClass()))) {
++    return false;
++  }
++
+   *objFuse = cx_->zone()->objectFuses.getOrCreate(cx_, holder);
+   if (!*objFuse) {
+     cx_->recoverFromOutOfMemory();

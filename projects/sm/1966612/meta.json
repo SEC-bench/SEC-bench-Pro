@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1966612",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/builtin/Promise.cpp"
+    ],
+    "target_subdir": [
+        "js/src/builtin"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds write",
+    "error_type": "ASAN_CRASH",
+    "description": "Promise.allSettled — Separate alreadyCalled State Per onFulfilled/onRejected Function Allows Paired Callback Re-Entry After Result Array Exposed → OOB Write (CVE-2025-4918, Pwn2Own 2025). CVE-2025-4918 (Pwn2Own 2025, sec-critical). A subtle bug in the Promise.allSettled implementation allows an out-of-bounds write on the result array. The spec requires a shared 'alreadyCalled' record between onFulfilled/onRejected function pairs, but SpiderMonkey stores the state separately for each function and uses a check against the result array to detect double-invocation. When the last element's first callback resolves all promises, the result array is exposed to JavaScript. Malicious JS can then invoke the paired callback, which accesses the already-exposed array making unsafe assumptions about its length, writing beyond the allocated bounds. The fix makes the second function of each pair reference the first, sharing state properly.",
+    "fix_commits": [
+        "d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-promise-combinator-function-state.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1966612 - Fix promise combinator function state.",
+            "source_commit": "d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8",
+            "commit": "d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8",
+            "phabricator": "D249782"
+        }
+    ],
+    "vrp": null
+}

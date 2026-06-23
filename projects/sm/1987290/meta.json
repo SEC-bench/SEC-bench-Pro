@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1987290",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/builtin/FinalizationRegistryObject.cpp"
+    ],
+    "target_subdir": [
+        "js/src/builtin"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds read",
+    "error_type": "ASAN_CRASH",
+    "description": "FinalizationRegistry.prototype.unregister OOB Argument Read — args[0] Used Without Bounds Check. Bug 1987290 (sec-high, csectype-bounds). The native implementation of FinalizationRegistry.prototype.unregister in js/src/builtin/FinalizationRegistryObject.cpp uses `args[0]` to grab the unregister-token argument instead of the bounds-checking `args.get(0)` helper. When JS code calls `registry.unregister()` with no arguments, JS::CallArgs::operator[] asserts `i < argc_` and the underlying read steps past the end of the call frame's outgoing argument area into adjacent stack memory. In a debug build the MOZ_ASSERT at js/CallArgs.h:213 fires; in an ASAN build the read tags as a stack OOB or stack-buffer-underflow that ASAN reports as a deadly signal. The bug was a regression from Bug 1863140 Part 3 (Phabricator D263113) that refactored the dispatcher and dropped the `get()` use. Fix: 2b8155c2c4c299955d4ae81423992ed56a838aee 'Bug 1987290 - Part 1: Use get() instead of operator[] to get arguments in FinalizationRegistryObject::unregister' (Tooru Fujisawa, 2025-09-08); the test landed in Part 2 (dad31486e264). PoC is the two-line idiom `new FinalizationRegistry(()=>{}).unregister()` reported externally on Bugzilla.",
+    "fix_commits": [
+        "2b8155c2c4c299955d4ae81423992ed56a838aee"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-part-1-use-get-instead-of-operator-to-get.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1987290 - Part 1: Use get() instead of operator[] to get",
+            "source_commit": "2b8155c2c4c299955d4ae81423992ed56a838aee",
+            "commit": "2b8155c2c4c299955d4ae81423992ed56a838aee",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/2b8155c2c4c299955d4ae81423992ed56a838aee",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/2b8155c2c4c299955d4ae81423992ed56a838aee",
+            "phabricator": "D264002"
+        }
+    ],
+    "vrp": null
+}

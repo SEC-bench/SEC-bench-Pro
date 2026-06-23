@@ -1,0 +1,43 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x601612e0e633 bp 0x7ffc401557b0 sp 0x7ffc40155790 T0)
+==13==The signal is caused by a READ memory access.
+==13==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.
+    #0 0x601612e0e633 in js::jit::IonScript::method() const /src/gecko-dev/js/src/jit/IonScript.h:285:36
+    #1 0x601612e0e633 in js::jit::IonScript::containsReturnAddress(unsigned char*) const /src/gecko-dev/js/src/jit/IonScript.h:304:12
+    #2 0x601612e0e633 in js::jit::JSJitFrameIter::checkInvalidation(js::jit::IonScript**) const /src/gecko-dev/js/src/jit/JSJitFrameIter.cpp:71:3
+    #3 0x601612e36254 in js::jit::TraceIonJSFrame(JSTracer*, js::jit::JSJitFrameIter const&) /src/gecko-dev/js/src/jit/JitFrames.cpp:947:13
+    #4 0x601612e36254 in js::jit::TraceJitActivation(JSTracer*, js::jit::JitActivation*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1358:11
+    #5 0x601612e36254 in js::jit::TraceJitActivations(JSContext*, JSTracer*) /src/gecko-dev/js/src/jit/JitFrames.cpp:1400:5
+    #6 0x6016120384e8 in js::gc::GCRuntime::traceRuntimeCommon(JSTracer*, js::gc::GCRuntime::TraceOrMarkRuntime) /src/gecko-dev/js/src/gc/RootMarking.cpp:303:5
+    #7 0x601612037f42 in js::gc::GCRuntime::traceRuntimeForMajorGC(JSTracer*, js::gc::AutoGCSession&) /src/gecko-dev/js/src/gc/RootMarking.cpp:242:3
+    #8 0x601611edda6a in js::gc::GCRuntime::beginMarkPhase(js::gc::AutoGCSession&) /src/gecko-dev/js/src/gc/GC.cpp:2885:5
+    #9 0x601611ee75a8 in js::gc::GCRuntime::incrementalSlice(js::SliceBudget&, JS::GCReason, bool) /src/gecko-dev/js/src/gc/GC.cpp:3610:7
+    #10 0x601611eeec0d in js::gc::GCRuntime::gcCycle(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4194:3
+    #11 0x601611ef1ad7 in js::gc::GCRuntime::collect(bool, js::SliceBudget const&, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4382:9
+    #12 0x601611e97425 in js::gc::GCRuntime::gc(JS::GCOptions, JS::GCReason) /src/gecko-dev/js/src/gc/GC.cpp:4459:3
+    #13 0x601611ef6e81 in js::gc::GCRuntime::runDebugGC() /src/gecko-dev/js/src/gc/GC.cpp
+    #14 0x601611eff8da in js::gc::GCRuntime::gcIfNeededAtAllocation(JSContext*) /src/gecko-dev/js/src/gc/Allocator.cpp:412:5
+    #15 0x601611eff8da in bool js::gc::GCRuntime::checkAllocatorState<(js::AllowGC)1>(JSContext*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/Allocator.cpp:376:10
+    #16 0x601611eff4de in JSObject* js::gc::detail::AllocateObject<(js::AllowGC)1>(JSContext*, js::gc::AllocKind, unsigned long, js::gc::InitialHeap, JSClass const*, js::gc::AllocSite*) /src/gecko-dev/js/src/gc/Allocator.cpp:56:15
+    #17 0x6016109d402a in js::NativeObject* js::gc::CellAllocator::NewCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, unsigned long const&, js::gc::InitialHeap&, JSClass const*&, js::gc::AllocSite*&>(JSContext*, js::gc::AllocKind&, unsigned long const&, js::gc::InitialHeap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/gc/Allocator.h:123:9
+    #18 0x6016109d402a in js::NativeObject* JSContext::newCell<js::NativeObject, (js::AllowGC)1, js::gc::AllocKind&, unsigned long const&, js::gc::InitialHeap&, JSClass const*&, js::gc::AllocSite*&>(js::gc::AllocKind&, unsigned long const&, js::gc::InitialHeap&, JSClass const*&, js::gc::AllocSite*&) /src/gecko-dev/js/src/vm/JSContext.h:265:12
+    #19 0x6016109d402a in js::NativeObject::create(JSContext*, js::gc::AllocKind, js::gc::InitialHeap, JS::Handle<js::SharedShape*>, js::gc::AllocSite*) /src/gecko-dev/js/src/vm/NativeObject-inl.h:446:11
+    #20 0x601610f060a3 in NewObject(JSContext*, JSClass const*, JS::Handle<js::TaggedProto>, js::gc::AllocKind, js::NewObjectKind) /src/gecko-dev/js/src/vm/JSObject.cpp:768:23
+    #21 0x601610f067a3 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::gc::AllocKind, js::NewObjectKind) /src/gecko-dev/js/src/vm/JSObject.cpp:807:10
+    #22 0x601610f69ce3 in js::NewObjectWithClassProto(JSContext*, JSClass const*, JS::Handle<JSObject*>, js::NewObjectKind) /src/gecko-dev/js/src/vm/JSObject-inl.h:439:10
+    #23 0x601610f69ce3 in js::StringObject* js::NewObjectWithClassProtoAndKind<js::StringObject>(JSContext*, JS::Handle<JSObject*>, js::NewObjectKind) /src/gecko-dev/js/src/vm/JSObject-inl.h:451:19
+    #24 0x601610f69ce3 in js::StringObject::create(JSContext*, JS::Handle<JSString*>, JS::Handle<JSObject*>, js::NewObjectKind) /src/gecko-dev/js/src/vm/StringObject-inl.h:39:11
+    #25 0x601610f261e2 in js::PrimitiveToObject(JSContext*, JS::Value const&) /src/gecko-dev/js/src/vm/JSObject.cpp:2501:14
+    #26 0x601610e6c861 in JS::ToObject(JSContext*, JS::Handle<JS::Value>) /src/gecko-dev/obj-debug-asan/dist/include/js/Conversions.h:272:10
+    #27 0x601610e6c861 in js::ValueToIterator(JSContext*, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Iteration.cpp:1621:11
+    #28 0x2b6d565ef495  (<unknown module>)
+
+==13==Register values:
+rax = 0x247c6ffac5000000  rbx = 0x00007ffc401558b0  rcx = 0x00002b6d5661a71a  rdx = 0x048f8dff58a00006  
+rdi = 0x247c6ffac5000030  rsi = 0x0000000000000002  rbp = 0x00007ffc401557b0  rsp = 0x00007ffc40155790  
+ r8 = 0x000072453dbe0e30   r9 = 0x00007ffc4015567f  r10 = 0x00000fff8802aacf  r11 = 0x0000100008022ac8  
+r12 = 0x00000fff8802ab2a  r13 = 0x000072453dbe0dc0  r14 = 0x00007ffc40155958  r15 = 0x00007ffc40155950  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/js/src/jit/IonScript.h:285:36 in js::jit::IonScript::method() const
+==13==ABORTING

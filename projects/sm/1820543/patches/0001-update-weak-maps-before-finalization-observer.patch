@@ -1,0 +1,32 @@
+From 533d5be1269d680dbef53e0116a917f1a7485e9d Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Wed, 15 Mar 2023 08:23:53 +0000
+Subject: [PATCH] Bug 1820543 - Update weak maps before finalization observer
+ edges when compacting r=sfink
+
+The latter relies on being able to access the former.
+
+Differential Revision: https://phabricator.services.mozilla.com/D171723
+---
+ js/src/gc/Compacting.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/js/src/gc/Compacting.cpp b/js/src/gc/Compacting.cpp
+index ad3651b3486ca..1ced3bea8b2fe 100644
+--- a/js/src/gc/Compacting.cpp
++++ b/js/src/gc/Compacting.cpp
+@@ -454,11 +454,12 @@ void Zone::prepareForCompacting() {
+ }
+ 
+ void GCRuntime::sweepZoneAfterCompacting(MovingTracer* trc, Zone* zone) {
+-  MOZ_ASSERT(zone->isCollecting());
+-  traceWeakFinalizationObserverEdges(trc, zone);
++  MOZ_ASSERT(zone->isGCCompacting());
+ 
+   zone->traceWeakMaps(trc);
+ 
++  traceWeakFinalizationObserverEdges(trc, zone);
++
+   for (auto* cache : zone->weakCaches()) {
+     cache->traceWeak(trc, nullptr);
+   }

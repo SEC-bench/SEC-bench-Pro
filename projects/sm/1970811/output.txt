@@ -1,0 +1,49 @@
+=================================================================
+==11==ERROR: AddressSanitizer: use-after-poison on address 0x2ad52b962148 at pc 0x55df2a8b5c6b bp 0x7ffdfc47b160 sp 0x7ffdfc47b158
+READ of size 8 at 0x2ad52b962148 thread T0
+    #0 0x55df2a8b5c6a in RefPtr<js::SharedImmutableScriptData>::operator!() const /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:339:36
+    #1 0x55df2a8b5c6a in JSScript::code() const /src/gecko-dev/js/src/vm/JSScript.h:1754:9
+    #2 0x55df2a8b5c6a in bool JSScript::containsPC<4ul>(unsigned char const*) const /src/gecko-dev/js/src/vm/JSScript.h:1792:18
+    #3 0x55df2a8a2ff3 in bool JSScript::containsPC<js::GCThingIndex>(unsigned char const*) const /src/gecko-dev/js/src/vm/JSScript.h:1796:12
+    #4 0x55df2a8a2ff3 in JSScript::getAtom(unsigned char*) const /src/gecko-dev/js/src/vm/JSScript.h:2084:5
+    #5 0x55df2a8a4af4 in JSScript::getName(unsigned char*) const /src/gecko-dev/js/src/vm/JSScript.h:2094:12
+    #6 0x55df2a8a4af4 in js::SetIntrinsicOperation(JSContext*, JSScript*, unsigned char*, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter-inl.h:208:42
+    #7 0x149dbf14d95d  (<unknown module>)
+
+Address 0x2ad52b962148 is a wild pointer inside of access range of size 0x000000000008.
+SUMMARY: AddressSanitizer: use-after-poison /src/gecko-dev/obj-debug-asan/dist/include/mozilla/RefPtr.h:339:36 in RefPtr<js::SharedImmutableScriptData>::operator!() const
+Shadow bytes around the buggy address:
+  0x2ad52b961e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x2ad52b961f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x2ad52b961f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x2ad52b962000: 00 f7 00 00 00 00 00 00 00 00 00 00 f7 f7 f7 f7
+  0x2ad52b962080: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+=>0x2ad52b962100: f7 f7 f7 f7 f7 f7 f7 f7 f7[f7]f7 f7 f7 f7 f7 f7
+  0x2ad52b962180: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x2ad52b962200: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x2ad52b962280: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x2ad52b962300: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+  0x2ad52b962380: f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7 f7
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+
+NOTE: the stack trace above identifies the code that *accessed* the poisoned memory.
+To identify the code that *poisoned* the memory, try the experimental setting ASAN_OPTIONS=poison_history_size=<size>.
+==11==ABORTING

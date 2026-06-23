@@ -1,0 +1,115 @@
+From 0f47625482817579bad325506b662db25b0ea2fb Mon Sep 17 00:00:00 2001
+From: Steve Fink <sfink@mozilla.com>
+Date: Sat, 17 May 2025 00:00:04 +0000
+Subject: [PATCH] Bug 1965751 - Always update to promoted root base string and
+ post-barrier r=jonco
+
+- also fix promoted string malloc accounting (when not tenuring)
+
+Differential Revision: https://phabricator.services.mozilla.com/D249117
+---
+ js/src/gc/Nursery.h                    |  3 +++
+ js/src/gc/Tenuring.cpp                 | 23 +++++++++++------------
+ js/src/jit-test/tests/gc/bug1965751.js |  9 +++++++++
+ js/src/vm/StringType.cpp               | 12 ++++++++++--
+ 4 files changed, 33 insertions(+), 14 deletions(-)
+ create mode 100644 js/src/jit-test/tests/gc/bug1965751.js
+
+diff --git a/js/src/gc/Nursery.h b/js/src/gc/Nursery.h
+index 7bce08e75d5a..75e4402a1ae2 100644
+--- a/js/src/gc/Nursery.h
++++ b/js/src/gc/Nursery.h
+@@ -553,6 +553,9 @@ class Nursery {
+   // vector. Shrinks the vector but does not update maxChunkCount().
+   void freeChunksFrom(Space& space, unsigned firstFreeChunk);
+ 
++  // During a semispace nursery collection, return whether a cell in fromspace
++  // was in the tospace of the previous collection, meaning that it should be
++  // tenured in this collection.
+   inline bool shouldTenure(gc::Cell* cell);
+ 
+   void sendTelemetry(JS::GCReason reason, mozilla::TimeDuration totalTime,
+diff --git a/js/src/gc/Tenuring.cpp b/js/src/gc/Tenuring.cpp
+index 7c57cda07f17..d01635c0aa5c 100644
+--- a/js/src/gc/Tenuring.cpp
++++ b/js/src/gc/Tenuring.cpp
+@@ -995,20 +995,19 @@ JSString* js::gc::TenuringTracer::promoteString(JSString* src) {
+     //     StringRelocationOverlay during promotion)
+ 
+     JSLinearString* base = src->asDependent().rootBaseDuringMinorGC();
+-    if (!InCollectedNurseryRegion(base)) {
+-      StringRelocationOverlay::forwardDependentString(src, dst);
+-    } else {
+-      // Limited recursion: the root base cannot be dependent, so this will not
+-      // recurse again.
+-      JSString* promotedBase = promoteOrForward(base);
+-      MOZ_ASSERT(!promotedBase->isDependent());
+-      if (dst->isTenured() && !promotedBase->isTenured()) {
+-        MOZ_ASSERT(!InCollectedNurseryRegion(promotedBase));
+-        runtime()->gc.storeBuffer().putWholeCell(dst);
+-      }
+-      StringRelocationOverlay::forwardDependentString(src, dst);
++
++    // Limited recursion: the root base cannot be dependent, so this will not
++    // recurse again.
++    JSString* promotedBase =
++        InCollectedNurseryRegion(base) ? promoteOrForward(base) : base;
++    MOZ_ASSERT(!promotedBase->isDependent());
++
++    dst->asDependent().setBase(&promotedBase->asLinear());
++    if (InCollectedNurseryRegion(base)) {
+       dst->asDependent().updateToPromotedBase(base);
+     }
++
++    StringRelocationOverlay::forwardDependentString(src, dst);
+   } else {
+     // Non-dependent string: store the original chars pointer in the nursery
+     // cell (for future promotions of any dependent strings that use this string
+diff --git a/js/src/jit-test/tests/gc/bug1965751.js b/js/src/jit-test/tests/gc/bug1965751.js
+new file mode 100644
+index 000000000000..c48637bb4082
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug1965751.js
+@@ -0,0 +1,9 @@
++function a(b, c) {
++    d = "a".repeat(1000)
++    e = ensureLinearString(newRope(d, "Unknown"))
++    ensureLinearString(newRope(e, "abcdef", {
++        nursery: c
++    }))
++    gc()
++}
++a(true, false)
+diff --git a/js/src/vm/StringType.cpp b/js/src/vm/StringType.cpp
+index ba0f19a4686f..31c8196fbdcc 100644
+--- a/js/src/vm/StringType.cpp
++++ b/js/src/vm/StringType.cpp
+@@ -2552,7 +2552,7 @@ void JSLinearString::maybeCloneCharsOnPromotionTyped(JSLinearString* str) {
+   MOZ_ASSERT(!InCollectedNurseryRegion(str), "str should have been promoted");
+   MOZ_ASSERT(str->isDependent());
+   JSLinearString* root = str->asDependent().rootBaseDuringMinorGC();
+-  if (!root->isTenured()) {
++  if (InCollectedNurseryRegion(root)) {
+     // Can still fixup the original chars pointer.
+     return;
+   }
+@@ -2577,7 +2577,15 @@ void JSLinearString::maybeCloneCharsOnPromotionTyped(JSLinearString* str) {
+ 
+   // Overwrite the dest string with a new linear string.
+   new (str) JSLinearString(data, len, false /* hasBuffer */);
+-  str->zone()->addCellMemory(str, nbytes, js::MemoryUse::StringContents);
++  if (str->isTenured()) {
++    str->zone()->addCellMemory(str, nbytes, js::MemoryUse::StringContents);
++  } else {
++    AutoEnterOOMUnsafeRegion oomUnsafe;
++    JSRuntime* rt = str->runtimeFromAnyThread();
++    if (!rt->gc.nursery().registerMallocedBuffer(data, nbytes)) {
++      oomUnsafe.crash("maybeCloneCharsOnPromotionTyped");
++    }
++  }
+ }
+ 
+ template void JSLinearString::maybeCloneCharsOnPromotionTyped<JS::Latin1Char>(
+-- 
+2.43.0
+

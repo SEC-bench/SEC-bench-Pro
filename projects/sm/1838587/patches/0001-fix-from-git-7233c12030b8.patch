@@ -1,0 +1,30 @@
+commit 7233c12030b8257e11f77183cac106dcc2970e3c
+Author: Jan de Mooij <jdemooij@mozilla.com>
+Date:   Tue Jun 20 09:57:15 2023 +0000
+
+    Bug 1838587 - Use loadArgumentDynamicSlot in tryAttachBoundFunction. r=iain
+    
+    Differential Revision: https://phabricator.services.mozilla.com/D181389
+
+diff --git a/js/src/jit/CacheIR.cpp b/js/src/jit/CacheIR.cpp
+index 66a8b5a7baf0..d277a4c788d6 100644
+--- a/js/src/jit/CacheIR.cpp
++++ b/js/src/jit/CacheIR.cpp
+@@ -11285,7 +11285,7 @@ AttachDecision CallIRGenerator::tryAttachBoundFunction(
+ 
+   // Load the callee and ensure it's a bound function.
+   ValOperandId calleeValId =
+-      writer.loadArgumentFixedSlot(ArgumentKind::Callee, argc_, flags);
++      writer.loadArgumentDynamicSlot(ArgumentKind::Callee, argcId, flags);
+   ObjOperandId calleeObjId = writer.guardToObject(calleeValId);
+   writer.guardClass(calleeObjId, GuardClassKind::BoundFunction);
+ 
+@@ -11297,7 +11297,7 @@ AttachDecision CallIRGenerator::tryAttachBoundFunction(
+     // Guard newTarget == callee. We depend on this in CallBoundScriptedFunction
+     // and in emitCallScriptedGuards by using boundTarget as newTarget.
+     ValOperandId newTargetValId =
+-        writer.loadArgumentFixedSlot(ArgumentKind::NewTarget, argc_, flags);
++        writer.loadArgumentDynamicSlot(ArgumentKind::NewTarget, argcId, flags);
+     ObjOperandId newTargetObjId = writer.guardToObject(newTargetValId);
+     writer.guardObjectIdentity(newTargetObjId, calleeObjId);
+   }

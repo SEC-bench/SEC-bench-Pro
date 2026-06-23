@@ -1,0 +1,3 @@
+Verified with `../../v8/crash_check.sh 351327767` using `out/x64.release/d8 --experimental-wasm-memory64 --no-wasm-trap-handler --sandbox-testing` from `meta.json`.
+
+The standalone PoC reproduces the report's sandbox-testing failure path for the cached-memory-index confusion bug, ending in the expected `Check failed: 0 == munmap(address, size).` termination after the sandbox prompt.

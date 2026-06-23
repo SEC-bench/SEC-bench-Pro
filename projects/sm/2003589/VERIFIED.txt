@@ -1,0 +1,7 @@
+VERIFIED at 2026-05-29T05:30:00Z — 2025-Q4 import on bug 2003589 (sec-high csectype-jit, 2025-Dec)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `Assertion failure: !cx->runtime()->jitRuntime()->disallowArbitraryCode(), at /src/gecko-dev/js/src/vm/Interpreter.cpp:407`
+  - report cited line 406; +1 drift is a comment-line shift, same path
+  - JIT path: ObjToIterator → BaseProxyHandler::getOwnEnumerablePropertyKeys → re-enters JS via the Proxy(Object, Object) install on `[].__proto__.__proto__` — exact JS frames as the report's gdb backtrace
+  - fixed image (git 1d09788fc823 "Only enumerate own properties in Object.keys ObjToIterator") blocks PoC 5/5
+  - regression of bug 1995077 (iterator-indices optimization)

@@ -1,0 +1,14 @@
+re @ 0x4a0a4
+re->data @ 0x4ace9
+re->bytecode @ 0x4ad31
+Sandbox testing mode is enabled. Write to the page starting at 0x758477bd000 (available from JavaScript as `Sandbox.targetPage`) to demonstrate a sandbox bypass.
+# Ignoring debug check failure in ../../src/regexp/regexp-interpreter.cc, line 138: !data_.empty()
+# Ignoring debug check failure in ../../src/base/small-vector.h, line 135: 0 != size() (0 vs. 0)
+# Ignoring debug check failure in ../../src/base/small-vector.h, line 162: size() >= count (0 vs. 1)
+# Ignoring debug check failure in ../../src/regexp/regexp-interpreter.cc, line 138: !data_.empty()
+# Ignoring debug check failure in ../../src/base/small-vector.h, line 135: 0 != size() (0 vs. 0)
+# Ignoring debug check failure in ../../src/base/small-vector.h, line 162: size() >= count (0 vs. 1)
+
+## V8 sandbox violation detected!
+
+Segmentation fault (core dumped)

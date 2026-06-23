@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:2019813",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/wasm/WasmValidate.cpp"
+    ],
+    "target_subdir": [
+        "js/src/wasm"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Out-of-bounds read",
+    "error_type": "ASAN_CRASH",
+    "description": "WebAssembly Imported Memory importIndex Off-By-One in AddImport. CVE-2026-2785 (sec-moderate). After a refactor that added compact wasm imports, AddImport() in js/src/wasm/WasmValidate.cpp records an imported memory's `importIndex` AFTER calling `moduleMeta->imports.emplaceBack(...)`: `codeMeta->memories.back().importIndex = Some(moduleMeta->imports.length())`. By that point `imports.length()` has already been incremented, so the recorded index points one past the just-added import slot. When downstream code resolves the imported memory by indexing into the imports vector with this off-by-one index, it either reads the wrong import (data corruption / type confusion at the wasm import boundary) or, when the memory import is the last entry in the vector, performs an out-of-bounds read past `imports.end()` — caught by ASAN as a heap-buffer-overflow / container overflow, or by a debug bounds assertion. The fix (commit 9ef71fcf90d12a656c362e4af21e3026bbdcb15f by Ben Visness, 2026-02-27, reviewed by rhunt; Phabricator D285313) captures `uint32_t importIndex = moduleMeta->imports.length();` BEFORE the emplaceBack and uses that local for `Some(importIndex)`. Trigger: instantiate a wasm module that has a builtins-table import (e.g. `wasm:js-string` `length`) plus an imported memory; wasmTextToBinary + new WebAssembly.Module({builtins:['js-string']}) + new WebAssembly.Instance with an imported Memory hits the off-by-one path during validation/instantiation. The committed regression test js/src/jit-test/tests/wasm/builtin-modules/bug2019813.js is shipped as poc.js verbatim. Reported via Mozilla Foundation Security Advisory 2026; Bugzilla 2019813 remains sec-restricted.",
+    "fix_commits": [
+        "9ef71fcf90d12a656c362e4af21e3026bbdcb15f"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-fix-off-by-one-in-imported-memory-index.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 2019813: Fix off-by-one in imported memory index. r=rhunt",
+            "source_commit": "9ef71fcf90d12a656c362e4af21e3026bbdcb15f",
+            "commit": "9ef71fcf90d12a656c362e4af21e3026bbdcb15f",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/9ef71fcf90d12a656c362e4af21e3026bbdcb15f",
+            "source_url": "https://github.com/mozilla-firefox/firefox/commit/9ef71fcf90d12a656c362e4af21e3026bbdcb15f",
+            "phabricator": "D285313"
+        }
+    ],
+    "vrp": null
+}

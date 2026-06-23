@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1970811",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/jit/BaselineFrame.cpp",
+    "js/src/jit/BaselineFrame.h"
+  ],
+  "target_subdir": [
+    "js/src/jit"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off --setpref=experimental.self_hosted_cache=true --blinterp-eager --baseline-warmup-threshold=1",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "When experimental.self_hosted_cache is enabled, Baseline-Interpreter frames produced via OSR (on-stack replacement) didn't carry the REALM_INDEPENDENT flag. Intrinsic helpers (SetIntrinsicOperation) walked into JSScript::containsPC which assumed the script pointer was still valid in the current realm, but the OSR-d frame was from the cached realm-independent self-hosted script \u2192 null/garbage script pointer, segfault in containsPC<4ul>. sec-high (csectype likely UAF). Fix: set REALM_INDEPENDENT on OSR'd frames when self_hosted_cache is enabled (git 4b63805dcd90 r=iain, Phabricator D253387, 6-line BaselineFrame.cpp + .h).",
+  "fix_commits": [
+    "4b63805dcd90"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-4b63805dcd90.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1970811 fix",
+      "source_commit": "4b63805dcd90",
+      "commit": "4b63805dcd90",
+      "url": "https://github.com/mozilla/gecko-dev/commit/4b63805dcd90",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/4b63805dcd90"
+    }
+  ],
+  "vrp": null
+}

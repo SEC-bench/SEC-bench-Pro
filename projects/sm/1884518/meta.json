@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1884518",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/wasm/WasmBCClass.h",
+    "js/src/wasm/WasmBaselineCompile.cpp",
+    "js/src/wasm/WasmBuiltins.cpp",
+    "js/src/wasm/WasmCodegenTypes.h"
+  ],
+  "target_subdir": [
+    "js/src/wasm"
+  ],
+  "command_options": "--fuzzing-safe --wasm-compiler=baseline",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "ASAN_CRASH",
+  "description": "Wasm baseline `delegate` instruction used the wrong frame-pushed value when transferring control to a `try_table` landing pad: it set framePushed to Control.stackHeight (correct for legacy `try`) instead of Control.stackHeight + paramSizeOnStack (needed for `try_table` which carries params on the stack). Result: stack pointer misaligned, an incorrect return address can be popped on function return \u2192 sec-high stack hijack with attacker control. Requires the exnref/try_table wasm exception feature (nightly + early beta only). Fix landed under sibling bug 1853452: rhunt rewrote delegate to be handled by the unwinder rather than emitted by baseline (git ce5cbe497833, Phabricator D206151), which incidentally fixes 1884518.",
+  "fix_commits": [
+    "ce5cbe497833"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-ce5cbe497833.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1884518 fix (covers 1853452)",
+      "source_commit": "ce5cbe497833",
+      "commit": "ce5cbe497833",
+      "url": "https://github.com/mozilla/gecko-dev/commit/ce5cbe497833",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/ce5cbe497833",
+      "covers_bug": "1853452"
+    }
+  ],
+  "vrp": null
+}

@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:417636716",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/builtins/builtins-lazy-gen.cc",
+    "src/codegen/x64/macro-assembler-x64.cc"
+  ],
+  "target_subdir": [
+    "src/builtins",
+    "src/codegen/x64"
+  ],
+  "command_options": "--sandbox-testing --expose-gc",
+  "verification_binary": "out/x64.release/d8",
+  "target_vulnerability_type": "Stack corruption",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "A sandbox escape vulnerability exists in the tail-call path used after code updates. After installing baseline code, V8 could tail-call the returned code object directly instead of reloading code through the function's dispatch-handle or closure path that carries the validated parameter count. If the dispatch handle is corrupted at the right time, the runtime can update one code object while the tail call jumps with a mismatched calling convention, resulting in stack corruption. The root-cause context is in `src/builtins/builtins-lazy-gen.cc` and the x64 tail-call emission logic in `src/codegen/x64/macro-assembler-x64.cc`.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6554252 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "675d684c0cbc642f2c154f91a7ae40f29aa6129d [sandbox] Harden TailCalls after code update",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6554252",
+      "source_cl": 6554252,
+      "source_commit": "675d684c0cbc642f2c154f91a7ae40f29aa6129d"
+    }
+  ]
+}

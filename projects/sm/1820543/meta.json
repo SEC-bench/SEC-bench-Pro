@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1820543",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/gc/Compacting.cpp"
+    ],
+    "target_subdir": [
+        "js/src/gc"
+    ],
+    "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Use-after-free",
+    "error_type": "ASAN_CRASH",
+    "description": "Heap use-after-free in SpiderMonkey GC compaction. CVE-2023-29535 (sec-high, MFSA 2023-13, Firefox 112). During GCRuntime::updatePointersToRelocatedCells, FinalizationRegistry observer edges were updated before the weak maps they depend on. When compaction relocated a WeakMap entry, the observer traversal still held the pre-move pointer, yielding a heap-use-after-free on a js::gc::Cell. Regression from bug 1749298 (Firefox 95+). The fix (commit 533d5be1269d680dbef53e0116a917f1a7485e9d by Jon Coppeard, 2023-03-15, r=sfink) reorders the compaction phase so weak maps are updated first, then finalization observer edges. Reporter: Lukas Bernhard.",
+    "fix_commits": [
+        "533d5be1269d680dbef53e0116a917f1a7485e9d"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-update-weak-maps-before-finalization-observer.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1820543 - Update weak maps before finalization observer",
+            "source_commit": "533d5be1269d680dbef53e0116a917f1a7485e9d",
+            "commit": "533d5be1269d680dbef53e0116a917f1a7485e9d",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/533d5be1269d680dbef53e0116a917f1a7485e9d",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/533d5be1269d680dbef53e0116a917f1a7485e9d",
+            "phabricator": "D171723"
+        }
+    ],
+    "vrp": null
+}

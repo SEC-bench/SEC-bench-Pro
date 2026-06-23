@@ -1,0 +1,31 @@
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==9==ERROR: AddressSanitizer: SEGV on unknown address 0x7ac942424242 (pc 0x7fd16560dac5 bp 0x7fff19732fe8 sp 0x7fff19732fb0 T0)
+==9==The signal is caused by a WRITE memory access.
+    #0 0x7fd16560dac5  (<unknown module>)
+    #1 0x55fe7aa7b889 in Builtins_JSToWasmWrapperAsm setup-isolate-deserialize.cc
+    #2 0x55fe7ab51685 in Builtins_JSToWasmWrapper setup-isolate-deserialize.cc
+    #3 0x55fe7a9e0a8a in Builtins_InterpreterEntryTrampoline setup-isolate-deserialize.cc
+    #4 0x55fe7a9de61b in Builtins_JSEntryTrampoline setup-isolate-deserialize.cc
+    #5 0x55fe7a9de35e in Builtins_JSEntry setup-isolate-deserialize.cc
+    #6 0x55fe771d48eb in Call src/execution/simulator.h:191:12
+    #7 0x55fe771d48eb in v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) src/execution/execution.cc:420:22
+    #8 0x55fe771d5ef6 in v8::internal::Execution::CallScript(v8::internal::Isolate*, v8::internal::Handle<v8::internal::JSFunction>, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>) src/execution/execution.cc:517:10
+    #9 0x55fe76d4d5bc in v8::Script::Run(v8::Local<v8::Context>, v8::Local<v8::Data>) src/api/api.cc:2140:7
+    #10 0x55fe76cd9bb3 in v8::Shell::ExecuteString(v8::Isolate*, v8::Local<v8::String>, v8::Local<v8::String>, v8::Shell::ReportExceptions, v8::Global<v8::Value>*) src/d8/d8.cc:1011:44
+    #11 0x55fe76d04b53 in v8::SourceGroup::Execute(v8::Isolate*) src/d8/d8.cc:4913:10
+    #12 0x55fe76d0f99e in v8::Shell::RunMainIsolate(v8::Isolate*, bool) src/d8/d8.cc:5852:37
+    #13 0x55fe76d0f0a6 in v8::Shell::RunMain(v8::Isolate*, bool) src/d8/d8.cc:5761:18
+    #14 0x55fe76d12088 in v8::Shell::Main(int, char**) src/d8/d8.cc:6615:18
+    #15 0x7fd165b5b1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #16 0x7fd165b5b28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #17 0x55fe76bd2024 in _start (/src/v8/out/x64.asan/d8+0x10e7024) (BuildId: bfed5d8e4d22e509)
+
+==9==Register values:
+rax = 0x0000000013371337  rbx = 0x00000000ffffffff  rcx = 0x00007ac94242423b  rdx = 0x0000000000000001  
+rdi = 0x00007fd16562f888  rsi = 0x00007ac000047299  rbp = 0x00007fff19732fe8  rsp = 0x00007fff19732fb0  
+ r8 = 0x00007fd16562f000   r9 = 0x00007ac90018fb4d  r10 = 0x00007bf164bf3350  r11 = 0x00007e2164bf38f0  
+r12 = 0x0000000000000000  r13 = 0x00007ee164be1080  r14 = 0x00007ac900000000  r15 = 0x00007ac900000775  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (<unknown module>) 
+==9==ABORTING

@@ -1,0 +1,15 @@
+Verified against the original collector report in `../../collector/output/general/Blink/JavaScript/WebAssembly/372269618/Report.md`.
+
+Collector artifacts checked:
+- `poc.js`
+- `poc_1.js`
+- `poc_1_2.js`
+- `poc_1_2_3.js`
+- `poc_comment_7.js`
+- `poc_comment_8.js`
+
+The local `poc.js` corresponds to the original collector `poc.js`; the report also includes stronger follow-up Turboshaft exploit variants. I corrected `meta.json` to include the report's required `--turboshaft-wasm` flag and reproduced with:
+
+`out/x64.asan/d8 --turboshaft-wasm --disable-in-process-stack-traces /testcase/poc.js`
+
+`output.txt` shows the confused default `undefined` value, then ends in an ASan SEGV from the resulting out-of-bounds read, which is consistent with the report's `DefaultReferenceValue()` externref confusion bug family.

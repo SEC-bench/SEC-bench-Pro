@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1895123",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/wasm/WasmStubs.cpp"
+  ],
+  "target_subdir": [
+    "js/src/wasm"
+  ],
+  "command_options": "--fuzzing-safe --cpu-count=2 --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "Wasm import stub did not create a stack map for the call frame in cases where the import involved suspending Promise integration (WebAssembly.Function with externref parameters used inside evalInWorker). Subsequent GC inside the imported host call saw an unmapped frame \u2192 UD2 trap on a GC type-tag check (Crash [@ ??] on UD2). sec-high. Fix: emit a stack map in wasm import stub when needed (git a6d934ae638b r=jandem,rhunt, Phabricator D210515). PoC requires opt build per reporter \u2014 debug build may also need build adjustment.",
+  "fix_commits": [
+    "a6d934ae638b"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-a6d934ae638b.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1895123 fix",
+      "source_commit": "a6d934ae638b",
+      "commit": "a6d934ae638b",
+      "url": "https://github.com/mozilla/gecko-dev/commit/a6d934ae638b",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/a6d934ae638b"
+    }
+  ],
+  "vrp": null
+}

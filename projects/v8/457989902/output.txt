@@ -1,0 +1,76 @@
+abort: CSA_DCHECK failed: Torque assert '!this.is_hole' failed [src/builtins/base.tq:204] [../../src/builtins/array-join.tq:823]
+
+Stacktrace:
+    ptr0=0x7a4900104421
+    ptr1=0x7c3a5c5e0460
+    ptr2=(nil)
+    ptr3=(nil)
+    ptr4=(nil)
+    ptr5=(nil)
+    failure_message_object=0x7b8a5bb20020
+
+==== JS stack trace =========================================
+
+    0: ExitFrame [pc: 0x56156813c7bd]
+    1: StubFrame [pc: 0x5615681c3338]
+    2: join [0x7a4900818bb1](this=0x7a490084a211 <JSArray[2]>)
+    3: toString [0x7a4900812ae1](this=0x7a490084a211 <JSArray[2]>)
+    4: InternalFrame [pc: 0x561567ef04a7]
+    5: EntryFrame [pc: 0x561567ef01eb]
+    6: ApiCallbackExitFrame print(this=0x7a4900810859 <JSGlobalProxy>,0x7a490084a211 <JSArray[2]>)
+
+    7: /* anonymous */ [0x7a4900829aed] [/testcase/poc.js:15] [bytecode=0x7a3e00800091 offset=149](this=0x7a4900810859 <JSGlobalProxy>)
+    8: InternalFrame [pc: 0x561567ef04a7]
+    9: EntryFrame [pc: 0x561567ef01eb]
+
+==== Details ================================================
+
+[0]: ExitFrame [pc: 0x56156813c7bd]
+[1]: StubFrame [pc: 0x5615681c3338]
+[2]: join [0x7a4900818bb1](this=0x7a490084a211 <JSArray[2]>) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[3]: toString [0x7a4900812ae1](this=0x7a490084a211 <JSArray[2]>) {
+// optimized frame
+--------- s o u r c e   c o d e ---------
+<No Source>
+-----------------------------------------
+}
+[4]: InternalFrame [pc: 0x561567ef04a7]
+[5]: EntryFrame [pc: 0x561567ef01eb]
+[6]: ApiCallbackExitFrame print(this=0x7a4900810859 <JSGlobalProxy>,0x7a490084a211 <JSArray[2]>)
+
+[7]: /* anonymous */ [0x7a4900829aed] [/testcase/poc.js:15] [bytecode=0x7a3e00800091 offset=149](this=0x7a4900810859 <JSGlobalProxy>) {
+  // heap-allocated locals
+  var dv = 0x7a490084a0f1 <ContextCell[const=0x7a490084a0c1 <DataView map = 0x7a4900819fd5>]>
+  var x = 0x7a490084a115 <ContextCell[const=0x7a490084a109 <HeapNumber -nan (0xfff7fffffff7ffff)>]>
+  var arr = 0x7a490084a221 <ContextCell[const=0x7a490084a211 <JSArray[2]>]>
+  // expression stack (top to bottom)
+  [13] : 0x7a4900000011 <undefined>
+  [12] : 774834176
+  [11] : 0x7a49008108b9 <NativeContext[302]>
+  [10] : 0x7a4900000011 <undefined>
+  [09] : 0x7a4900823cc5 <JSFunction print (sfi = 0x7a4900823c95)>
+  [08] : 0x7a4900000011 <undefined>
+  [07] : 0x7a4900810859 <JSGlobalProxy>
+  [06] : 0x7a490084a211 <JSArray[2]>
+  [05] : 0x7a4900000071 <true>
+  [04] : 0x7a4900000071 <true>
+  [03] : 0
+  [02] : 0x7a490084a211 <JSArray[2]>
+  [01] : 0x7a4900823cc5 <JSFunction print (sfi = 0x7a4900823c95)>
+  [00] : 0x7a4900000011 <undefined>
+--------- s o u r c e   c o d e ---------
+// Minimal testcase to cause a dcheck failure\x0afunction createArray(x) {\x0a    return new Array(x, 1.1);\x0a}\x0a\x0alet dv = new DataView(new ArrayBuffer(8));\x0adv.setUint32(0, 0xFFF7FFFF, true);\x0adv.setUint32(4, 0xFFF7FFFF, true);\x0alet x = dv.getFloat64(0, true);\x0a% PrepareFunctionForOptimization(createArray);\x0acre...
+
+-----------------------------------------
+}
+
+[8]: InternalFrame [pc: 0x561567ef04a7]
+[9]: EntryFrame [pc: 0x561567ef01eb]
+=====================
+
+Trace/breakpoint trap

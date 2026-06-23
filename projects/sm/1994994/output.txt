@@ -1,0 +1,73 @@
+[11] Assertion failure: (kMinCPOffset) <= (cp_offset), at /src/gecko-dev/js/src/irregexp/imported/regexp-bytecode-generator.cc:194
+#01: ???[/out/js +0x4661c96]
+#02: ???[/out/js +0x4696b0c]
+#03: ???[/out/js +0x469ba42]
+#04: ???[/out/js +0x46a4041]
+#05: ???[/out/js +0x468891c]
+#06: ???[/out/js +0x4659c86]
+#07: ???[/out/js +0x3696ebb]
+#08: ???[/out/js +0x2f096f9]
+#09: ???[/out/js +0x2f0004b]
+#10: ???[/out/js +0x372360a]
+#11: ???[/out/js +0x2f65d43]
+#12: ???[/out/js +0x2f28dc6]
+#13: ???[/out/js +0x2f43fba]
+#14: ???[/out/js +0x2f277d4]
+#15: ???[/out/js +0x2f2d4dd]
+#16: ???[/out/js +0x2f2dd17]
+#17: ???[/out/js +0x31b5595]
+#18: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x31b58e3]
+#19: ???[/out/js +0x2e12aa0]
+#20: ???[/out/js +0x2e117df]
+#21: ???[/out/js +0x2da071f]
+#22: ???[/out/js +0x2d91d8e]
+#23: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#24: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#25: _start[/out/js +0x2c944e5]
+#26: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x559db58d4cc2 bp 0x7ffcc92d72b0 sp 0x7ffcc92d7280 T0)
+==11==The signal is caused by a WRITE memory access.
+==11==Hint: address points to the zero page.
+    #0 0x559db58d4cc2 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x559db58d4cc2 in v8::internal::RegExpBytecodeGenerator::LoadCurrentCharacterImpl(int, v8::internal::Label*, bool, int, int) /src/gecko-dev/js/src/irregexp/imported/regexp-bytecode-generator.cc:194:3
+    #2 0x559db5909b0b in v8::internal::(anonymous namespace)::EmitHat(v8::internal::RegExpCompiler*, v8::internal::RegExpNode*, v8::internal::Trace*) /src/gecko-dev/js/src/irregexp/imported/regexp-compiler.cc:2217:14
+    #3 0x559db5909b0b in v8::internal::AssertionNode::Emit(v8::internal::RegExpCompiler*, v8::internal::Trace*) /src/gecko-dev/js/src/irregexp/imported/regexp-compiler.cc:2354:7
+    #4 0x559db590ea41 in v8::internal::TextNode::Emit(v8::internal::RegExpCompiler*, v8::internal::Trace*) /src/gecko-dev/js/src/irregexp/imported/regexp-compiler.cc:2594:17
+    #5 0x559db5917040 in v8::internal::ActionNode::Emit(v8::internal::RegExpCompiler*, v8::internal::Trace*) /src/gecko-dev/js/src/irregexp/imported/regexp-compiler.cc
+    #6 0x559db58fb91b in v8::internal::RegExpCompiler::Assemble(v8::internal::Isolate*, v8::internal::RegExpMacroAssembler*, v8::internal::RegExpNode*, int, v8::internal::Handle<v8::internal::String>) /src/gecko-dev/js/src/irregexp/imported/regexp-compiler.cc:275:43
+    #7 0x559db58ccc85 in js::irregexp::Assemble(JSContext*, v8::internal::RegExpCompiler*, v8::internal::RegExpCompileData*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSAtom*>, v8::internal::Zone*, bool, bool) /src/gecko-dev/js/src/irregexp/RegExpAPI.cpp:588:56
+    #8 0x559db58ccc85 in js::irregexp::CompilePattern(JSContext*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSLinearString*>, js::RegExpShared::CodeKind) /src/gecko-dev/js/src/irregexp/RegExpAPI.cpp:855:11
+    #9 0x559db4909eba in js::RegExpShared::execute(JSContext*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSLinearString*>, unsigned long, js::VectorMatchPairs*) /src/gecko-dev/js/src/vm/RegExpObject.cpp:701:8
+    #10 0x559db417c6f8 in ExecuteRegExpImpl(JSContext*, js::RegExpStatics*, JS::MutableHandle<js::RegExpShared*>, JS::Handle<JSLinearString*>, unsigned long, js::VectorMatchPairs*) /src/gecko-dev/js/src/builtin/RegExp.cpp:331:7
+    #11 0x559db417c6f8 in ExecuteRegExp(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSString*>, int, js::VectorMatchPairs*) /src/gecko-dev/js/src/builtin/RegExp.cpp:1433:7
+    #12 0x559db417304a in bool RegExpBuiltinExecMatchRaw<false>(JSContext*, JS::Handle<js::RegExpObject*>, JS::Handle<JSString*>, int, js::MatchPairs*, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/builtin/RegExp.cpp:1633:9
+    #13 0x559db417304a in js::RegExpBuiltinExec(JSContext*, JS::Handle<js::RegExpObject*>, JS::Handle<JSString*>, bool, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/builtin/RegExp.cpp:2159:10
+    #14 0x559db4996609 in bool intrinsic_RegExpBuiltinExec<false>(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/SelfHosting.cpp:1007:10
+    #15 0x559db41d8d42 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #16 0x559db419bdc5 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #17 0x559db41b6fb9 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #18 0x559db41b6fb9 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3276:16
+    #19 0x559db419a7d3 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #20 0x559db41a04dc in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:851:13
+    #21 0x559db41a0d16 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:884:10
+    #22 0x559db4428594 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #23 0x559db44288e2 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #24 0x559db4085a9f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1315:10
+    #25 0x559db40847de in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #26 0x559db401371e in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12051:10
+    #27 0x559db401371e in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12304:12
+    #28 0x559db4004d8d in main /src/gecko-dev/js/src/shell/js.cpp:12707:12
+    #29 0x7f76d2a931c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #30 0x7f76d2a9328a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #31 0x559db3f074e4 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c944e4) (BuildId: b5dcea5f48bc8339ecc6d116db07a2be)
+
+==11==Register values:
+rax = 0x0000000000000000  rbx = 0x0000000000000000  rcx = 0x00000000000000c2  rdx = 0x0000000000000000  
+rdi = 0x0000559db80323b0  rsi = 0x00007ffcc92d7238  rbp = 0x00007ffcc92d72b0  rsp = 0x00007ffcc92d7280  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000000000000000  r13 = 0x0000000000000001  r14 = 0x00007c76d1ee1d40  r15 = 0x00000000ffff8000  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==11==ABORTING

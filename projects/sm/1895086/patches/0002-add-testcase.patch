@@ -1,0 +1,38 @@
+From 1367febd6afeebd639963837aa082b09bfcaffc1 Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Tue, 23 Jul 2024 12:35:07 +0000
+Subject: [PATCH] Bug 1895086 - Add testcase r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D209913
+---
+ js/src/jit-test/tests/gc/bug-1894916.js | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+ create mode 100644 js/src/jit-test/tests/gc/bug-1894916.js
+
+diff --git a/js/src/jit-test/tests/gc/bug-1894916.js b/js/src/jit-test/tests/gc/bug-1894916.js
+new file mode 100644
+index 0000000000000..5375fe1632941
+--- /dev/null
++++ b/js/src/jit-test/tests/gc/bug-1894916.js
+@@ -0,0 +1,21 @@
++// |jit-test| --fuzzing-safe
++gczeal(0);
++gczeal(8, 37);
++function f67() {
++  for (let i71 = 0; i71 < 5; i71++) {
++    print(i71);
++    const v82 = this.transplantableObject();
++    const v83 = v82.object;
++    class C84 {};
++    const o86 = {
++      "sameZoneAs": C84,
++      "immutablePrototype": false,
++    };
++    const t60 = newGlobal(o86);
++    t60.__proto__ = v83;
++    const v90 = newGlobal({sameCompartmentAs: this});
++    v90.nukeAllCCWs();
++    v82.transplant(v90);
++  }
++}
++f67();

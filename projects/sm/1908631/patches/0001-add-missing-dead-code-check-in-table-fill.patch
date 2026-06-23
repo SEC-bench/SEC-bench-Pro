@@ -1,0 +1,25 @@
+From 5a54e992206bf047493b1081886b364fe21837d7 Mon Sep 17 00:00:00 2001
+From: Ben Visness <bvisness@mozilla.com>
+Date: Mon, 22 Jul 2024 21:04:37 +0000
+Subject: [PATCH] Bug 1908631: Add missing dead code check in table.fill.
+ r=rhunt
+
+Differential Revision: https://phabricator.services.mozilla.com/D217310
+---
+ js/src/wasm/WasmBaselineCompile.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/js/src/wasm/WasmBaselineCompile.cpp b/js/src/wasm/WasmBaselineCompile.cpp
+index 5c1a3fd76587a..b397ec491c2d6 100644
+--- a/js/src/wasm/WasmBaselineCompile.cpp
++++ b/js/src/wasm/WasmBaselineCompile.cpp
+@@ -6736,6 +6736,9 @@ bool BaseCompiler::emitTableFill() {
+   if (!iter_.readTableFill(&tableIndex, &nothing, &nothing, &nothing)) {
+     return false;
+   }
++  if (deadCode_) {
++    return true;
++  }
+ 
+   IndexType indexType = codeMeta_.tables[tableIndex].indexType();
+ 

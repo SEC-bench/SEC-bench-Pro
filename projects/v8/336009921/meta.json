@@ -1,0 +1,34 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:336009921",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/wasm/wrappers.cc"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The V8 JS-to-Wasm wrapper mechanism lacks a runtime signature verification between the wrapper code and the actual Wasm internal function it dispatches to. When a Wasm exported function is called from JavaScript, execution flows through three stages: JS → JS-to-Wasm wrapper → Wasm internal function. The wrapper (built in src/wasm/wrappers.cc via BuildJSToWasmWrapper/BuildCallAndReturn) is compiled for a fixed signature (sig_) which governs the argument count, types, and return value handling on the stack. At runtime, the wrapper loads the actual call target and instance from the function_data object embedded in the JS closure, but performs no check that the runtime function_data's signature matches the compile-time sig_. Since the code pointer (wrapper_code) is protected via V8's code pointer table in sandbox mode but function_data is a heap-accessible tagged pointer, an attacker within the V8 sandbox can swap the function_data (SharedFunctionInfo->function_data) between two Wasm exported functions with different signatures. This creates a mismatch where the wrapper sets up a call frame for one signature but the Wasm internal function expects a different one, leading to out-of-bounds reads or writes on the stack. Specifically, if the wrapper's argument count exceeds the internal function's, unexpected stack data is passed as Wasm arguments (OOB read); if the internal function's return count exceeds the wrapper's, it writes return values beyond the expected stack region (OOB write). This can be leveraged to calculate code base addresses via OOB reads and write ROP chains via OOB writes, ultimately achieving arbitrary code execution and escaping the V8 sandbox.",
+  "vrp": 5000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Upstream fix patch exported from commit e25efe6cf28b8a7dfc6de89ac16fd2a77f5e281d for fixed-image builds.",
+      "context": "landed-commit-backport",
+      "evidence_text": "e25efe6cf28b8a7dfc6de89ac16fd2a77f5e281d [wasm][sandbox] Verify signatures in js-to-wasm wrappers",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5622490",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/5622490",
+      "source_cl": 5622490,
+      "cl": 5622490,
+      "source_commit": "e25efe6cf28b8a7dfc6de89ac16fd2a77f5e281d",
+      "commit": "e25efe6cf28b8a7dfc6de89ac16fd2a77f5e281d"
+    }
+  ]
+}

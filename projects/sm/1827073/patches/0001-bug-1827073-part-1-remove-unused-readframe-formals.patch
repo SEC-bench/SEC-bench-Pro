@@ -1,0 +1,44 @@
+From af7bb7c7c1031ae7fe82f6aa63b9e1e757af7e1a Mon Sep 17 00:00:00 2001
+From: Jan de Mooij <jdemooij@mozilla.com>
+Date: Wed, 12 Apr 2023 04:51:21 +0000
+Subject: [PATCH] Bug 1827073 part 1 - Remove unused ReadFrame_Formals. r=iain
+
+Differential Revision: https://phabricator.services.mozilla.com/D175112
+---
+ js/src/jit/JSJitFrameIter.h | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/js/src/jit/JSJitFrameIter.h b/js/src/jit/JSJitFrameIter.h
+index 0024ff8750cd6..f62eb5dbcf0be 100644
+--- a/js/src/jit/JSJitFrameIter.h
++++ b/js/src/jit/JSJitFrameIter.h
+@@ -76,9 +76,6 @@ enum class FrameType {
+ };
+ 
+ enum ReadFrameArgsBehavior {
+-  // Only read formals (i.e. [0 ... callee()->nargs]
+-  ReadFrame_Formals,
+-
+   // Only read overflown args (i.e. [callee()->nargs ... numActuals()]
+   ReadFrame_Overflown,
+ 
+@@ -240,10 +237,6 @@ class JSJitFrameIter {
+     unsigned nactual = numActualArgs();
+     unsigned start, end;
+     switch (behavior) {
+-      case ReadFrame_Formals:
+-        start = 0;
+-        end = callee()->nargs();
+-        break;
+       case ReadFrame_Overflown:
+         start = callee()->nargs();
+         end = nactual;
+@@ -690,7 +683,7 @@ class InlineFrameIterator {
+                                 fallback);
+       }
+ 
+-      if (behavior != ReadFrame_Formals) {
++      if (nactual > nformal) {
+         if (more()) {
+           // There is still a parent frame of this inlined frame.  All
+           // arguments (also the overflown) are the last pushed values

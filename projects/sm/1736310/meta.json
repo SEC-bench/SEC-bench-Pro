@@ -1,0 +1,39 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1736310",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/public/GCHashTable.h",
+    "js/public/GCVector.h",
+    "js/public/SweepingAPI.h",
+    "js/src/gc/Sweeping.cpp",
+    "js/src/vm/ArrayBufferObject.h"
+  ],
+  "target_subdir": [
+    "js/public",
+    "js/src/gc",
+    "js/src/vm"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Use-after-free",
+  "error_type": "RUNTIME_CRASH",
+  "description": "When a GCVector held by WeakCache stored deferred references to a TypedArray buffer that was later detached during a setElement valueOf callback under gczeal(9), the existing needsSweep() method (which only reported emptiness, not sweep need) fell through to the GCPolicy path without sweeping, leaving the typed array pointing at a detached ArrayBuffer \u2014 hitting !obj->hasDetachedBuffer() at TypedArrayObject.cpp:1021. sec-high GC/buffer-detach assert. Fix: replace WeakCache::needsSweep with empty() and add a proper sweep path for GCPolicy (git a05bddc2ecd5, jcoppeard, 2021-10-18).",
+  "fix_commits": [
+    "a05bddc2ecd5"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-a05bddc2ecd5.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1736310 fix",
+      "source_commit": "a05bddc2ecd5",
+      "commit": "a05bddc2ecd5",
+      "url": "https://github.com/mozilla/gecko-dev/commit/a05bddc2ecd5",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/a05bddc2ecd5"
+    }
+  ],
+  "vrp": null
+}

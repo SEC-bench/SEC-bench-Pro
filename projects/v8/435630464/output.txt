@@ -1,0 +1,20 @@
+Sandbox testing mode is enabled. Only sandbox violations will be reported, all other crashes will be ignored.
+[+] Running without --harmony-struct
+[*] Running exploit...
+[w] value 0x1 -> 0x0 @ iteration 0x0
+
+## V8 sandbox violation detected!
+
+Received signal 11 SEGV_MAPERR 1337144700db
+
+==== C stack trace ===============================
+
+out/x64.release/d8(+0x1a9fe24)[0x555983b02e24]
+/lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7fb5a1477330]
+out/x64.release/d8(+0xb7b520)[0x555982bde520]
+out/x64.release/d8(+0xaafcdc)[0x555982b12cdc]
+out/x64.release/d8(+0xaafdac)[0x555982b12dac]
+out/x64.release/d8(+0x6b0ea7)[0x555982713ea7]
+out/x64.release/d8(+0x1940e36)[0x5559839a3e36]
+[end of stack trace]
+Segmentation fault (core dumped)

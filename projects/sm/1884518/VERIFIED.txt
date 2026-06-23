@@ -1,0 +1,9 @@
+VERIFIED at 2026-05-29T22:50:00Z — 2024-Q2 batch on bug 1884518 (sec-high, 2024-Apr)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type
+  - crash signal: `AddressSanitizer: SEGV on unknown address ... pc is at a non-executable region. Maybe a wild jump?`
+  - matches the report's "incorrect return address popped on function return" — the corrupted SP causes RET to jump into non-executable memory (heap).
+  - flags found: `--wasm-compiler=baseline` is REQUIRED. Default optimizing/Ion compiler emits `try_table`/`delegate` via the unwinder (which the fix unifies) and doesn't hit the bug. The fix patch is exclusively in WasmBaselineCompile.cpp / WasmBCClass.h, so baseline is the only buggy path.
+  - report-cited `--wasm-exnref` flag does NOT exist as a shell flag in this 2024-04 build (`wasm_exnref=true` is the default pref). Removed from meta.json.command_options.
+  - fix lives under sibling Bug 1853452 (rhunt Comment 15: "Bug 1853452 landed and fixed this issue"); batch2's bug-1884518 grep missed it.
+  - fixed image (git ce5cbe497833 "Bug 1853452 - wasm: Use unwinding to implement delegate on baseline", Phabricator D206151, 4 files) blocks PoC 5/5.
+  - meta.json.fixes.covers_bug records the sibling-bug relationship.

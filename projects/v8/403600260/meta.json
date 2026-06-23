@@ -1,0 +1,50 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:403600260",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing --single-threaded",
+  "target_source_files": [
+    "src/maglev/maglev-graph-builder.cc"
+  ],
+  "target_subdir": [
+    "src/maglev"
+  ],
+  "target_vulnerability_type": "Uninitialized memory read",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "In MaglevGraphBuilder::TryBuildAndAllocateJSGeneratorObject(), a VirtualObject is created via CreateJSGeneratorObject() with slot_count derived from the generator function's initial_map instance_size. The zone allocator (zone()->AllocateArray<ValueNode*>(slot_count)) does not initialize the allocated slots. CreateJSGeneratorObject() only initializes the fixed JSGeneratorObject header fields (~10 or 12 slots), and TryBuildAndAllocateJSGeneratorObject() then initializes only slack_tracking_prediction.inobject_property_count() additional in-object property slots. With a corrupted initial_map (achievable via a prior sandbox bypass), an attacker can forge instance_size to be larger than the total of initialized fixed fields plus inobject_property_count, causing the trailing VirtualObject slots to remain uninitialized (containing zone-allocator garbage). These uninitialized ValueNode* slots are subsequently processed unconditionally by BuildInlinedAllocation() via VirtualObject::ForEachInput(), which passes each slot to GetTaggedValue(). GetTaggedValue() calls GetOrCreateInfoFor() which calls StaticTypeForNode(). StaticTypeForNode() contains two switch-cases: the first (over ValueRepresentation) is exhaustive but small enough that the compiler emits a comparison-based fallthrough for the tagged case, allowing an invalid representation value of 7 to bypass all early returns; the second switch (exhaustive over Opcode) is large enough that the compiler emits an unchecked jump-offset table lookup. By heap-spraying the zone memory with a crafted fake ValueNode whose opcode field contains an attacker-chosen out-of-bounds index, the unchecked jump table lookup redirects execution to an arbitrary code location, granting full program counter control and a complete V8 sandbox bypass.",
+  "vrp": 25000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Local patch generated from V8 commit 73f21fd09b6b2b9930dbed725bbbde78de4e1710 to make validation and patched-image builds independent of remote Gerrit fetches.",
+      "context": "local-format-patch",
+      "evidence_text": "[maglev] Clear remaining slots for objects with slack",
+      "source_url": "https://crrev.com/c/6386656",
+      "url": "https://crrev.com/c/6386656",
+      "source_cl": 6386656,
+      "cl": 6386656,
+      "source_commit": "73f21fd09b6b2b9930dbed725bbbde78de4e1710",
+      "commit": "73f21fd09b6b2b9930dbed725bbbde78de4e1710"
+    },
+    {
+      "kind": "patch_file",
+      "path": "patches/0002-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 2,
+      "description": "Local patch generated from V8 commit 3516747f87b9370e6865429707f50e5b3845ee68 to make validation and patched-image builds independent of remote Gerrit fetches.",
+      "context": "local-format-patch",
+      "evidence_text": "[maglev] Always initialize all slots of a VirtualObject",
+      "source_url": "https://crrev.com/c/6387758",
+      "url": "https://crrev.com/c/6387758",
+      "source_cl": 6387758,
+      "cl": 6387758,
+      "source_commit": "3516747f87b9370e6865429707f50e5b3845ee68",
+      "commit": "3516747f87b9370e6865429707f50e5b3845ee68"
+    }
+  ]
+}

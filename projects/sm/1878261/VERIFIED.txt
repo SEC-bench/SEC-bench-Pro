@@ -1,0 +1,11 @@
+VERIFIED at 2026-05-29T05:50:49Z — orchestrator end-to-end on bug 1878261 (sec-high)
+  - CONFIMRED: ASAN_CRASH matches meta.json.error_type (iter 1/100, 26 lines)
+  - Crash: SEGV in js::gc::Cell::zoneFromAnyThread() via JS::Compartment::wrap()
+            -> chain: AutoReportException::~AutoReportException ->
+                       StealPendingExceptionStack -> getPendingException ->
+                       Compartment::wrap -> Cell::zoneFromAnyThread (UAF)
+            -> register rcx=0x1fffc5e5e5e5e5e5 (0xe5 == ASAN free-poison pattern)
+            -> classic UAF on freed Cell during Debugger interrupt path
+  - Fix (patches/0001-fix-from-git-dcc38792dc66.patch): "Prefer local variables
+    over fromMarkedLocation" — JitFrames.cpp avoids stale frame pointer
+  - Fixed image blocks PoC 10/10

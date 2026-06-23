@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:435630467",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing",
+  "target_source_files": [
+    "src/builtins/builtins-internal-gen.cc"
+  ],
+  "target_subdir": [
+    "src/builtins"
+  ],
+  "target_vulnerability_type": "Control-flow integrity violation",
+  "error_type": "SANDBOX_VIOLATION",
+  "description": "The DebugBreakTrampoline builtin in src/builtins/builtins-internal-gen.cc performs an unsafe tail call without validating the parameter count of the target code. When installed as a function's code entry (e.g., when a debugger breakpoint is set), the trampoline reads the SharedFunctionInfo from the JSFunction object (which is in-sandbox memory), retrieves the code object, and immediately tail-calls it via TailCallJSCode without verifying that the actual argument count matches the formal parameter count of the target code. A TODO comment in the code explicitly acknowledges this: 'TODO(saelo): this is not safe. We either need to validate the parameter count here or obtain the code from the dispatch table.' An attacker with in-sandbox memory corruption primitives can exploit this by: (1) corrupting a JSFunction's dispatch table entry or code pointer to DebugBreakTrampoline, and (2) modifying the SharedFunctionInfo to point to a high-arity code object (e.g., a 0x100-parameter function). When the corrupted function is called with fewer arguments than the target expects, the callee pops more values from the stack than were pushed, moving the stack pointer above the current frame and corrupting the call stack. Combined with a Wasm stack-spraying technique, this achieves full PC and stack control, enabling a V8 sandbox escape. DebugBreakTrampoline is explicitly allowlisted in JSDispatchTable::IsCompatibleCode() (src/sandbox/js-dispatch-table-inl.h) as an exception to Leaptiering CFI parameter-count enforcement, making it a prime target for this class of attack.",
+  "vrp": 20000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "commit-message-id",
+      "evidence_lineno": 0,
+      "evidence_text": "269d7c0f238a38e272f19f98a217989524c9f799 [sandbox] Make DebugBreakTrampoline check the arguments count",
+      "url": "https://chromium-review.googlesource.com/c/v8/v8/+/6871396",
+      "cl": 6871396,
+      "commit": "269d7c0f238a38e272f19f98a217989524c9f799",
+      "description": "Local patch exported from https://chromium-review.googlesource.com/c/v8/v8/+/6871396 for reproducible fixed-image builds.",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6871396",
+      "source_cl": 6871396,
+      "source_commit": "269d7c0f238a38e272f19f98a217989524c9f799",
+      "source_ref": "refs/changes/96/6871396/7",
+      "source_patchset": 7
+    }
+  ]
+}

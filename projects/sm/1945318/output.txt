@@ -1,0 +1,70 @@
+[13] Assertion failure: aIndex < mLength, at /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585
+#01: ???[/out/js +0x3689e75]
+#02: ???[/out/js +0x3686b2d]
+#03: JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&, JS::Handle<JSObject*>)[/out/js +0x3c0ffc1]
+#04: ???[/out/js +0x323f3dd]
+#05: ???[/out/js +0x2ee8b98]
+#06: ???[/out/js +0x2ea1fd5]
+#07: ???[/out/js +0x2ec1107]
+#08: ???[/out/js +0x2ea06f9]
+#09: ???[/out/js +0x2ea1ff7]
+#10: ???[/out/js +0x2ea3b6c]
+#11: ???[/out/js +0x36d05ce]
+#12: ???[/out/js +0x30b6002]
+#13: ???[/out/js +0x35913bc]
+#14: ???[/out/js +0x2ee8b98]
+#15: ???[/out/js +0x2ea1fd5]
+#16: ???[/out/js +0x2ea3b6c]
+#17: JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>)[/out/js +0x3130aa3]
+#18: ???[/out/js +0x33380e8]
+#19: js::RunJobs(JSContext*)[/out/js +0x3337833]
+#20: ???[/out/js +0x2d38da8]
+#21: ???[/out/js +0x2d19d36]
+#22: ???[/out/js +0x2d05262]
+#23: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#24: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#25: _start[/out/js +0x2c0a985]
+#26: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: ILL on unknown address 0x5aa56be13e9f (pc 0x5aa56be13e9f bp 0x7ffc95896df0 sp 0x7ffc95895dc0 T0)
+    #0 0x5aa56be13e9f in mozilla::Vector<js::SavedFrame::Lookup, 60ul, js::TempAllocPolicy>::operator[](unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585:5
+    #1 0x5aa56be13e9f in JS::GCVector<js::SavedFrame::Lookup, 60ul, js::TempAllocPolicy>::operator[](unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:71:36
+    #2 0x5aa56be13e9f in js::MutableWrappedPtrOperations<JS::GCVector<js::SavedFrame::Lookup, 60ul, js::TempAllocPolicy>, JS::Rooted<JS::GCVector<js::SavedFrame::Lookup, 60ul, js::TempAllocPolicy>>>::operator[](unsigned long) /src/gecko-dev/obj-debug-asan/dist/include/js/GCVector.h:258:60
+    #3 0x5aa56be13e9f in js::SavedStacks::insertFrames(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1622:7
+    #4 0x5aa56be10b2c in js::SavedStacks::saveCurrentStack(JSContext*, JS::MutableHandle<js::SavedFrame*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&, JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/SavedStacks.cpp:1339:10
+    #5 0x5aa56c399fc0 in JS::CaptureCurrentStack(JSContext*, JS::MutableHandle<JSObject*>, mozilla::Variant<JS::AllFrames, JS::MaxFrames, JS::FirstSubsumedFrame>&&, JS::Handle<JSObject*>) /src/gecko-dev/js/src/jsapi.cpp:4952:29
+    #6 0x5aa56b9c93dc in exn_captureStackTrace(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/vm/ErrorObject.cpp:1073:8
+    #7 0x5aa56b672b97 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:532:13
+    #8 0x5aa56b62bfd4 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:628:12
+    #9 0x5aa56b64b106 in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:700:10
+    #10 0x5aa56b64b106 in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3338:16
+    #11 0x5aa56b62a6f8 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:502:13
+    #12 0x5aa56b62bff6 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:660:13
+    #13 0x5aa56b62db6b in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:727:8
+    #14 0x5aa56be5a5cd in js::CallSelfHostedFunction(JSContext*, JS::Handle<js::PropertyName*>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/SelfHosting.cpp:1541:10
+    #15 0x5aa56b840001 in AsyncFunctionResume(JSContext*, JS::Handle<js::AsyncFunctionGeneratorObject*>, ResumeKind, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/AsyncFunction.cpp:156:8
+    #16 0x5aa56bd1b3bb in AsyncFunctionPromiseReactionJob(JSContext*, JS::Handle<PromiseReactionRecord*>) /src/gecko-dev/js/src/builtin/Promise.cpp:2189:12
+    #17 0x5aa56bd1b3bb in PromiseReactionJob(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/Promise.cpp:2252:12
+    #18 0x5aa56b672b97 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:532:13
+    #19 0x5aa56b62bfd4 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:628:12
+    #20 0x5aa56b62db6b in js::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, js::AnyInvokeArgs const&, JS::MutableHandle<JS::Value>, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:727:8
+    #21 0x5aa56b8baaa2 in JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CallAndConstruct.cpp:119:10
+    #22 0x5aa56bac20e7 in JS::Call(JSContext*, JS::Handle<JS::Value>, JS::Handle<JSObject*>, JS::HandleValueArray const&, JS::MutableHandle<JS::Value>) /src/gecko-dev/obj-debug-asan/dist/include/js/CallAndConstruct.h:110:10
+    #23 0x5aa56bac20e7 in js::InternalJobQueue::runJobs(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:875:14
+    #24 0x5aa56bac1832 in js::RunJobs(JSContext*) /src/gecko-dev/js/src/vm/JSContext.cpp:813:17
+    #25 0x5aa56b4c2da7 in RunShellJobs(JSContext*) /src/gecko-dev/js/src/shell/js.cpp:1409:5
+    #26 0x5aa56b4a3d35 in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12016:5
+    #27 0x5aa56b48f261 in main /src/gecko-dev/js/src/shell/js.cpp:12421:12
+    #28 0x7bb21b15b1c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x7bb21b15b28a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #30 0x5aa56b394984 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2c0a984) (BuildId: dccd6a0dcf21c60241d8f2933006356d)
+
+==13==Register values:
+rax = 0x000077b2192d5000  rbx = 0x00000fff92b12e1f  rcx = 0x0000000000000000  rdx = 0x00007bb21ad66000  
+rdi = 0x000077b2192d5000  rsi = 0x0000000000000001  rbp = 0x00007ffc95896df0  rsp = 0x00007ffc95895dc0  
+ r8 = 0x0000000000000000   r9 = 0x00007fffffffff01  r10 = 0x00007fffffffff01  r11 = 0x0000000000000201  
+r12 = 0x00000fff92b12f73  r13 = 0x0000100012b0abdc  r14 = 0x00007ffc95896d20  r15 = 0x00007ffc958970f8  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: ILL /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Vector.h:585:5 in mozilla::Vector<js::SavedFrame::Lookup, 60ul, js::TempAllocPolicy>::operator[](unsigned long)
+==13==ABORTING

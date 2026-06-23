@@ -1,0 +1,36 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1882751",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/jit/MacroAssembler.cpp",
+        "js/src/wasm/WasmGcObject.h"
+    ],
+    "target_subdir": [
+        "js/src/jit",
+        "js/src/wasm"
+    ],
+    "command_options": "--wasm-compiler=baseline",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Integer overflow",
+    "error_type": "ASAN_CRASH",
+    "description": "Wasm-GC inline array allocation integer overflow - MacroAssembler::wasmArrayAllocCheckLength used a signed-overflow test for numElements * elementSize, allowing unsigned-overflowing lengths to enter the fast allocation path. The vulnerable fast-path check in js/src/jit/MacroAssembler.cpp interacted with wasm array sizing limits declared in js/src/wasm/WasmGcObject.h. A wrapped byte count under-allocated the backing store while the object retained the attacker-controlled logical length, enabling out-of-bounds array access. The fix compares against the correct per-element maximum length instead of relying on signed overflow flags.",
+    "fix_commits": [
+        "d6d6aababd5b2aa1d622fe4f56a1e60c167c5547"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-replace-runtime-array-length-checks-with-a.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1882751: Replace runtime array length checks with a",
+            "source_commit": "d6d6aababd5b2aa1d622fe4f56a1e60c167c5547",
+            "commit": "d6d6aababd5b2aa1d622fe4f56a1e60c167c5547",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/d6d6aababd5b2aa1d622fe4f56a1e60c167c5547",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/d6d6aababd5b2aa1d622fe4f56a1e60c167c5547",
+            "phabricator": "D203511"
+        }
+    ],
+    "vrp": null
+}

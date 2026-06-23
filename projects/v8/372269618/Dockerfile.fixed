@@ -1,0 +1,31 @@
+FROM hwiwonlee/v8.x86_64:372269618
+
+ARG NINJA_JOBS
+WORKDIR /src/v8
+
+COPY patches/ /tmp/secb-fix-patches/
+RUN set -eux; \
+    for p in /tmp/secb-fix-patches/*.patch; do \
+      [ -e "$p" ] || continue; \
+      git apply "$p"; \
+    done; \
+    true
+
+RUN set -eux; \
+    jobs="${NINJA_JOBS:-$(nproc)}"; \
+    out_dir='out/x64.asan'; \
+    target='d8'; \
+    args_file="$out_dir/args.gn"; \
+    if [ ! -f "$args_file" ]; then \
+      echo "Missing GN args file: $args_file" >&2; \
+      exit 1; \
+    fi; \
+    cp "$args_file" /tmp/secb-args.gn; \
+    rm -rf "$out_dir"; \
+    gn gen "$out_dir" --args="$(cat /tmp/secb-args.gn)"; \
+    ninja -j"$jobs" -C "$out_dir" "$target"; \
+    mkdir -p /out; \
+    ln -sf /src/v8/out/x64.asan/d8 /out/d8; \
+    if [ -f /src/v8/out/x64.asan/snapshot_blob.bin ]; then \
+      ln -sf /src/v8/out/x64.asan/snapshot_blob.bin /out/snapshot_blob.bin; \
+    fi

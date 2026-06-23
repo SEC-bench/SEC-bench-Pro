@@ -1,0 +1,70 @@
+[1] Hit MOZ_CRASH(*** Compartment mismatch 7c1443ee09a0 vs. 7c1443ee1120 at argument 0) at /src/gecko-dev/js/src/vm/JSContext-inl.h:56
+#01: ???[/out/js +0x2f680b3]
+#02: ???[/out/js +0x50c0d2e]
+#03: ???[/out/js +0x50c31ec]
+#04: ???[/out/js +0x50c147e]
+#05: ???[/out/js +0x50b8443]
+#06: ???[/out/js +0x50b8306]
+#07: JS_WriteStructuredClone(JSContext*, JS::Handle<JS::Value>, JSStructuredCloneData*, JS::StructuredCloneScope, JS::CloneDataPolicy const&, JSStructuredCloneCallbacks const*, void*, JS::Handle<JS::Value>)[/out/js +0x50d7436]
+#08: JSAutoStructuredCloneBuffer::write(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::CloneDataPolicy const&, JSStructuredCloneCallbacks const*, void*)[/out/js +0x50d93ba]
+#09: ???[/out/js +0x32ea810]
+#10: ???[/out/js +0x4e60163]
+#11: ???[/out/js +0x4e25466]
+#12: ???[/out/js +0x4e4093e]
+#13: ???[/out/js +0x4e23e94]
+#14: ???[/out/js +0x4e29b7d]
+#15: ???[/out/js +0x4e2a3b7]
+#16: ???[/out/js +0x5345775]
+#17: JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>)[/out/js +0x5345ac3]
+#18: ???[/out/js +0x2e3c380]
+#19: ???[/out/js +0x2e3b0bf]
+#20: ???[/out/js +0x2dca3ab]
+#21: ???[/out/js +0x2dba43e]
+#22: ???[/lib/x86_64-linux-gnu/libc.so.6 +0x2a1ca]
+#23: __libc_start_main[/lib/x86_64-linux-gnu/libc.so.6 +0x2a28b]
+#24: _start[/out/js +0x2cbc225]
+#25: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==1==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x55c39bc910d4 bp 0x7ffd36046410 sp 0x7ffd36046400 T0)
+==1==The signal is caused by a WRITE memory access.
+==1==Hint: address points to the zero page.
+    #0 0x55c39bc910d4 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:235:3
+    #1 0x55c39bc910d4 in MOZ_Crash(char const*, int, char const*) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:373:3
+    #2 0x55c39bc910d4 in js::ContextChecks::fail(JS::Compartment*, JS::Compartment*, int) /src/gecko-dev/js/src/vm/JSContext-inl.h:55:5
+    #3 0x55c39dde9d2d in void JSContext::checkImpl<JS::Handle<JS::Value>>(JS::Handle<JS::Value> const&) /src/gecko-dev/js/src/vm/JSContext-inl.h:216:33
+    #4 0x55c39dde9d2d in void JSContext::check<JS::Handle<JS::Value>>(JS::Handle<JS::Value> const&) /src/gecko-dev/js/src/vm/JSContext-inl.h:223:5
+    #5 0x55c39dde9d2d in JSStructuredCloneWriter::startWrite(JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/StructuredClone.cpp:2140:14
+    #6 0x55c39ddec1eb in JSStructuredCloneWriter::writeSharedWasmMemory(JS::Handle<JSObject*>) /src/gecko-dev/js/src/vm/StructuredClone.cpp:1606:10
+    #7 0x55c39ddea47d in JSStructuredCloneWriter::startWrite(JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/StructuredClone.cpp:2245:16
+    #8 0x55c39dde1442 in JSStructuredCloneWriter::write(JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/StructuredClone.cpp:2472:8
+    #9 0x55c39dde1305 in WriteStructuredClone(JSContext*, JS::Handle<JS::Value>, JSStructuredCloneData*, JS::StructuredCloneScope, JS::CloneDataPolicy const&, JSStructuredCloneCallbacks const*, void*, JS::Value const&) /src/gecko-dev/js/src/vm/StructuredClone.cpp:784:10
+    #10 0x55c39de00435 in JS_WriteStructuredClone(JSContext*, JS::Handle<JS::Value>, JSStructuredCloneData*, JS::StructuredCloneScope, JS::CloneDataPolicy const&, JSStructuredCloneCallbacks const*, void*, JS::Handle<JS::Value>) /src/gecko-dev/js/src/vm/StructuredClone.cpp:4236:10
+    #11 0x55c39de023b9 in JSAutoStructuredCloneBuffer::write(JSContext*, JS::Handle<JS::Value>, JS::Handle<JS::Value>, JS::CloneDataPolicy const&, JSStructuredCloneCallbacks const*, void*) /src/gecko-dev/js/src/vm/StructuredClone.cpp:4359:10
+    #12 0x55c39c01380f in js::testingFunc_serialize(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:6304:18
+    #13 0x55c39db89162 in CallJSNative(JSContext*, bool (*)(JSContext*, unsigned int, JS::Value*), js::CallReason, JS::CallArgs const&) /src/gecko-dev/js/src/vm/Interpreter.cpp:490:13
+    #14 0x55c39db4e465 in js::InternalCallOrConstruct(JSContext*, JS::CallArgs const&, js::MaybeConstruct, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:586:12
+    #15 0x55c39db6993d in js::CallFromStack(JSContext*, JS::CallArgs const&, js::CallReason) /src/gecko-dev/js/src/vm/Interpreter.cpp:658:10
+    #16 0x55c39db6993d in js::Interpret(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:3272:16
+    #17 0x55c39db4ce93 in js::RunScript(JSContext*, js::RunState&) /src/gecko-dev/js/src/vm/Interpreter.cpp:460:13
+    #18 0x55c39db52b7c in js::ExecuteKernel(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, js::AbstractFramePtr, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:850:10
+    #19 0x55c39db533b6 in js::Execute(JSContext*, JS::Handle<JSScript*>, JS::Handle<JSObject*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/Interpreter.cpp:880:10
+    #20 0x55c39e06e774 in ExecuteScript(JSContext*, JS::Handle<JSObject*>, JS::Handle<JSScript*>, JS::MutableHandle<JS::Value>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:548:10
+    #21 0x55c39e06eac2 in JS_ExecuteScript(JSContext*, JS::Handle<JSScript*>) /src/gecko-dev/js/src/vm/CompilationAndEvaluation.cpp:572:10
+    #22 0x55c39bb6537f in RunFile(JSContext*, char const*, _IO_FILE*, CompileUtf8, bool, bool) /src/gecko-dev/js/src/shell/js.cpp:1388:10
+    #23 0x55c39bb640be in Process(JSContext*, char const*, bool, FileKind) /src/gecko-dev/js/src/shell/js.cpp
+    #24 0x55c39baf33aa in ProcessArgs(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12092:10
+    #25 0x55c39baf33aa in Shell(JSContext*, js::cli::OptionParser*) /src/gecko-dev/js/src/shell/js.cpp:12345:12
+    #26 0x55c39bae343d in main /src/gecko-dev/js/src/shell/js.cpp:12751:12
+    #27 0x7f2444a651c9  (/lib/x86_64-linux-gnu/libc.so.6+0x2a1c9) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #28 0x7f2444a6528a in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28a) (BuildId: 8e9fd827446c24067541ac5390e6f527fb5947bb)
+    #29 0x55c39b9e5224 in _start (/src/gecko-dev/obj-debug-asan/dist/bin/js+0x2cbc224) (BuildId: 0f636ddc7930fa909d72ed60afc2c9f1)
+
+==1==Register values:
+rax = 0x0000000000000000  rbx = 0x000055c3a053f120  rcx = 0x0000000000000038  rdx = 0x0000000000000000  
+rdi = 0x000055c39fbfaf30  rsi = 0x00007ffd360463b8  rbp = 0x00007ffd36046410  rsp = 0x00007ffd36046400  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00007b24430de040  r13 = 0x00000fffa6c08c88  r14 = 0x00000f648861bc08  r15 = 0x00007ffd36046750  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:235:3 in MOZ_CrashSequence(void*, long)
+==1==ABORTING

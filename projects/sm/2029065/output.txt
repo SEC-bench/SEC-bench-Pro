@@ -1,0 +1,33 @@
+[13] Assertion failure: numDominated_ != 0, at /src/gecko-dev/js/src/jit/MIRGraph.h:539
+#01: ???[/out/js +0x4167ba6]
+#02: ???[/out/js +0x4b6ec7a]
+#03: ???[/out/js +0x4b6b035]
+#04: ???[/out/js +0x4b79b50]
+#05: ???[/out/js +0x4b7d576]
+#06: ???[/out/js +0x4b7ed12]
+#07: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x5e6e9a90fbd2 bp 0x7ffe46583b60 sp 0x7ffe46583b60 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x5e6e9a90fbd2 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:235:3
+    #1 0x5e6e9a90fbd2 in js::jit::MBasicBlock::numDominated() const /src/gecko-dev/js/src/jit/MIRGraph.h:539:5
+    #2 0x5e6e9a90fbd2 in js::jit::MBasicBlock::dominates(js::jit::MBasicBlock const*) const /src/gecko-dev/js/src/jit/MIRGraph.h:150:45
+    #3 0x5e6e9b316c79 in js::jit::OptimizeIteratorIndices(js::jit::MIRGenerator const*, js::jit::MIRGraph&) /src/gecko-dev/js/src/jit/IonAnalysis.cpp:2234:41
+    #4 0x5e6e9b313034 in js::jit::OptimizeMIR(js::jit::MIRGenerator*) /src/gecko-dev/js/src/jit/Ion.cpp:1105:10
+    #5 0x5e6e9b321b4f in js::jit::CompileBackEnd(js::jit::MIRGenerator*, js::jit::WarpSnapshot*) /src/gecko-dev/js/src/jit/Ion.cpp:1697:8
+    #6 0x5e6e9b325575 in js::jit::IonCompile(JSContext*, JS::Handle<JSScript*>, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:1870:38
+    #7 0x5e6e9b325575 in js::jit::Compile(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2022:24
+    #8 0x5e6e9b326d11 in BaselineCanEnterAtEntry(JSContext*, JS::Handle<JSScript*>, js::jit::BaselineFrame*) /src/gecko-dev/js/src/jit/Ion.cpp:2139:25
+    #9 0x5e6e9b326d11 in IonCompileScriptForBaseline(JSContext*, js::jit::BaselineFrame*, unsigned char*) /src/gecko-dev/js/src/jit/Ion.cpp:2248:12
+    #10 0x6c1f5970c085  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00006eefdb9356f8  rcx = 0x000000000000021b  rdx = 0x0000000000000000  
+rdi = 0x00005e6e9d6bc710  rsi = 0x00007ffe46583b18  rbp = 0x00007ffe46583b60  rsp = 0x00007ffe46583b60  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x00006eefdb9314e0  r13 = 0x00006eefdb936a00  r14 = 0x00006eefdb9359c8  r15 = 0x00006eefdb930478  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:235:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

@@ -1,0 +1,27 @@
+[13] Assertion failure: element, at /src/gecko-dev/js/src/ds/SinglyLinkedList.h:77
+#01: ???[/out/js +0x362d359]
+#02: ???[/out/js +0x3b2cbd0]
+#03: ???[/out/js +0x33d958b]
+#04: ??? (???:???)
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==13==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 (pc 0x607c66dba385 bp 0x7fffddfce310 sp 0x7fffddfce310 T0)
+==13==The signal is caused by a WRITE memory access.
+==13==Hint: address points to the zero page.
+    #0 0x607c66dba385 in MOZ_CrashSequence(void*, long) /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3
+    #1 0x607c66dba385 in js::SinglyLinkedList<js::gc::Arena>::getFirst() const /src/gecko-dev/js/src/ds/SinglyLinkedList.h:77:5
+    #2 0x607c66dba385 in js::SinglyLinkedList<js::gc::Arena>::Iterator::Iterator(js::SinglyLinkedList<js::gc::Arena> const&) /src/gecko-dev/js/src/ds/SinglyLinkedList.h:209:18
+    #3 0x607c66dba385 in js::ChainedIterator<js::SinglyLinkedList<js::gc::Arena>::Iterator, 3ul>::ChainedIterator<js::gc::ArenaList&, js::gc::ArenaList&, js::gc::ArenaList&>(js::gc::ArenaList&, js::gc::ArenaList&, js::gc::ArenaList&) /src/gecko-dev/js/src/gc/IteratorUtils.h:87:19
+    #4 0x607c672b9bcf in js::gc::ArenaIter::ArenaIter(JS::Zone*, js::gc::AllocKind) /src/gecko-dev/js/src/gc/GC-inl.h:53:9
+    #5 0x607c672b9bcf in js::gc::AtomMarkingRuntime::unmarkAllGrayReferences(js::gc::GCRuntime*) /src/gecko-dev/js/src/gc/AtomMarking.cpp:344:20
+    #6 0x607c66b6658a in SetGrayBitsInvalid(JSContext*, unsigned int, JS::Value*) /src/gecko-dev/js/src/builtin/TestingFunctions.cpp:3345:21
+    #7 0x727ba64d171e  (<unknown module>)
+
+==13==Register values:
+rax = 0x0000000000000000  rbx = 0x00007fffddfce3a0  rcx = 0x000000000000004d  rdx = 0x0000000000000000  
+rdi = 0x0000607c6a75e7d0  rsi = 0x00007fffddfce2c8  rbp = 0x00007fffddfce310  rsp = 0x00007fffddfce310  
+ r8 = 0x0000000000000000   r9 = 0xffffff0000000000  r10 = 0xefffffffffffffff  r11 = 0x4000000000000000  
+r12 = 0x0000754c286e1e40  r13 = 0x00007fffddfce870  r14 = 0x00007fffddfce7b0  r15 = 0x5555555555555555  
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/gecko-dev/obj-debug-asan/dist/include/mozilla/Assertions.h:237:3 in MOZ_CrashSequence(void*, long)
+==13==ABORTING

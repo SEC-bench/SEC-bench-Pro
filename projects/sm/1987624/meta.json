@@ -1,0 +1,33 @@
+{
+  "image_name": "hwiwonlee/sm.x86_64:1987624",
+  "work_dir": "/src/gecko-dev",
+  "target_source_files": [
+    "js/src/wasm/WasmJS.cpp"
+  ],
+  "target_subdir": [
+    "js/src/wasm"
+  ],
+  "command_options": "--fuzzing-safe --ion-offthread-compile=off",
+  "verification_binary": "/out/js",
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "ASAN_CRASH",
+  "description": "WebAssembly.Module / WebAssembly.compile path went through GetBufferSource which did not correctly handle SharedArrayBuffer + externref combinations, producing a stale pointer in the decoder. When the decode path then walked into a moved-away module bytes buffer, the next allocation crashed in DecodeModuleEnvironment. Fix: refactor GetBufferSource so each call materialises a fresh shared/non-shared view, plus call-site updates (git c89c1e356e68 r=yury, Phabricator D264478, 119-line WasmJS.cpp refactor).",
+  "fix_commits": [
+    "c89c1e356e68"
+  ],
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix-from-git-c89c1e356e68.patch",
+      "apply_in_gecko_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Bug 1987624 fix",
+      "source_commit": "c89c1e356e68",
+      "commit": "c89c1e356e68",
+      "url": "https://github.com/mozilla/gecko-dev/commit/c89c1e356e68",
+      "source_url": "https://github.com/mozilla/gecko-dev/commit/c89c1e356e68"
+    }
+  ],
+  "vrp": null
+}

@@ -1,0 +1,90 @@
+From 62ea7950e9268e5b58d1dc6e4de6016ab719e11f Mon Sep 17 00:00:00 2001
+From: Jon Coppeard <jcoppeard@mozilla.com>
+Date: Fri, 6 Dec 2024 09:28:16 +0000
+Subject: [PATCH] Bug 1929623 - The result of evaluating a JSON module should
+ be |undefined| r=jandem
+
+Differential Revision: https://phabricator.services.mozilla.com/D228663
+---
+ js/src/jit-test/tests/modules/bug-1929623.js      |  4 ++++
+ .../jit-test/tests/modules/evaluation-result.js   | 11 +++++++++++
+ js/src/vm/Modules.cpp                             | 15 +++++++++------
+ 3 files changed, 24 insertions(+), 6 deletions(-)
+ create mode 100644 js/src/jit-test/tests/modules/bug-1929623.js
+ create mode 100644 js/src/jit-test/tests/modules/evaluation-result.js
+
+diff --git a/js/src/jit-test/tests/modules/bug-1929623.js b/js/src/jit-test/tests/modules/bug-1929623.js
+new file mode 100644
+index 0000000000000..77ca03fbe4a0f
+--- /dev/null
++++ b/js/src/jit-test/tests/modules/bug-1929623.js
+@@ -0,0 +1,4 @@
++const a = "".startsWith("");
++function b() { return newGlobal(b); }
++b.newCompartment = a;
++with (b()) this.moduleEvaluate(parseModule("45172", "", "json"));
+diff --git a/js/src/jit-test/tests/modules/evaluation-result.js b/js/src/jit-test/tests/modules/evaluation-result.js
+new file mode 100644
+index 0000000000000..6020403a0f259
+--- /dev/null
++++ b/js/src/jit-test/tests/modules/evaluation-result.js
+@@ -0,0 +1,11 @@
++async function parseAndEvaluate(source, filename, kind) {
++    let m = parseModule(source, filename, kind);
++    moduleLink(m);
++    return await moduleEvaluate(m);
++}
++
++(async () => {
++  assertEq(await parseAndEvaluate("[]", "", "js"), undefined);
++  assertEq(await parseAndEvaluate("[]", "", "json"), undefined);
++})();
++drainJobQueue();
+diff --git a/js/src/vm/Modules.cpp b/js/src/vm/Modules.cpp
+index 1a017f0308b01..67506114e479b 100644
+--- a/js/src/vm/Modules.cpp
++++ b/js/src/vm/Modules.cpp
+@@ -46,9 +46,9 @@ using mozilla::Utf8Unit;
+ 
+ static bool ModuleLink(JSContext* cx, Handle<ModuleObject*> module);
+ static bool ModuleEvaluate(JSContext* cx, Handle<ModuleObject*> module,
+-                           MutableHandle<Value> result);
++                           MutableHandle<Value> rval);
+ static bool SyntheticModuleEvaluate(JSContext* cx, Handle<ModuleObject*> module,
+-                                    MutableHandle<Value> result);
++                                    MutableHandle<Value> rval);
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ // Public API
+@@ -1493,8 +1493,8 @@ static bool InnerModuleLinking(JSContext* cx, Handle<ModuleObject*> module,
+ 
+ static bool SyntheticModuleEvaluate(JSContext* cx,
+                                     Handle<ModuleObject*> moduleArg,
+-                                    MutableHandle<Value> result) {
+-  // Steps 1-12 happens elsewhere in the engine.
++                                    MutableHandle<Value> rval) {
++  // Steps 1-12 happen elsewhere in the engine.
+ 
+   // Step 13. Let pc be ! NewPromiseCapability(%Promise%).
+   Rooted<PromiseObject*> resultPromise(cx, CreatePromiseObjectForAsync(cx));
+@@ -1502,15 +1502,18 @@ static bool SyntheticModuleEvaluate(JSContext* cx,
+     return false;
+   }
+ 
++  // Since the only synthetic modules we support are JSON modules, result is
++  // always |undefined|.
++
+   // Step 14. IfAbruptRejectPromise(result, pc) (Skipped)
+ 
+   // 15. Perform ! pc.[[Resolve]](result).
+-  if (!AsyncFunctionReturned(cx, resultPromise, result)) {
++  if (!AsyncFunctionReturned(cx, resultPromise, JS::UndefinedHandleValue)) {
+     return false;
+   }
+ 
+   // 16. Return pc.[[Promise]].
+-  result.set(ObjectValue(*resultPromise));
++  rval.set(ObjectValue(*resultPromise));
+   return true;
+ }
+ 

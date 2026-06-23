@@ -1,0 +1,243 @@
+From 269d7c0f238a38e272f19f98a217989524c9f799 Mon Sep 17 00:00:00 2001
+From: Igor Sheludko <ishell@chromium.org>
+Date: Thu, 21 Aug 2025 19:14:08 +0200
+Subject: [PATCH] [sandbox] Make DebugBreakTrampoline check the arguments count
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+... when tail calling to code.
+
+Drive-by: introduce TailCallJSCode() variants for loading the code
+from dispatch table or function (according to V8_ENABLE_LEAPTIERING
+state) and for validating that the code's parameter count matches
+the parameter count stored in dispatch table.
+
+Fixed: 435630467
+Change-Id: I446c2d08071a1acc4d450f3f7603ae9a5c3020a9
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/6871396
+Reviewed-by: Samuel Groß <saelo@chromium.org>
+Commit-Queue: Igor Sheludko <ishell@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#101985}
+---
+ src/builtins/builtins-internal-gen.cc     |  5 ++-
+ src/builtins/js-trampoline-assembler.cc   | 21 +++++-----
+ src/codegen/code-stub-assembler.cc        | 37 +++++++++++++++++
+ src/codegen/code-stub-assembler.h         | 24 ++++++++++-
+ test/mjsunit/sandbox/regress-435630467.js | 49 +++++++++++++++++++++++
+ 5 files changed, 121 insertions(+), 15 deletions(-)
+ create mode 100644 test/mjsunit/sandbox/regress-435630467.js
+
+diff --git a/src/builtins/builtins-internal-gen.cc b/src/builtins/builtins-internal-gen.cc
+index 4e1ff8bae74..16ac0c97760 100644
+--- a/src/builtins/builtins-internal-gen.cc
++++ b/src/builtins/builtins-internal-gen.cc
+@@ -110,9 +110,10 @@ TF_BUILTIN(DebugBreakTrampoline, CodeStubAssembler) {
+ 
+   BIND(&tailcall_to_shared);
+   // Tail call into code object on the SharedFunctionInfo.
+-  // TODO(saelo): this is not safe. We either need to validate the parameter
+-  // count here or obtain the code from the dispatch table.
+   TNode<Code> code = GetSharedFunctionInfoCode(shared);
++
++  // TailCallJSCode will take care of parameter count validation between the
++  // code and dispatch handle.
+   TailCallJSCode(code, context, function, new_target, arg_count,
+                  dispatch_handle);
+ }
+diff --git a/src/builtins/js-trampoline-assembler.cc b/src/builtins/js-trampoline-assembler.cc
+index 09cd0359861..d07f3a7d51d 100644
+--- a/src/builtins/js-trampoline-assembler.cc
++++ b/src/builtins/js-trampoline-assembler.cc
+@@ -32,13 +32,13 @@ void JSTrampolineAssembler::TailCallJSFunction(TNode<JSFunction> function) {
+              Word32Equal(dispatch_handle,
+                          LoadObjectField<JSDispatchHandleT>(
+                              function, JSFunction::kDispatchHandleOffset)));
+-  TNode<Code> code = LoadCodeObjectFromJSDispatchTable(dispatch_handle);
+ #else  // V8_ENABLE_LEAPTIERING
+   auto dispatch_handle = InvalidDispatchHandleConstant();
+-  TNode<Code> code =
+-      LoadCodePointerFromObject(function, JSFunction::kCodeOffset);
+-#endif
+-  TailCallJSCode(code, context, function, new_target, argc, dispatch_handle);
++#endif  // V8_ENABLE_LEAPTIERING
++
++  // TailCallJSCode will load the code from the dispatch table or function
++  // according to V8_ENABLE_LEAPTIERING state.
++  TailCallJSCode(context, function, new_target, argc, dispatch_handle);
+ }
+ 
+ #ifndef V8_ENABLE_LEAPTIERING
+@@ -245,13 +245,10 @@ void JSTrampolineAssembler::TieringBuiltinImpl(const Function& Impl) {
+                          LoadObjectField<JSDispatchHandleT>(
+                              function, JSFunction::kDispatchHandleOffset)));
+ 
+-  // Load the code directly from the dispatch table to guarantee the signature
+-  // of the code matches with the number of arguments passed when calling into
+-  // this trampoline.
+-  // TODO(saelo): consider removing the {code} parameter from TailCallJSCode
+-  // entirely and only passing the dispatch_handle.
+-  TNode<Code> code = LoadCodeObjectFromJSDispatchTable(dispatch_handle);
+-  TailCallJSCode(code, context, function, new_target, argc, dispatch_handle);
++  // TailCallJSCode will load the code from the dispatch table to guarantee
++  // that the signature of the code matches with the number of arguments
++  // passed when calling into this trampoline.
++  TailCallJSCode(context, function, new_target, argc, dispatch_handle);
+ }
+ 
+ TF_BUILTIN(FunctionLogNextExecution, JSTrampolineAssembler) {
+diff --git a/src/codegen/code-stub-assembler.cc b/src/codegen/code-stub-assembler.cc
+index 2f1617f9a72..8cf0ffd9cb1 100644
+--- a/src/codegen/code-stub-assembler.cc
++++ b/src/codegen/code-stub-assembler.cc
+@@ -2077,6 +2077,39 @@ TNode<Uint16T> CodeStubAssembler::LoadParameterCountFromJSDispatchTable(
+ 
+ #endif  // V8_ENABLE_LEAPTIERING
+ 
++void CodeStubAssembler::TailCallJSCode(
++    TNode<Code> code, TNode<Context> context, TNode<JSFunction> function,
++    TNode<Object> new_target, TNode<Int32T> arg_count,
++    TNode<JSDispatchHandleT> dispatch_handle) {
++#ifdef V8_ENABLE_SANDBOX
++  // Check that the code has a matching parameter count. This ensures that
++  // the target code will correctly tear down parameters when leaving.
++  static_assert(V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL);
++  CSA_SBXCHECK(
++      this,
++      Word32Equal(LoadCodeParameterCount(code),
++                  LoadParameterCountFromJSDispatchTable(dispatch_handle)));
++#endif  // V8_ENABLE_SANDBOX
++
++  CodeAssembler::TailCallJSCode(code, context, function, new_target, arg_count,
++                                dispatch_handle);
++}
++
++void CodeStubAssembler::TailCallJSCode(
++    TNode<Context> context, TNode<JSFunction> function,
++    TNode<Object> new_target, TNode<Int32T> arg_count,
++    TNode<JSDispatchHandleT> dispatch_handle) {
++#ifdef V8_ENABLE_LEAPTIERING
++  TNode<Code> code = LoadCodeObjectFromJSDispatchTable(dispatch_handle);
++#else
++  TNode<Code> code =
++      LoadCodePointerFromObject(function, JSFunction::kCodeOffset);
++#endif  // V8_ENABLE_LEAPTIERING
++
++  CodeAssembler::TailCallJSCode(code, context, function, new_target, arg_count,
++                                dispatch_handle);
++}
++
+ #ifdef V8_ENABLE_SANDBOX
+ 
+ TNode<TrustedObject> CodeStubAssembler::LoadIndirectPointerFromObject(
+@@ -3896,6 +3929,10 @@ TNode<Code> CodeStubAssembler::LoadInterpreterDataInterpreterTrampoline(
+       data, offsetof(InterpreterData, interpreter_trampoline_)));
+ }
+ 
++TNode<Int32T> CodeStubAssembler::LoadCodeParameterCount(TNode<Code> code) {
++  return LoadObjectField<Uint16T>(code, Code::kParameterCountOffset);
++}
++
+ TNode<Int32T> CodeStubAssembler::LoadBytecodeArrayParameterCount(
+     TNode<BytecodeArray> bytecode_array) {
+   return LoadObjectField<Uint16T>(bytecode_array,
+diff --git a/src/codegen/code-stub-assembler.h b/src/codegen/code-stub-assembler.h
+index adab49f89b7..984e26010bf 100644
+--- a/src/codegen/code-stub-assembler.h
++++ b/src/codegen/code-stub-assembler.h
+@@ -1753,6 +1753,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+   TNode<Code> LoadInterpreterDataInterpreterTrampoline(
+       TNode<InterpreterData> data);
+ 
++  TNode<Int32T> LoadCodeParameterCount(TNode<Code> code);
++
+   TNode<Int32T> LoadBytecodeArrayParameterCount(
+       TNode<BytecodeArray> bytecode_array);
+   TNode<Int32T> LoadBytecodeArrayParameterCountWithoutReceiver(
+@@ -4276,7 +4278,27 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+ 
+   TNode<UintPtrT> ComputeJSDispatchTableEntryOffset(
+       TNode<JSDispatchHandleT> handle);
+-#endif
++#endif  // V8_ENABLE_LEAPTIERING
++
++  // Tailcalls to the given code object with JSCall linkage. The JS arguments
++  // (including receiver) are supposed to be already on the stack.
++  // This is a building block for implementing trampoline stubs that are
++  // installed instead of code objects with JSCall linkage.
++  // Note that no arguments adaption is going on here - all the JavaScript
++  // arguments are left on the stack unmodified. Therefore, this tail call can
++  // only be used after arguments adaptation has been performed already.
++  // When Sandbox is enabled it also checks that the code's parameter count
++  // and dispatch handle's parameter counts match.
++  void TailCallJSCode(TNode<Code> code, TNode<Context> context,
++                      TNode<JSFunction> function, TNode<Object> new_target,
++                      TNode<Int32T> arg_count,
++                      TNode<JSDispatchHandleT> dispatch_handle);
++  // Same as above, but the code object is loaded from the dispatch table
++  // entry or from the function according to V8_ENABLE_LEAPTIERING state and
++  // thus the parameter count check is not necessary.
++  void TailCallJSCode(TNode<Context> context, TNode<JSFunction> function,
++                      TNode<Object> new_target, TNode<Int32T> arg_count,
++                      TNode<JSDispatchHandleT> dispatch_handle);
+ 
+   // Indicate that this code must support a dynamic parameter count.
+   //
+diff --git a/test/mjsunit/sandbox/regress-435630467.js b/test/mjsunit/sandbox/regress-435630467.js
+new file mode 100644
+index 00000000000..58f1718287f
+--- /dev/null
++++ b/test/mjsunit/sandbox/regress-435630467.js
+@@ -0,0 +1,49 @@
++// Copyright 2025 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Flags: --sandbox-testing --allow-natives-syntax
++
++const kJSFunctionType = Sandbox.getInstanceTypeIdFor('JS_FUNCTION_TYPE');
++const kSharedFunctionInfoType = Sandbox.getInstanceTypeIdFor('SHARED_FUNCTION_INFO_TYPE');
++const kJSFunctionSFIOffset = Sandbox.getFieldOffset(kJSFunctionType, 'shared_function_info');
++const kSharedFunctionInfoTrustedFunctionDataOffset = Sandbox.getFieldOffset(kSharedFunctionInfoType, 'trusted_function_data');
++const kSharedFunctionInfoUntrustedFunctionDataOffset = Sandbox.getFieldOffset(kSharedFunctionInfoType, 'function_data');
++const kSharedFunctionInfoScriptOffset = Sandbox.getFieldOffset(kSharedFunctionInfoType, 'script');
++const kHeapObjectTag = 1;
++
++let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
++
++function getBuiltinId(name) {
++  return Sandbox.getBuiltinNames().indexOf(name);
++}
++
++function setFunctionsSFIToBuiltin(f, builtin_id) {
++  let f_addr = Sandbox.getAddressOf(f);
++  let sfi = memory.getUint32(f_addr + kJSFunctionSFIOffset, true) - kHeapObjectTag;
++  // For builtins trusted_function_data should be zero and script should be
++  // undefined.
++  memory.setUint32(sfi + kSharedFunctionInfoTrustedFunctionDataOffset, 0, true);
++  memory.setUint32(sfi + kSharedFunctionInfoUntrustedFunctionDataOffset, builtin_id << 1, true);
++  memory.setUint32(sfi + kSharedFunctionInfoScriptOffset, 0x11, true);  // undefined
++}
++
++// Function with 0x100 args.
++let fn = new Function(Array(0x100).fill().map((_, i)=>'p'+i), '');
++%PrepareFunctionForOptimization(fn);
++fn();
++
++let wrap_fn = (run) => {
++  run();
++};
++
++
++%PrepareFunctionForOptimization(wrap_fn);
++
++Sandbox.setFunctionCodeToBuiltin(fn, getBuiltinId("DebugBreakTrampoline"));
++
++setFunctionsSFIToBuiltin(fn, getBuiltinId("EmptyFunction"));
++
++wrap_fn(fn);
++// Arguments count mismatch must be detected during the previous call.
++assertUnreachable();
+-- 
+2.43.0
+

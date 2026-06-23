@@ -1,0 +1,34 @@
+{
+    "image_name": "hwiwonlee/sm.x86_64:1970095",
+    "work_dir": "/src/gecko-dev",
+    "target_source_files": [
+        "js/src/builtin/OrderedHashTableObject.h"
+    ],
+    "target_subdir": [
+        "js/src/builtin"
+    ],
+    "command_options": "",
+    "verification_binary": "/out/js",
+    "target_vulnerability_type": "Integer truncation",
+    "error_type": "ASAN_CRASH",
+    "description": "OrderedHashTableObject Rehash — size_t Allocation Size Truncated to uint32_t in AllocNurseryOrMallocBuffer, memcpy Writes Past Under-Allocated Buffer (CVE-2025-49710). CVE-2025-49710 (sec-high). The OrderedHashTableObject code uses size_t for buffer size calculations but calls AllocNurseryOrMallocBuffer which takes a uint32_t argument. When a Map or Set grows large enough (SpiderMonkey allows up to ~170 million entries, far exceeding Chrome's 2^24 limit), the allocation size overflows on truncation to uint32_t, causing a too-small buffer to be allocated. The subsequent memcpy during rehash writes past the allocated buffer, enabling heap corruption. The fix limits the maximum number of Map/Set entries and transitions allocation functions to use size_t.",
+    "fix_commits": [
+        "4f27a916218de6a299db8d00d48ad5e91db9832d"
+    ],
+    "fixes": [
+        {
+            "kind": "patch_file",
+            "path": "patches/0001-clean-up-some-map-set-code.patch",
+            "apply_in_gecko_repo": true,
+            "role": "primary",
+            "sequence": 1,
+            "description": "Bug 1970095 - Clean up some Map/Set code. r=iain",
+            "source_commit": "4f27a916218de6a299db8d00d48ad5e91db9832d",
+            "commit": "4f27a916218de6a299db8d00d48ad5e91db9832d",
+            "url": "https://hg.mozilla.org/mozilla-central/rev/4f27a916218de6a299db8d00d48ad5e91db9832d",
+            "source_url": "https://github.com/mozilla/gecko-dev/commit/4f27a916218de6a299db8d00d48ad5e91db9832d",
+            "phabricator": "D252581"
+        }
+    ],
+    "vrp": null
+}

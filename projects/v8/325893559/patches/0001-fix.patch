@@ -1,0 +1,46 @@
+From 7330f46163e8a2c10a3d40ecbf554656f0ac55e8 Mon Sep 17 00:00:00 2001
+From: Andreas Haas <ahaas@chromium.org>
+Date: Tue, 20 Feb 2024 16:27:22 +0100
+Subject: [PATCH] [wasm] Add bounds check in tier-up of wasm-to-js wrapper
+
+The entry index in the WasmApiFunctionRef was used to look for the given
+WasmApiFunctionRef in the indirect function tables, but it was not
+considered that the indirect function tables can have different lengths.
+
+R=clemensb@chromium.org
+
+Bug: 325893559
+Change-Id: I0497c7a769515345d586d250cc71e0dfc7c70394
+Reviewed-on: https://chromium-review.googlesource.com/c/v8/v8/+/5309898
+Reviewed-by: Clemens Backes <clemensb@chromium.org>
+Commit-Queue: Andreas Haas <ahaas@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#92442}
+---
+ src/runtime/runtime-wasm.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/runtime/runtime-wasm.cc b/src/runtime/runtime-wasm.cc
+index c60cbc92949..d869884036c 100644
+--- a/src/runtime/runtime-wasm.cc
++++ b/src/runtime/runtime-wasm.cc
+@@ -614,7 +614,7 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+     for (int table_index = 0; table_index < table_count; ++table_index) {
+       Tagged<WasmDispatchTable> table =
+           trusted_data->dispatch_table(table_index);
+-      if (table->ref(entry_index) == *ref) {
++      if (entry_index < table->length() && table->ref(entry_index) == *ref) {
+         canonical_sig_index = table->sig(entry_index);
+         break;
+       }
+@@ -685,7 +685,7 @@ RUNTIME_FUNCTION(Runtime_TierUpWasmToJSWrapper) {
+     for (int table_index = 0; table_index < table_count; ++table_index) {
+       Tagged<WasmDispatchTable> table =
+           trusted_data->dispatch_table(table_index);
+-      if (table->ref(entry_index) == *ref) {
++      if (entry_index < table->length() && table->ref(entry_index) == *ref) {
+         table->SetTarget(entry_index, wasm_code->instruction_start());
+         // {ref} is used in at most one table.
+         break;
+-- 
+2.43.0
+

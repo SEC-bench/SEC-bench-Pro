@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:444189152",
+  "work_dir": "/src/v8",
+  "target_source_files": [
+    "src/compiler/backend/x64/instruction-selector-x64.cc"
+  ],
+  "target_subdir": [
+    "src/compiler/backend/x64"
+  ],
+  "command_options": "--no-liftoff --disable-in-process-stack-traces",
+  "verification_binary": "out/x64.asan/d8",
+  "target_vulnerability_type": "Integer overflow",
+  "error_type": "ASAN_CRASH",
+  "description": "An integer overflow vulnerability exists in the `TryEmitLoadForLoadWord64AndShiftRight` function in V8's x64 instruction selector (`src/compiler/backend/x64/instruction-selector-x64.cc`). This function optimizes the pattern of loading a 64-bit value from memory and right-shifting it by 32 bits, by instead directly loading only the upper 32 bits from `original_offset + 4`. The root cause is that the function checks whether the original memory displacement fits within an int32 range (via `ValueFitsIntoImmediate`), but does not verify that `displacement + 4` also fits within int32. When `displacement` is close to `INT32_MAX` (e.g., `0x7FFFFFFC`), adding 4 causes a signed 32-bit integer overflow, wrapping around to a large negative value (e.g., `-2147483648`). This overflowed negative offset is then encoded into the generated machine instruction, causing an out-of-bounds memory read. The vulnerability is triggered by WebAssembly code compiled with TurboFan (--no-liftoff) that performs a 64-bit load from a near-INT32_MAX memory offset followed by a 32-bit unsigned right shift. The JIT instruction selector applies the load optimization, but the offset arithmetic overflows, resulting in a segmentation fault (out-of-bounds read).",
+  "vrp": "none",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6939347 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "89ab7b1efb333b85f5669b10659b8b4abf14bb9b [compiler] Avoid overflow in Load>>32 ISEL optimization",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6939347",
+      "source_cl": 6939347,
+      "source_commit": "89ab7b1efb333b85f5669b10659b8b4abf14bb9b"
+    }
+  ]
+}

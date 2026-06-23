@@ -1,0 +1,2 @@
+Assertion failure: ins->compareType() == MCompare::Compare_String, at /src/gecko-dev/js/src/jit/MIR.cpp:3849
+Segmentation fault (core dumped)

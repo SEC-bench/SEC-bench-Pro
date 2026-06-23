@@ -1,0 +1,32 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:446113732",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--experimental-wasm-custom-descriptors",
+  "target_source_files": [
+    "src/wasm/function-body-decoder-impl.h"
+  ],
+  "target_subdir": [
+    "src/wasm"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's implementation of WebAssembly custom descriptors because `ref.cast_desc` and `br_on_cast_desc*` allow subtype relationships between descriptors to justify casts between unrelated described struct types. Descriptor subtyping does not imply subtyping between the underlying described structs, so these operations can unsoundly alias incompatible Wasm objects. Attackers can exploit that mismatch to obtain arbitrary caged writes within the sandbox.",
+  "vrp": "55000",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "description": "Patch generated from https://chromium-review.googlesource.com/c/v8/v8/+/6973586 to avoid remote fetch during validation.",
+      "context": "landed-commit-patch",
+      "evidence_lineno": 0,
+      "evidence_text": "48c3551179299151b044b2c161566465497c0407 [wasm-custom-desc] Fix subtyping",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/6973586",
+      "source_cl": 6973586,
+      "source_commit": "48c3551179299151b044b2c161566465497c0407"
+    }
+  ]
+}

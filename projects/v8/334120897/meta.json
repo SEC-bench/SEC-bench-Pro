@@ -1,0 +1,48 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:334120897",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.release/d8",
+  "command_options": "--sandbox-testing --no-wasm-bounds-checks",
+  "target_source_files": [
+    "src/wasm/wasm-objects.tq",
+    "src/compiler/wasm-compiler.cc"
+  ],
+  "target_subdir": [
+    "src/wasm",
+    "src/compiler"
+  ],
+  "target_vulnerability_type": "Sandbox bypass",
+  "description": "A sandbox bypass vulnerability exists in V8's WebAssembly implementation due to a security boundary violation in the JS-to-Wasm call path. The root cause is that WasmFunctionData (a HeapObject living inside the V8 sandbox) holds a func_ref field that determines which call_target (JIT-compiled code) gets invoked. Because WasmFunctionData and WasmFuncRef are regular heap objects, an attacker with intra-sandbox write capability can overwrite WasmFunctionData.func_ref of one exported function to point to a different function's WasmFuncRef. The JSToWasmWrapper (generated in wasm-compiler.cc, BuildCallAndReturn) then loads call_target from this attacker-controlled WasmFuncRef->WasmInternalFunction chain and invokes it with arguments that were type-converted according to the calling function's declared signature. For example, if a function expecting (i32)->i64 has its func_ref replaced with that of a function expecting (i64)->i64, the JIT code for the i32 function runs with a full 64-bit offset, enabling an out-of-bounds memory read/write at arbitrary 64-bit addresses outside the V8 sandbox. Two files are included because the flaw spans both: wasm-objects.tq defines the insecure object layout (func_ref as an in-sandbox heap pointer that controls execution), and wasm-compiler.cc is where BuildCallAndReturn dereferences that pointer to obtain the call_target without any signature consistency check.",
+  "vrp": 6000,
+  "error_type": "SANDBOX_VIOLATION",
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "source_commits": [
+        "33e4006f1ee2f61e701a94b9bde9c5e16add6891",
+        "cf9373a0d6760146534b096cee60675a3ea09ad7",
+        "5942a14103720910a8c6a0aebc67f4314dd8fdd9"
+      ],
+      "context": "fix-parent-to-final-tree-diff",
+      "description": "Non-empty tree diff from the vulnerable parent checkout to the final validated fix commit.",
+      "source_urls": [
+        "https://chromium-review.googlesource.com/c/v8/v8/+/5453422",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/5484107",
+        "https://chromium-review.googlesource.com/c/v8/v8/+/5494364"
+      ],
+      "source_cls": [
+        5453422,
+        5484107,
+        5494364
+      ],
+      "evidence_text": "Fix chain for 334120897: trap handler sandbox-region check, trusted WasmFunctionData, and i32 high-word zeroing.",
+      "source_commit": "5942a14103720910a8c6a0aebc67f4314dd8fdd9",
+      "source_url": "https://chromium-review.googlesource.com/c/v8/v8/+/5494364",
+      "source_cl": 5494364
+    }
+  ]
+}

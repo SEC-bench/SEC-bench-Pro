@@ -1,0 +1,37 @@
+{
+  "image_name": "hwiwonlee/v8.x86_64:327740539",
+  "work_dir": "/src/v8",
+  "verification_binary": "out/x64.asan/d8",
+  "command_options": "--allow-natives-syntax --fuzzing --stress-background-compile --parallel-compile-tasks-for-lazy",
+  "target_source_files": [
+    "src/ast/scopes.cc"
+  ],
+  "target_subdir": [
+    "src/ast"
+  ],
+  "target_vulnerability_type": "Type confusion",
+  "error_type": "RUNTIME_CRASH",
+  "description": "A type confusion vulnerability exists in V8's background compilation path due to an unsafe cross-thread handle dereference in Scope::NewHomeObjectVariableProxy (src/ast/scopes.cc). When background compilation (via BackgroundCompileTask/LazyCompileDispatcher) lazily parses a function that contains a super property expression (e.g., super.prop) and the enclosing scope already has a scope_info_ (i.e., a prior scope info from a previous parse), the function calls scope_info_->ContextSlotIndex(name->string(), &lookup_result). The name->string() call returns a Handle<String> that was created in the main thread's handle scope. V8's threading model prohibits background threads from dereferencing handles not owned by their LocalHeap; background threads may only dereference their own local or persistent handles. When the main thread's heap is in a 'parked' state, its objects can be relocated by the garbage collector. If a background thread dereferences a main-thread handle at this point, it may access a stale or relocated heap object, leading to type confusion. The bug is triggered with --stress-background-compile --parallel-compile-tasks-for-lazy flags when JavaScript code uses super property access inside methods of classes that undergo lazy background compilation.",
+  "vrp": 15000,
+  "fixes": [
+    {
+      "kind": "patch_file",
+      "path": "patches/0001-fix.patch",
+      "apply_in_v8_repo": true,
+      "role": "primary",
+      "sequence": 1,
+      "context": "explicit-fix",
+      "evidence_lineno": 297,
+      "evidence_text": "merges approved for [https://crrev.com/c/5350482](<https://crrev.com/c/5350482>) please merge this fix to 12.3-lkgr and 12.2-lkgr at your earliest convenience",
+      "url": "https://crrev.com/c/5350482",
+      "cl": 5350482,
+      "commit": "8f477f936c9b9e6b4c9f35a8ccc5e65bd4cb7f4e",
+      "description": "Local patch exported from https://crrev.com/c/5350482 for reproducible fixed-image builds.",
+      "source_url": "https://crrev.com/c/5350482",
+      "source_cl": 5350482,
+      "source_commit": "8f477f936c9b9e6b4c9f35a8ccc5e65bd4cb7f4e",
+      "source_ref": "refs/changes/82/5350482/6",
+      "source_patchset": 6
+    }
+  ]
+}
