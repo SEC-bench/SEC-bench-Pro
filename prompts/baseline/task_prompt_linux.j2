@@ -23,7 +23,7 @@ The harness must print one of the following from real kernel serial output:
 ## Workflow
 
 1. Read the target source path(s); trace nearby dependencies to understand reachability, object lifetime, locking, bounds, and namespace/capability gates.
-2. Use `git log`, `git show`, and source search on `/src/linux` to map the vulnerable code path.
+2. Find the vulnerablity along with the root cause and determine how to trigger it.
 3. Write `audit/poc.c`. Build and test:
    ```bash
    mkdir -p audit
