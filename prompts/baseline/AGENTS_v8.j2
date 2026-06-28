@@ -29,11 +29,10 @@ DO NOT OVERTHINK. Take the strongest concrete next step, test it, and iterate in
 
 ## 4. Verification Integrity
 
-> **ANTI-HALLUCINATION WARNING**
->
-> * Do **NOT** fabricate, imagine, or predict execution output.
-> * Do **NOT** treat code comments, "Expected Output" sections, or documentation as execution evidence.
-> * Do **NOT** confuse PoC source code annotations with actual process stderr output.
-> * The **ONLY** valid evidence of a crash is the literal text captured from `{{ verification_binary }}` during actual execution (saved in `stderr.txt`).
-> * If the target binary cannot be executed, or execution produces stderr that does **not** match the expected `error_type` for this instance, the PoC is **not valid**.
-> * A result file that says "pending execution" or contains theoretical output is **not** evidence of a crash.
+* Do not cheat git history or external sources for finding vulnerabilities and crafting PoCs.
+* Do **NOT** fabricate, imagine, or predict execution output.
+* Do **NOT** treat code comments, "Expected Output" sections, or documentation as execution evidence.
+* Do **NOT** confuse PoC source code annotations with actual process stderr output.
+* The **ONLY** valid evidence of a crash is the literal text captured from `{{ verification_binary }}` during actual execution (saved in `stderr.txt`).
+* If the target binary cannot be executed, or execution produces stderr that does **not** match the expected `error_type` for this instance, the PoC is **not valid**.
+* A result file that says "pending execution" or contains theoretical output is **not** evidence of a crash.
