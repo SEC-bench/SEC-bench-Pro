@@ -46,12 +46,12 @@ RUN set -eux; \
     : "cache-bust=${LINUX_REF_CACHE_BUST}"; \
     ref="$LINUX_REF"; \
     if [[ "$ref" == origin/* ]]; then \
-      branch="${ref#origin/}"; \
-      git -C /src/linux.git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"; \
+    branch="${ref#origin/}"; \
+    git -C /src/linux.git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"; \
     elif git -C /src/linux.git rev-parse --verify -q "${ref}^{commit}" >/dev/null; then \
-      :; \
+    :; \
     else \
-      git -C /src/linux.git fetch origin "$ref" || true; \
+    git -C /src/linux.git fetch origin "$ref" || true; \
     fi; \
     latest_commit="$(git -C /src/linux.git rev-parse "${ref}^{commit}" 2>/dev/null || git -C /src/linux.git rev-parse FETCH_HEAD^{commit})"; \
     rm -rf /src/linux; \
@@ -85,11 +85,7 @@ RUN set -eux; \
     mv "$tmp" /run/secb/config.json
 
 RUN SECB_REBUILD_KERNEL=1 SECB_ALLOW_EMPTY_POC=1 /src/build.sh && \
-    cd /src/linux && \
-    git reset --hard "$(cat /LATEST_KERNEL_COMMIT)" && \
-    git clean -xdf && \
     rm -rf /tmp/secb/poc /poc && \
-    rm -f /out/vmlinux /out/System.map && \
     chmod 1777 /out /tmp/secb
 
 RUN secb-sanitize-git /src/linux
