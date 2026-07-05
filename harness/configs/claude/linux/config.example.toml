@@ -10,16 +10,79 @@ images_dir = "../projects/linux"
 
 tracking = "none"
 privileged = true
+update_claude_cli = true
+claude_sandbox = true
+dangerously_skip_permissions = false
+strict_mcp_config = true
 
 allowed_tools = [
+    "Agent",
     "Bash",
     "Read",
     "Write",
     "Edit",
     "Glob",
     "Grep",
-    "TodoWrite",
-    "TodoRead",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskUpdate",
+    "mcp__secb__*",
 ]
 output_format = "stream-json"
 reasoning_effort = "max"
+
+[mcp_servers.secb]
+type = "stdio"
+command = "secb-linux-vm-mcp"
+
+[claude_settings]
+disableClaudeAiConnectors = true
+disableRemoteControl = true
+disableArtifact = true
+disableSkillShellExecution = true
+disableAllHooks = true
+
+[claude_settings.permissions]
+disableBypassPermissionsMode = "disable"
+
+[claude_settings.sandbox]
+enabled = true
+failIfUnavailable = true
+autoAllowBashIfSandboxed = true
+allowUnsandboxedCommands = false
+
+[claude_settings.sandbox.network]
+deniedDomains = ["*"]
+
+[[claude_settings.sandbox.credentials.files]]
+path = "/root/.claude"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.files]]
+path = "/root/.claude.json"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_BEDROCK"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_VERTEX"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_FOUNDRY"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "ANTHROPIC_AUTH_TOKEN"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "ANTHROPIC_API_KEY"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_OAUTH_TOKEN"
+mode = "deny"

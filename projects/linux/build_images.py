@@ -6,27 +6,39 @@ execution and per-instance logging.
 
 Examples:
     # Build everything (base first, then vuln+fixed+latest in parallel)
-    python linux/build_images.py --mode all -j 4
+    python projects/linux/build_images.py --mode all -j 4
 
     # Build only vulnerable images for two CVEs
-    python linux/build_images.py --mode vuln --instances CVE-2022-0185 CVE-2021-22555
+    python projects/linux/build_images.py --mode vuln --instances CVE-2022-0185 CVE-2021-22555
 
     # Build latest images with a specific kernel ref
-    python linux/build_images.py --mode latest --linux-ref v6.15 -j 8
+    python projects/linux/build_images.py --mode latest --linux-ref v6.15 -j 8
 
     # Rebuild base image with no cache
-    python linux/build_images.py --mode base --no-cache
+    python projects/linux/build_images.py --mode base --no-cache
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from rich.text import Text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LINUX_DIR = Path(__file__).resolve().parent
@@ -44,8 +56,25 @@ def ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def log(msg: str) -> None:
-    print(f"[{ts()}] {msg}", flush=True)
+def make_progress() -> Progress:
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("elapsed"),
+        TimeElapsedColumn(),
+        TextColumn("eta"),
+        TimeRemainingColumn(),
+    )
+
+
+def log(msg: str, progress: Progress | None = None) -> None:
+    line = f"[{ts()}] {msg}"
+    if progress:
+        progress.console.print(Text(line))
+    else:
+        print(line, flush=True)
 
 
 def discover_instances() -> list[str]:
@@ -63,6 +92,7 @@ def build_image(
     no_cache: bool = False,
     log_file: Path | None = None,
     skip_existing: bool = False,
+    secrets: list[str] | None = None,
 ) -> tuple[str, bool, float]:
     """Run a single docker build. Returns (tag, success, duration_seconds)."""
     if skip_existing:
@@ -82,6 +112,8 @@ def build_image(
         cmd.append("--no-cache")
     for k, v in (build_args or {}).items():
         cmd += ["--build-arg", f"{k}={v}"]
+    for s in secrets or []:
+        cmd += ["--secret", s]
     cmd.append(str(context))
 
     start = time.monotonic()
@@ -89,6 +121,7 @@ def build_image(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        env={**os.environ, "DOCKER_BUILDKIT": "1"},
     )
     elapsed = time.monotonic() - start
 
@@ -99,27 +132,41 @@ def build_image(
     return tag, result.returncode == 0, elapsed
 
 
-def build_base(args: argparse.Namespace, log_dir: Path) -> bool:
-    log("building base image: hwiwonlee/linux.base:latest")
+def build_base(
+    args: argparse.Namespace,
+    log_dir: Path,
+    progress: Progress | None = None,
+) -> bool:
+    task_id = None
+    if progress:
+        task_id = progress.add_task("base image", total=1)
+
+    log("building base image: hwiwonlee/linux.base:latest", progress)
     tag = f"{IMAGE_REPOS['base']}:latest"
     build_args = {}
     if args.kbuild_jobs:
         build_args["KBUILD_JOBS"] = str(args.kbuild_jobs)
 
+    # Context is the repo root so the Dockerfile can COPY the vendored MCP
+    # (mcps/linux) alongside base/linux/*. A repo-root .dockerignore keeps the
+    # sent context lean. No gh token / secret needed anymore.
     log_file = log_dir / "base.log"
     tag, ok, elapsed = build_image(
         tag=tag,
-        context=BASE_DIR,
+        context=REPO_ROOT,
         dockerfile=BASE_DIR / "Dockerfile",
         build_args=build_args,
         no_cache=args.no_cache,
         log_file=log_file,
         skip_existing=args.skip_existing,
     )
+    if progress and task_id is not None:
+        progress.advance(task_id)
+
     if ok:
-        log(f"base ok ({elapsed:.0f}s)")
+        log(f"base ok ({elapsed:.0f}s)", progress)
     else:
-        log(f"base FAILED — see {log_file}")
+        log(f"base FAILED — see {log_file}", progress)
     return ok
 
 
@@ -128,10 +175,14 @@ def build_instances_parallel(
     instances: list[str],
     args: argparse.Namespace,
     log_dir: Path,
+    progress: Progress | None = None,
 ) -> list[str]:
     """Build vuln/fixed/latest images in parallel. Returns list of failed instance IDs."""
     repo = IMAGE_REPOS[mode]
     failed: list[str] = []
+    task_id = None
+    if progress:
+        task_id = progress.add_task(f"{mode} images", total=len(instances))
 
     def _build_one(cve: str) -> tuple[str, bool, float, Path]:
         tag = f"{repo}:{cve}"
@@ -175,12 +226,14 @@ def build_instances_parallel(
     start_idx = 0
     if mode == "latest" and len(instances) > 1 and args.parallel > 1:
         first = instances[0]
-        log(f"[{mode}] warming cache with {first}")
+        log(f"[{mode}] warming cache with {first}", progress)
         cve, ok, elapsed, lf = _build_one(first)
+        if progress and task_id is not None:
+            progress.advance(task_id)
         if ok:
-            log(f"[{mode}] {cve} ok ({elapsed:.0f}s)")
+            log(f"[{mode}] {cve} ok ({elapsed:.0f}s)", progress)
         else:
-            log(f"[{mode}] {cve} FAILED — see {lf}")
+            log(f"[{mode}] {cve} FAILED — see {lf}", progress)
             failed.append(cve)
         start_idx = 1
 
@@ -192,10 +245,12 @@ def build_instances_parallel(
         futures = {pool.submit(_build_one, cve): cve for cve in remaining}
         for future in as_completed(futures):
             cve, ok, elapsed, lf = future.result()
+            if progress and task_id is not None:
+                progress.advance(task_id)
             if ok:
-                log(f"[{mode}] {cve} ok ({elapsed:.0f}s)")
+                log(f"[{mode}] {cve} ok ({elapsed:.0f}s)", progress)
             else:
-                log(f"[{mode}] {cve} FAILED — see {lf}")
+                log(f"[{mode}] {cve} FAILED — see {lf}", progress)
                 failed.append(cve)
 
     return failed
@@ -269,6 +324,11 @@ def main() -> int:
         action="store_true",
         help="Push images after successful build.",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable the rich progress bar.",
+    )
     args = parser.parse_args()
 
     if args.parallel < 1:
@@ -288,55 +348,66 @@ def main() -> int:
     log_dir = LINUX_DIR / "build_logs" / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    log(f"instances: {len(instances)}")
-    log(f"modes: {', '.join(modes)}")
-    log(f"parallel: {args.parallel}")
-    log(f"logs: {log_dir}")
-
     all_failed: dict[str, list[str]] = {}
     total_start = time.monotonic()
 
-    for mode in modes:
-        if mode == "base":
-            if not build_base(args, log_dir):
-                all_failed["base"] = ["linux.base"]
-            continue
+    progress = None if args.no_progress else make_progress()
 
-        eligible = filter_instances(instances, mode)
-        if not eligible:
-            log(f"[{mode}] no eligible instances, skipping")
-            continue
+    def _run() -> None:
+        log(f"instances: {len(instances)}", progress)
+        log(f"modes: {', '.join(modes)}", progress)
+        log(f"parallel: {args.parallel}", progress)
+        if args.kbuild_jobs:
+            log(f"kbuild jobs: {args.kbuild_jobs}", progress)
+        log(f"logs: {log_dir}", progress)
 
-        log(f"[{mode}] building {len(eligible)} image(s)")
-        failed = build_instances_parallel(mode, eligible, args, log_dir)
-        if failed:
-            all_failed[mode] = failed
+        for mode in modes:
+            if mode == "base":
+                if not build_base(args, log_dir, progress):
+                    all_failed["base"] = ["linux.base"]
+                continue
 
-        # Push successful images
-        if args.push:
-            repo = IMAGE_REPOS[mode]
-            succeeded = [c for c in eligible if c not in failed]
-            for cve in succeeded:
-                tag = f"{repo}:{cve}"
-                log(f"[{mode}] pushing {tag}")
-                subprocess.run(
-                    ["docker", "push", tag],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            eligible = filter_instances(instances, mode)
+            if not eligible:
+                log(f"[{mode}] no eligible instances, skipping", progress)
+                continue
+
+            log(f"[{mode}] building {len(eligible)} image(s)", progress)
+            failed = build_instances_parallel(mode, eligible, args, log_dir, progress)
+            if failed:
+                all_failed[mode] = failed
+
+            # Push successful images
+            if args.push:
+                repo = IMAGE_REPOS[mode]
+                succeeded = [c for c in eligible if c not in failed]
+                for cve in succeeded:
+                    tag = f"{repo}:{cve}"
+                    log(f"[{mode}] pushing {tag}", progress)
+                    subprocess.run(
+                        ["docker", "push", tag],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+
+    if progress:
+        with progress:
+            _run()
+    else:
+        _run()
 
     total_elapsed = time.monotonic() - total_start
-    log(f"done in {total_elapsed:.0f}s")
+    log(f"done in {total_elapsed:.0f}s", progress)
 
     if all_failed:
-        log("FAILURES:")
+        log("FAILURES:", progress)
         for mode, cves in all_failed.items():
             for cve in cves:
-                log(f"  [{mode}] {cve}")
-        log(f"logs: {log_dir}")
+                log(f"  [{mode}] {cve}", progress)
+        log(f"logs: {log_dir}", progress)
         return 1
 
-    log("all builds succeeded")
+    log("all builds succeeded", progress)
     return 0
 
 

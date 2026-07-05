@@ -1,7 +1,8 @@
-model = "gpt-5.4"
+model = "gpt-5.5"
+provider = "openai"
 project = "linux"
-instances = ["CVE-2024-26921"]
-outdir = "output/linux/codex/example/gpt-5.4/example"
+instances = ["CVE-2026-43078"]
+outdir = "output/linux/codex/example/gpt-5.5/"
 timeout = 5400
 prompt_template = "../prompts/baseline/task_prompt_linux.j2"
 agents_md = "../prompts/baseline/AGENTS_linux.j2"
@@ -9,8 +10,36 @@ images_dir = "../projects/linux"
 
 tracking = "none"
 
-approval_mode = "full-auto"
-sandbox = "danger-full-access"
+approval_mode = "never"
+sandbox = "workspace-write"
+add_dirs = ["/out", "/tmp", "/usr/local/bin"]
+strict_config = true
+update_codex_cli = true
 reasoning_effort = "xhigh"
-copy_host_auth = true
+copy_host_auth = "~/.codex/auth.json"
 json_output = true
+
+[codex_config]
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "disabled"
+allow_login_shell = false
+
+[codex_config.sandbox_workspace_write]
+network_access = false
+
+# The secb harness, exposed as MCP tools. Codex spawns this server OUTSIDE its
+# bubblewrap sandbox, so QEMU launched from it gets native KVM while the agent's
+# own shell commands remain sandboxed (workspace-write, no network).
+[codex_config.mcp_servers.secb]
+command = "secb-linux-vm-mcp"
+# Auto-run the harness tools: with approval_policy=never, MCP tool calls (which
+# run outside the sandbox) would otherwise be cancelled ("user cancelled MCP
+# tool call") in headless exec. We fully trust our own harness server.
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 60
+
+[codex_config.shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+exclude = ["OPENAI_API_KEY", "OPENAI_*", "*_TOKEN", "*_KEY", "*_SECRET"]

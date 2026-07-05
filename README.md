@@ -45,22 +45,24 @@ Install Python dependencies from the repo root:
 uv sync
 ```
 
-Run a baseline Codex eval for a target project:
+Run an example Codex eval for a target project:
 
 ```sh
-uv run harness/eval_codex.py harness/configs/codex/v8/baseline_gpt-5.4.toml
-uv run harness/eval_codex.py harness/configs/codex/sm/baseline_gpt-5.4.toml
-uv run harness/eval_codex.py harness/configs/codex/linux/baseline_gpt-5.4.toml
+uv run harness/eval_codex.py harness/configs/codex/v8/config.example.toml
+uv run harness/eval_codex.py harness/configs/codex/sm/config.example.toml
+uv run harness/eval_codex.py harness/configs/codex/linux/config.example.toml
 ```
 
 Run Claude or OpenCode with the matching config tree:
 
 ```sh
-uv run harness/eval_claude.py harness/configs/claude/v8/baseline_sonnet-4.6.toml
+uv run harness/eval_claude.py harness/configs/claude/v8/config.example.toml
 uv run harness/eval_opencode.py harness/configs/opencode/v8/config.example.toml
 ```
 
-The same target directories exist under `harness/configs/claude/{v8,sm,linux}/` and `harness/configs/opencode/{v8,sm,linux}/`.
+Each `harness/configs/<agent>/<project>/` directory contains one
+`config.example.toml`. Copy or edit that file to select another model,
+provider, output directory, or instance set.
 
 To evaluate a small target set, edit the TOML config before running:
 
@@ -73,14 +75,32 @@ images_dir = "../projects/v8"    # use ../projects/sm or ../projects/linux for o
 
 Relative `outdir` values are resolved under `harness/`, so the example above writes to `harness/output/v8/codex/my-run/<timestamp>/<instance_id>/`. See `harness/README.md` for all config fields, provider options, and artifact details.
 
+### Linux MCP Sandbox
+
+Linux agent runs expose the KVM/QEMU harness through the vendored
+`mcps/linux` package (`secb-linux-vm-mcp`). Agents write `audit/poc.c` and use
+the trusted MCP tools `secb_build`, `secb_repro`, and `secb_validate`; the MCP
+server runs outside the agent command sandbox so QEMU gets native KVM while the
+agent shell remains network-restricted.
+
+All Linux leaves now declare `meta.json.privilege`: `user` PoCs run as uid
+1000, and `root` PoCs run as init-namespace uid 0. The Linux prompts and MCP
+validator use this field so the stated attacker model matches the actual guest
+execution.
+
+The example configs harden network access per agent: Codex uses
+`workspace-write` with `network_access = false` and `web_search = "disabled"`,
+Claude uses its Bash sandbox with denied domains, and OpenCode routes Bash tool
+calls through a network-namespace shell wrapper.
+
 ## Grade Results
 
 `harness/grade.py` re-runs agent-produced PoCs against vulnerable, fixed, and latest images, then classifies each PoC with the project-specific judge prompt. Point `--target-dir` at one timestamped run or a parent directory containing timestamped runs:
 
 ```sh
-uv run harness/grade.py --project v8 --target-dir harness/output/v8/codex/baseline/gpt-5.4/defaults --benchmark-dir projects/v8 --pull-missing
-uv run harness/grade.py --project sm --target-dir harness/output/sm/codex/baseline/gpt-5.4/defaults --benchmark-dir projects/sm --pull-missing
-uv run harness/grade.py --project linux --target-dir harness/output/linux/codex/baseline/gpt-5.4/defaults --benchmark-dir projects/linux --pull-missing
+uv run harness/grade.py --project v8 --target-dir harness/output/v8/codex/example/gpt-5.5 --benchmark-dir projects/v8 --pull-missing
+uv run harness/grade.py --project sm --target-dir harness/output/sm/codex/example/gpt-5.5 --benchmark-dir projects/sm --pull-missing
+uv run harness/grade.py --project linux --target-dir harness/output/linux/codex/example/gpt-5.5 --benchmark-dir projects/linux --pull-missing
 ```
 
 Summary CSVs are written to `<timestamp_dir>/summary` unless `--out-dir` is set. Linux latest validation uses per-CVE images from `hwiwonlee/linux.x86_64.latest:<instance_id>`; build local copies with:
@@ -146,6 +166,8 @@ harness/
 prompts/
   baseline/
   judge/
+mcps/
+  linux/       Vendored secb Linux VM MCP server
 projects/
   v8/
     <issue_id>/  103 Chromium V8 benchmark cases

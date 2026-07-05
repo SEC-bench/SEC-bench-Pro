@@ -1,0 +1,82 @@
+model = "us.anthropic.claude-sonnet-4-6"
+provider = "bedrock"
+project = "sm"
+instances = ["1880719"]
+outdir = "output/sm/claude/example/sonnet-4.6"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_sm.j2"
+agents_md = "../prompts/baseline/AGENTS_sm.j2"
+images_dir = "../projects/sm"
+
+tracking = "none"
+privileged = false
+update_claude_cli = true
+claude_sandbox = true
+dangerously_skip_permissions = false
+
+allowed_tools = [
+    "Agent",
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskUpdate",
+]
+output_format = "stream-json"
+reasoning_effort = "high"
+
+[claude_settings]
+disableClaudeAiConnectors = true
+disableRemoteControl = true
+disableArtifact = true
+disableSkillShellExecution = true
+disableAllHooks = true
+
+[claude_settings.permissions]
+disableBypassPermissionsMode = "disable"
+
+[claude_settings.sandbox]
+enabled = true
+failIfUnavailable = true
+autoAllowBashIfSandboxed = true
+allowUnsandboxedCommands = false
+
+[claude_settings.sandbox.network]
+deniedDomains = ["*"]
+
+[[claude_settings.sandbox.credentials.files]]
+path = "/root/.claude"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.files]]
+path = "/root/.claude.json"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_BEDROCK"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_VERTEX"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_USE_FOUNDRY"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "ANTHROPIC_AUTH_TOKEN"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "ANTHROPIC_API_KEY"
+mode = "deny"
+
+[[claude_settings.sandbox.credentials.envVars]]
+name = "CLAUDE_CODE_OAUTH_TOKEN"
+mode = "deny"

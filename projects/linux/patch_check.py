@@ -220,6 +220,43 @@ def run_audit_attempt(
             output = (prep.stdout or "") + (prep.stderr or "")
             return prep.returncode, False, output, True
 
+        # Privilege-drop init.sh: the PoC runs at the CVE's declared privilege
+        # (uid 1000 for "user", init-ns root for "root"). No-op for rebuilt
+        # images that already bake it.
+        init_src = ROOT / instance_id / "init.sh"
+        if init_src.is_file():
+            init_cp = docker_capture(
+                ["docker", "cp", str(init_src), f"{name}:/rootfs/init.sh"],
+                timeout=60,
+            )
+            if init_cp.returncode == 0:
+                docker_capture(
+                    ["docker", "exec", name, "chmod", "+x", "/rootfs/init.sh"],
+                    timeout=30,
+                )
+
+        # Ensure guest privilege matches meta.json. Pre-built images may bake a
+        # /run/secb/config.json without a "privilege" key (secb.sh then defaults
+        # to "user"), wrongly dropping a root-only PoC to uid 1000.
+        try:
+            meta_p = ROOT / instance_id / "meta.json"
+            priv = (
+                json.loads(meta_p.read_text()).get("privilege")
+                if meta_p.is_file()
+                else None
+            )
+        except Exception:
+            priv = None
+        if priv:
+            docker_capture(
+                [
+                    "docker", "exec", name, "bash", "-lc",
+                    f"jq '.privilege = \"{priv}\"' /run/secb/config.json "
+                    "> /tmp/c.json && mv /tmp/c.json /run/secb/config.json",
+                ],
+                timeout=30,
+            )
+
         cp_proc = docker_capture(
             ["docker", "cp", f"{poc_bundle}/.", f"{name}:/src/linux/audit/"],
             timeout=60,

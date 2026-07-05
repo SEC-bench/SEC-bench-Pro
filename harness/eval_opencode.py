@@ -131,6 +131,7 @@ _OPENCODE_EXTRA_ENV = {
 
 _DEFAULT_AGENT_NAME = "opencode"
 _DEFAULT_PERMISSION_CONFIG: dict[str, Any] = {
+    "*": "deny",
     # Built-in tools from https://opencode.ai/docs/tools/#built-in.
     "bash": "allow",
     "edit": "allow",
@@ -142,6 +143,7 @@ _DEFAULT_PERMISSION_CONFIG: dict[str, Any] = {
     },
     "grep": "allow",
     "glob": "allow",
+    "list": "allow",
     "lsp": "allow",
     "skill": "allow",
     "todowrite": "allow",
@@ -152,9 +154,79 @@ _DEFAULT_PERMISSION_CONFIG: dict[str, Any] = {
     "doom_loop": "allow",
     "external_directory": "allow",
     "task": "allow",
+    # OpenCode exposes MCP tools with the server name as the prefix, e.g.
+    # secb_validate/secb_build/secb_repro for the Linux PoC harness.
+    "secb_*": "allow",
 }
 _OPENCODE_ARTIFACT_MODES = {"compact", "debug"}
 _OPENCODE_DB_CONTAINER_PATH = "/root/.local/share/opencode/opencode.db"
+_OPENCODE_NETWORK_SANDBOX_SHELL = "/usr/local/bin/opencode-network-sandbox-shell"
+_OPENCODE_NETWORK_SANDBOX_BACKEND = "/run/opencode-network-sandbox-backend"
+_OPENCODE_NETWORK_SANDBOX_STATUS = "/tmp/opencode-shell-sandbox.status"
+
+_OPENCODE_NETWORK_SANDBOX_SHELL_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+
+real_shell="${OPENCODE_SANDBOX_REAL_SHELL:-}"
+if [ -z "$real_shell" ]; then
+  if [ -x /bin/bash ]; then
+    real_shell=/bin/bash
+  else
+    real_shell=/bin/sh
+  fi
+fi
+if [ ! -x "$real_shell" ]; then
+  echo "opencode shell sandbox: shell is not executable: $real_shell" >&2
+  exit 126
+fi
+
+backend="$(cat /run/opencode-network-sandbox-backend 2>/dev/null || true)"
+payload='
+if command -v ip >/dev/null 2>&1; then
+  ip link set lo up 2>/dev/null || true
+fi
+if ! command -v setpriv >/dev/null 2>&1; then
+  echo "opencode shell sandbox: setpriv unavailable" >&2
+  exit 126
+fi
+exec setpriv --bounding-set=-sys_admin,-net_admin --inh-caps=-all --ambient-caps=-all -- "$@"
+'
+case "$backend" in
+  unshare)
+    exec unshare --net --fork -- \
+      /bin/sh -c "$payload" opencode-network-sandbox "$real_shell" "$@"
+    ;;
+  bwrap)
+    exec bwrap --unshare-net --dev-bind / / --proc /proc -- \
+      /bin/sh -c "$payload" opencode-network-sandbox "$real_shell" "$@"
+    ;;
+  *)
+    echo "opencode shell sandbox: backend unavailable" >&2
+    exit 126
+    ;;
+esac
+"""
+
+_OPENCODE_NETWORK_SANDBOX_BACKEND_SCRIPT = r"""
+set -eu
+mkdir -p /run
+rm -f /run/opencode-network-sandbox-backend
+if command -v unshare >/dev/null 2>&1 && \
+    command -v setpriv >/dev/null 2>&1 && \
+    unshare --net --fork -- \
+      /bin/sh -c 'exit 0' >/dev/null 2>&1; then
+  printf 'unshare\n' >/run/opencode-network-sandbox-backend
+  exit 0
+fi
+if command -v bwrap >/dev/null 2>&1 && \
+    command -v setpriv >/dev/null 2>&1 && \
+    bwrap --unshare-net --dev-bind / / --proc /proc -- \
+      /bin/sh -c 'exit 0' >/dev/null 2>&1; then
+  printf 'bwrap\n' >/run/opencode-network-sandbox-backend
+  exit 0
+fi
+exit 1
+"""
 
 _OPENCODE_REASONING_TAIL_SCRIPT = r"""
 import json
@@ -244,6 +316,283 @@ def _deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str
     return merged
 
 
+def _validate_permission_rule(value: Any, path: str) -> None:
+    if isinstance(value, str):
+        if value not in {"allow", "ask", "deny"}:
+            raise ValueError(
+                f"Invalid {path}. Must be 'allow', 'ask', or 'deny'."
+            )
+        return
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError(f"Invalid {path}. Permission keys must be strings.")
+            _validate_permission_rule(nested, f"{path}.{key}")
+        return
+    raise ValueError(f"Invalid {path}. Must be a string or TOML table.")
+
+
+def _normalize_permission_config(value: Any) -> Any:
+    permission = copy.deepcopy(value)
+    _validate_permission_rule(permission, "permission")
+    return permission
+
+
+def _normalize_opencode_mcp_servers(value: object) -> dict[str, object]:
+    if value in (None, False):
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("Invalid mcp. Must be a TOML table.")
+
+    normalized: dict[str, object] = {}
+    for name, server in value.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Invalid mcp. Server names must be non-empty strings.")
+        if not isinstance(server, dict):
+            raise ValueError(f"Invalid mcp.{name}. Must be a TOML table.")
+
+        server_type = server.get("type")
+        if server_type != "local":
+            raise ValueError(
+                f"Invalid mcp.{name}.type. Only 'local' MCP servers are "
+                "supported for benchmark runs."
+            )
+
+        command = server.get("command")
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(item, str) or not item.strip() for item in command)
+        ):
+            raise ValueError(
+                f"Invalid mcp.{name}.command. OpenCode local MCP command must "
+                "be a non-empty list of strings."
+            )
+
+        normalized_server: dict[str, object] = {
+            "type": "local",
+            "command": list(command),
+        }
+
+        if "cwd" in server:
+            cwd = server["cwd"]
+            if not isinstance(cwd, str) or not cwd.strip():
+                raise ValueError(f"Invalid mcp.{name}.cwd. Must be a string.")
+            normalized_server["cwd"] = cwd
+
+        if "environment" in server:
+            environment = server["environment"]
+            if (
+                not isinstance(environment, dict)
+                or any(
+                    not isinstance(key, str) or not isinstance(val, str)
+                    for key, val in environment.items()
+                )
+            ):
+                raise ValueError(
+                    f"Invalid mcp.{name}.environment. Must be a string map."
+                )
+            normalized_server["environment"] = dict(environment)
+
+        if "enabled" in server:
+            enabled = server["enabled"]
+            if not isinstance(enabled, bool):
+                raise ValueError(f"Invalid mcp.{name}.enabled. Must be a boolean.")
+            normalized_server["enabled"] = enabled
+
+        if "timeout" in server:
+            timeout = server["timeout"]
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+                raise ValueError(f"Invalid mcp.{name}.timeout. Must be a number.")
+            normalized_server["timeout"] = timeout
+
+        normalized[name] = normalized_server
+    return normalized
+
+
+def _permission_allows_mcp_server(permission_config: Any, server_name: str) -> bool:
+    if permission_config == "allow":
+        return True
+    if not isinstance(permission_config, dict):
+        return False
+
+    explicit_keys = (
+        f"{server_name}_*",
+        f"{server_name}*",
+    )
+    for key in explicit_keys:
+        if permission_config.get(key) == "allow":
+            return True
+    return permission_config.get("*") == "allow"
+
+
+def _setup_secb_mcp(container_id: str, config: dict) -> int:
+    """Install the vendored `secb-linux-vm-mcp` package in the container."""
+    mcp_servers = config.get("mcp") or {}
+    if "secb" not in mcp_servers:
+        return 0
+
+    step_run("Set up secb MCP server")
+    mcps_src = Path(__file__).resolve().parent.parent / "mcps" / "linux"
+    if not mcps_src.is_dir():
+        step_err(f"Set up secb MCP server  {DIM}vendored mcps/linux not found{NC}")
+        return 1
+    if not docker_copy_to(container_id, str(mcps_src), "/opt/secb-mcps/linux"):
+        step_err(f"Set up secb MCP server  {DIM}copy failed{NC}")
+        return 1
+    install_rc, _stdout, install_stderr = docker_exec(
+        container_id,
+        "(uv pip install --system /opt/secb-mcps/linux "
+        "|| python3 -m pip install --break-system-packages /opt/secb-mcps/linux)",
+        900,
+    )
+    if install_rc != 0:
+        detail = install_stderr[:160].replace("\n", " ") if install_stderr else ""
+        step_err(f"Set up secb MCP server  {DIM}install failed: {detail}{NC}")
+        return install_rc
+    step_ok(f"Set up secb MCP server  {DIM}(installed from vendored mcps/){NC}")
+    return 0
+
+
+def _ensure_opencode_shell_network_sandbox(container_id: str) -> int:
+    """Install and verify the shell wrapper used for OpenCode bash tool calls."""
+    step_run("Ensure OpenCode shell network sandbox")
+    setup_rc, _stdout, setup_stderr = docker_exec(
+        container_id,
+        _OPENCODE_NETWORK_SANDBOX_BACKEND_SCRIPT,
+        30,
+    )
+
+    if setup_rc != 0:
+        install_cmd = r"""
+set -eu
+log=/tmp/opencode-shell-sandbox-install.log
+: > "$log"
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -o DPkg::Lock::Timeout=60 update -qq >>"$log" 2>&1
+  apt-get -o DPkg::Lock::Timeout=60 install -y -qq --no-install-recommends \
+    util-linux bubblewrap >>"$log" 2>&1
+  rm -rf /var/lib/apt/lists/*
+elif command -v apk >/dev/null 2>&1; then
+  apk add --no-cache util-linux bubblewrap >>"$log" 2>&1
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y util-linux bubblewrap >>"$log" 2>&1
+elif command -v yum >/dev/null 2>&1; then
+  yum install -y util-linux bubblewrap >>"$log" 2>&1
+else
+  echo "no supported package manager found" >>"$log"
+  exit 127
+fi
+command -v setpriv >/dev/null 2>&1
+command -v unshare >/dev/null 2>&1 || command -v bwrap >/dev/null 2>&1
+"""
+        install_rc, _stdout, install_stderr = docker_exec(
+            container_id,
+            install_cmd,
+            300,
+        )
+        if install_rc != 0:
+            _tail_rc, tail_stdout, _tail_stderr = docker_exec(
+                container_id,
+                "tail -n 20 /tmp/opencode-shell-sandbox-install.log 2>/dev/null || true",
+                30,
+            )
+            detail_source = tail_stdout or install_stderr
+            detail = detail_source[:240].replace("\n", " ") if detail_source else ""
+            step_err(
+                "Ensure OpenCode shell network sandbox  "
+                f"{DIM}(dependency failed: {detail or f'exit {install_rc}'}){NC}"
+            )
+            return install_rc
+
+        setup_rc, _stdout, setup_stderr = docker_exec(
+            container_id,
+            _OPENCODE_NETWORK_SANDBOX_BACKEND_SCRIPT,
+            30,
+        )
+
+    if setup_rc != 0:
+        detail = setup_stderr[:240].replace("\n", " ") if setup_stderr else ""
+        step_err(
+            "Ensure OpenCode shell network sandbox  "
+            f"{DIM}(backend unavailable: {detail or f'exit {setup_rc}'}){NC}"
+        )
+        return setup_rc
+
+    mkdir_rc, _stdout, mkdir_stderr = docker_exec(
+        container_id,
+        "mkdir -p /usr/local/bin",
+        10,
+    )
+    if mkdir_rc != 0:
+        detail = mkdir_stderr[:120].replace("\n", " ") if mkdir_stderr else ""
+        step_err(
+            "Ensure OpenCode shell network sandbox  "
+            f"{DIM}(setup failed: {detail or f'exit {mkdir_rc}'}){NC}"
+        )
+        return mkdir_rc
+
+    if not docker_pipe_stdin(
+        container_id,
+        _OPENCODE_NETWORK_SANDBOX_SHELL_SCRIPT,
+        _OPENCODE_NETWORK_SANDBOX_SHELL,
+    ):
+        step_err(f"Ensure OpenCode shell network sandbox  {DIM}(copy failed){NC}")
+        return 1
+
+    chmod_rc, _stdout, chmod_stderr = docker_exec(
+        container_id,
+        f"chmod 755 {shlex.quote(_OPENCODE_NETWORK_SANDBOX_SHELL)}",
+        10,
+    )
+    if chmod_rc != 0:
+        detail = chmod_stderr[:120].replace("\n", " ") if chmod_stderr else ""
+        step_err(
+            "Ensure OpenCode shell network sandbox  "
+            f"{DIM}(chmod failed: {detail or f'exit {chmod_rc}'}){NC}"
+        )
+        return chmod_rc
+
+    smoke_cmd = (
+        f"{shlex.quote(_OPENCODE_NETWORK_SANDBOX_SHELL)} -c "
+        + shlex.quote(
+            "echo ok >/tmp/opencode-shell-sandbox.ok && "
+            "if awk 'NR > 1 && $2 == \"00000000\" { found = 1 } "
+            "END { exit found ? 0 : 1 }' /proc/net/route; then "
+            "  echo default route still visible >&2; exit 1; "
+            "fi && "
+            "test \"$(readlink /proc/1/ns/net)\" != "
+            "\"$(readlink /proc/self/ns/net)\""
+        )
+    )
+    smoke_rc, _stdout, smoke_stderr = docker_exec(container_id, smoke_cmd, 30)
+    if smoke_rc != 0:
+        detail = smoke_stderr[:240].replace("\n", " ") if smoke_stderr else ""
+        step_err(
+            "Ensure OpenCode shell network sandbox  "
+            f"{DIM}(smoke failed: {detail or f'exit {smoke_rc}'}){NC}"
+        )
+        return smoke_rc
+
+    rc, backend, _stderr = docker_exec(
+        container_id,
+        f"cat {shlex.quote(_OPENCODE_NETWORK_SANDBOX_BACKEND)}",
+        10,
+    )
+    backend = backend.strip() if rc == 0 else ""
+    status_cmd = (
+        "printf '%s\n' "
+        + shlex.quote(f"enabled=true\nbackend={backend}\nshell={_OPENCODE_NETWORK_SANDBOX_SHELL}")
+        + f" > {shlex.quote(_OPENCODE_NETWORK_SANDBOX_STATUS)}"
+    )
+    docker_exec(container_id, status_cmd, 10)
+
+    suffix = f" ({backend})" if backend else ""
+    step_ok(f"Ensure OpenCode shell network sandbox  {DIM}{suffix}{NC}")
+    return 0
+
+
 def _build_opencode_config(
     *,
     agent_name: str,
@@ -254,6 +603,8 @@ def _build_opencode_config(
     skill_container_dir: str | None,
     permission_config: Any,
     steps: int | None,
+    mcp_config: dict[str, object] | None,
+    shell_path: str | None,
     config_overrides: dict[str, Any] | None,
 ) -> dict[str, Any]:
     agent_config: dict[str, Any] = {
@@ -262,7 +613,9 @@ def _build_opencode_config(
         "model": model_ref,
     }
     if permission_config is not None:
-        agent_config["permission"] = permission_config
+        config_permission = copy.deepcopy(permission_config)
+    else:
+        config_permission = None
     if variant:
         agent_config["variant"] = variant
     if agent_options:
@@ -278,6 +631,7 @@ def _build_opencode_config(
         # worktrees are large and snapshotting on every edit overloads disk/CPU
         # without adding value, since the harness collects worktree diffs itself.
         "snapshot": False,
+        "autoupdate": False,
         "default_agent": agent_name,
         "agent": {
             agent_name: agent_config,
@@ -290,6 +644,12 @@ def _build_opencode_config(
 
     if config_overrides:
         config = _deep_merge_dict(config, config_overrides)
+    if mcp_config:
+        config["mcp"] = copy.deepcopy(mcp_config)
+    if config_permission is not None:
+        config["permission"] = config_permission
+    if shell_path:
+        config["shell"] = shell_path
     return config
 
 
@@ -1083,6 +1443,25 @@ def collect_worktree_artifacts(
         step_warn(f"Collect worktree state  {DIM}copy failed{NC}")
 
 
+def collect_shell_network_sandbox_artifact(
+    container_id: str,
+    instance_outdir: Path,
+) -> None:
+    if not _container_path_exists(
+        container_id,
+        _OPENCODE_NETWORK_SANDBOX_STATUS,
+        "-f",
+    ):
+        return
+    dest = instance_outdir / "opencode_shell_sandbox.txt"
+    if not docker_copy_from(
+        container_id,
+        _OPENCODE_NETWORK_SANDBOX_STATUS,
+        str(dest),
+    ):
+        step_warn(f"Collect OpenCode shell sandbox status  {DIM}copy failed{NC}")
+
+
 def run_instance(
     *,
     instance_id: str,
@@ -1116,9 +1495,14 @@ def run_instance(
     permission_config = config.get("permission", _DEFAULT_PERMISSION_CONFIG)
     steps: int | None = config.get("steps")
     config_overrides: dict[str, Any] | None = config.get("opencode_config")
+    mcp_config: dict[str, object] | None = config.get("mcp") or None
     artifact_mode: str = config.get("opencode_artifacts", "compact")
     privileged: bool = config.get("privileged", common.is_linux_project(project))
     refresh_models: bool = config.get("refresh_models", True)
+    update_opencode_cli: bool = config.get("update_opencode_cli", False)
+    opencode_update_method: str = config.get("opencode_update_method", "npm")
+    pure: bool = config.get("pure", True)
+    shell_network_sandbox: bool = config.get("shell_network_sandbox", False)
 
     container_name = f"opencode-eval-{instance_id}-{int(datetime.now().timestamp())}"
 
@@ -1151,6 +1535,17 @@ def run_instance(
     ]
     if privileged:
         docker_run_cmd.append("--privileged")
+    elif shell_network_sandbox:
+        docker_run_cmd.extend(
+            [
+                "--cap-add=SYS_ADMIN",
+                "--cap-add=NET_ADMIN",
+                "--security-opt",
+                "seccomp=unconfined",
+                "--security-opt",
+                "apparmor=unconfined",
+            ]
+        )
     docker_run_cmd.extend(
         [
             *env_args,
@@ -1208,6 +1603,9 @@ def run_instance(
         opencode_path_export = (
             'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:'
             '$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
+            'export NVM_DIR="$HOME/.nvm" && '
+            'if [ -s "$NVM_DIR/nvm.sh" ]; then '
+            '. "$NVM_DIR/nvm.sh" 2>/dev/null || true; fi && '
         )
         rc = run_step(
             "Check OpenCode CLI",
@@ -1217,6 +1615,21 @@ def run_instance(
         )
         if rc != 0:
             return 127
+
+        if update_opencode_cli:
+            rc = run_step(
+                "Update OpenCode CLI",
+                container_id,
+                600,
+                (
+                    f"{opencode_path_export}"
+                    f"{shlex.quote(opencode_cli)} upgrade "
+                    f"--method {shlex.quote(opencode_update_method)} && "
+                    f"{shlex.quote(opencode_cli)} --version"
+                ),
+            )
+            if rc != 0:
+                return rc
 
         if tracking == "beads":
             run_step(
@@ -1260,6 +1673,14 @@ def run_instance(
                 secb_config_content=linux_secb_config_content,
                 instance_dir=linux_instance_dir,
             )
+            secb_mcp_rc = _setup_secb_mcp(container_id, config)
+            if secb_mcp_rc != 0:
+                return secb_mcp_rc
+
+        if shell_network_sandbox:
+            sandbox_rc = _ensure_opencode_shell_network_sandbox(container_id)
+            if sandbox_rc != 0:
+                return sandbox_rc
 
         skill_container_dir: str | None = None
         if skill_directory and skill_directory.is_dir():
@@ -1291,6 +1712,12 @@ def run_instance(
             skill_container_dir=skill_container_dir,
             permission_config=permission_config,
             steps=steps,
+            mcp_config=mcp_config,
+            shell_path=(
+                _OPENCODE_NETWORK_SANDBOX_SHELL
+                if shell_network_sandbox
+                else None
+            ),
             config_overrides=config_overrides,
         )
         opencode_config_content = json.dumps(opencode_config, indent=2) + "\n"
@@ -1345,6 +1772,8 @@ def run_instance(
             path_export = (
                 ACOV_PYTHON_AUDIT_ENV_SH
                 + f'export PATH="{ACOV_SHIM_DIR}:$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
+                + 'export NVM_DIR="$HOME/.nvm" && '
+                + 'if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" 2>/dev/null || true; fi && '
                 + f'export ACOV_DB="{acov_db_container_path(work_dir)}" && '
                 + f'export ACOV_EVENT_LOG="{acov_event_log_container_path(work_dir)}" && '
                 + f'export ACOV_SOCKET="{ACOV_SOCKET_PATH}" && '
@@ -1362,6 +1791,7 @@ def run_instance(
 
         opencode_cmd_parts = [
             shlex.quote(opencode_cli),
+            *(["--pure"] if pure else []),
             "run",
             "--format",
             shlex.quote(output_format),
@@ -1378,6 +1808,9 @@ def run_instance(
             "export TERM=xterm-256color && "
             "export COLORTERM=truecolor && "
             "export FORCE_COLOR=1 && "
+            "export OPENCODE_DISABLE_AUTOUPDATE=1 && "
+            "export OPENCODE_DISABLE_DEFAULT_PLUGINS=1 && "
+            "unset OPENCODE_ENABLE_EXA && "
             f"cd {shlex.quote(work_dir)} && "
             + " ".join(opencode_cmd_parts)
         )
@@ -1430,6 +1863,7 @@ def run_instance(
             artifact_mode,
         )
         collect_worktree_artifacts(container_id, work_dir, instance_outdir)
+        collect_shell_network_sandbox_artifact(container_id, instance_outdir)
         collect_audit_artifacts(container_id, work_dir, instance_outdir)
 
         if tracking == "beads":
@@ -1546,7 +1980,13 @@ def main() -> int:
         return 1
     config["opencode_artifacts"] = artifact_mode
 
-    for bool_key in ("privileged", "refresh_models"):
+    for bool_key in (
+        "privileged",
+        "refresh_models",
+        "update_opencode_cli",
+        "pure",
+        "shell_network_sandbox",
+    ):
         if bool_key in config and not isinstance(config[bool_key], bool):
             error(f"Invalid {bool_key}. Must be true or false.")
             return 1
@@ -1555,6 +1995,28 @@ def main() -> int:
         common.is_linux_project(config.get("project", "")),
     )
     config["refresh_models"] = config.get("refresh_models", True)
+    config["update_opencode_cli"] = config.get("update_opencode_cli", False)
+    config["pure"] = config.get("pure", True)
+    config["shell_network_sandbox"] = config.get("shell_network_sandbox", False)
+
+    opencode_update_method = config.get("opencode_update_method", "npm")
+    if (
+        not isinstance(opencode_update_method, str)
+        or opencode_update_method not in {"curl", "npm", "pnpm", "bun", "brew"}
+    ):
+        error(
+            "Invalid opencode_update_method. Must be one of: "
+            "curl, npm, pnpm, bun, brew."
+        )
+        return 1
+    config["opencode_update_method"] = opencode_update_method
+
+    if "network_isolation" in config:
+        warn(
+            "network_isolation is deprecated for OpenCode and ignored; "
+            "shell_network_sandbox=true isolates bash tool calls without "
+            "domain heuristics."
+        )
 
     if "steps" in config and not isinstance(config["steps"], int):
         error("Invalid steps. Must be an integer when set.")
@@ -1563,6 +2025,39 @@ def main() -> int:
     if "opencode_config" in config and not isinstance(config["opencode_config"], dict):
         error("Invalid opencode_config. Must be a TOML table when set.")
         return 1
+
+    try:
+        config["permission"] = _normalize_permission_config(
+            config.get("permission", _DEFAULT_PERMISSION_CONFIG),
+        )
+    except ValueError as exc:
+        error(str(exc))
+        return 1
+
+    try:
+        config["mcp"] = _normalize_opencode_mcp_servers(config.get("mcp"))
+    except ValueError as exc:
+        error(str(exc))
+        return 1
+
+    if config["mcp"]:
+        for server_name in config["mcp"]:
+            if not _permission_allows_mcp_server(config["permission"], server_name):
+                error(
+                    f"mcp.{server_name} requires a permission entry like "
+                    f"'{server_name}_* = \"allow\"'."
+                )
+                return 1
+
+    if (
+        config["shell_network_sandbox"]
+        and isinstance(config.get("opencode_config"), dict)
+        and "shell" in config["opencode_config"]
+    ):
+        warn(
+            "opencode_config.shell is ignored because "
+            "shell_network_sandbox=true."
+        )
 
     skill_directory: Path | None = None
     if config.get("skill_directory"):
@@ -1623,6 +2118,20 @@ def main() -> int:
         info("Refresh OpenCode models: true")
     else:
         info("Refresh OpenCode models: false")
+    if config.get("update_opencode_cli"):
+        info(
+            "Update OpenCode CLI: true "
+            f"(method={config['opencode_update_method']})"
+        )
+    else:
+        info("Update OpenCode CLI: false")
+    info(f"OpenCode pure mode: {str(config.get('pure', True)).lower()}")
+    if config.get("shell_network_sandbox", False):
+        info("OpenCode shell network sandbox: enabled")
+    else:
+        info("OpenCode shell network sandbox: disabled")
+    if config.get("mcp"):
+        info(f"OpenCode MCP servers: {', '.join(sorted(config['mcp']))}")
     if config.get("privileged", False):
         info("Docker privileged mode: true")
     if skill_directory:
