@@ -25,7 +25,7 @@ The benchmark currently includes 344 verified cases across Chromium V8, Mozilla 
 
 ## News
 
-- [2026-06]: 🔥 SEC-bench Pro was used in the full GPT-5.5-Cyber evaluation ([blog](https://openai.com/index/daybreak-securing-the-world/)).
+- [2026-06]: 🔥 SEC-bench Pro was used in the full [GPT-5.5-Cyber](https://openai.com/index/daybreak-securing-the-world/) and [GPT-5.6](https://deploymentsafety.openai.com/gpt-5-6-preview/sec-bench-pro) evaluation.
 - [2026-06]: The Linux leaderboard is now live ([link](https://sec-bench.github.io/linux)).
 - [2026-05]: The SpiderMonkey leaderboard is now live ([link](https://sec-bench.github.io/firefox)).
 - [2026-05]: SEC-bench Pro launched with the V8 leaderboard ([link](https://sec-bench.github.io/v8)).
