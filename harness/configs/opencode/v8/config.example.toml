@@ -32,6 +32,7 @@
 #            and AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
 model = "kimi-k2.6"
 api = "moonshot-cn"
+project = "v8"
 
 # Benchmark selection --------------------------------------------------------
 #

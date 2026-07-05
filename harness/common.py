@@ -608,6 +608,11 @@ def build_template_context(meta: dict) -> dict[str, object]:
         "error_type_display": guidance["display"],
         "required_stderr_patterns": guidance["required_patterns"],
         "error_type_acceptance_rule": guidance["acceptance_rule"],
+        # Privilege class (authoritative in meta.json): "user" means the harness
+        # runs the PoC as uid 1000, "root" means it runs as init-namespace root.
+        # The task prompt branches on this so its stated attacker model matches
+        # the privilege the guest actually drops to.
+        "privilege": meta.get("privilege") or "user",
     }
 
 
@@ -894,6 +899,11 @@ def build_linux_secb_config(meta: dict) -> dict[str, object]:
         },
     }
 
+    # Privilege class (authoritative in meta.json): "root" for CVEs that need
+    # real init-namespace root, "user" for unprivileged (uid 1000) triggers.
+    # secb.sh passes this to the guest via the kernel cmdline; init.sh reads it.
+    cfg["privilege"] = meta.get("privilege") or "user"
+
     repro = meta.get("repro") if isinstance(meta.get("repro"), dict) else {}
     if poc.get("cflags"):
         cfg["poc"] = {"cflags": poc["cflags"]}
@@ -931,6 +941,157 @@ def _copy_linux_support_script(
         step_ok(f"Copy Linux {script_name}")
     else:
         step_warn(f"Copy Linux {script_name}  {DIM}copy failed{NC}")
+
+
+def _ensure_linux_process_tools(container_id: str) -> None:
+    """Install host-side process tools useful for managing QEMU runs."""
+    check_rc, _stdout, _stderr = docker_exec(
+        container_id,
+        "command -v ps >/dev/null 2>&1 && command -v pkill >/dev/null 2>&1",
+        30,
+    )
+    if check_rc == 0:
+        return
+
+    step_run("Ensure Linux process tools")
+    install_cmd = r"""
+set -eu
+log=/tmp/linux-process-tools-install.log
+: > "$log"
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -o DPkg::Lock::Timeout=60 update -qq >>"$log" 2>&1
+  apt-get -o DPkg::Lock::Timeout=60 install -y -qq --no-install-recommends \
+    procps psmisc >>"$log" 2>&1
+  rm -rf /var/lib/apt/lists/*
+elif command -v apk >/dev/null 2>&1; then
+  apk add --no-cache procps psmisc >>"$log" 2>&1
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y procps-ng psmisc >>"$log" 2>&1
+elif command -v yum >/dev/null 2>&1; then
+  yum install -y procps-ng psmisc >>"$log" 2>&1
+else
+  echo "no supported package manager found" >>"$log"
+  exit 127
+fi
+command -v ps >/dev/null 2>&1
+command -v pkill >/dev/null 2>&1
+"""
+    install_rc, _stdout, stderr = docker_exec(container_id, install_cmd, 300)
+    if install_rc == 0:
+        step_ok(f"Ensure Linux process tools  {DIM}(installed){NC}")
+        return
+
+    _tail_rc, tail_stdout, _tail_stderr = docker_exec(
+        container_id,
+        "tail -n 20 /tmp/linux-process-tools-install.log 2>/dev/null || true",
+        30,
+    )
+    detail_source = tail_stdout or stderr
+    detail = detail_source[:240].replace("\n", " ") if detail_source else ""
+    step_warn(
+        "Ensure Linux process tools  "
+        f"{DIM}(unavailable: {detail or f'exit {install_rc}'}){NC}"
+    )
+
+
+def _prepare_linux_secb_runtime(container_id: str) -> None:
+    """Make the Linux secb scripts runnable under command sandboxes."""
+    run_step(
+        "Prepare Linux secb runtime",
+        container_id,
+        120,
+        r"""
+set -eu
+mkdir -p /run/secb /tmp/secb /out
+chmod 1777 /out /tmp/secb 2>/dev/null || true
+rm -f /out/initramfs.base.cpio /out/initramfs.base.cpio.orig
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+(
+  cd "$tmp"
+  mkdir -p bin sbin etc proc sys dev tmp var/run usr/bin usr/sbin root
+  if [ -x /bin/busybox ]; then
+    busybox=/bin/busybox
+  elif command -v busybox >/dev/null 2>&1; then
+    busybox=$(command -v busybox)
+  else
+    echo "busybox missing; cannot create /out/initramfs.base.cpio" >&2
+    exit 2
+  fi
+  cp "$busybox" bin/busybox
+  chmod +x bin/busybox
+  for applet in sh mount umount echo cat ls ln mkdir mknod poweroff reboot \
+                chmod chown ps dmesg sleep env unshare setsid stty tee \
+                grep sed awk head tail cut sort uniq which sysctl ifconfig \
+                ip insmod modprobe lsmod date sync hostname; do
+    ln -sf busybox "bin/$applet"
+  done
+  find . -print0 | cpio --null -o -H newc --quiet > /out/initramfs.base.cpio
+)
+rm -rf "$tmp"
+trap - EXIT
+
+[ -f /src/build.sh ] || exit 0
+if command -v python3 >/dev/null 2>&1; then
+  py=python3
+elif command -v python >/dev/null 2>&1; then
+  py=python
+else
+  echo "python missing; cannot patch /src/build.sh" >&2
+  exit 2
+fi
+
+"$py" <<'PY'
+from pathlib import Path
+
+path = Path("/src/build.sh")
+text = path.read_text()
+
+text = text.replace(
+    'rm -rf /poc; ln -s "$POC_WORK_DIR" /poc',
+    ': # host /poc symlink omitted; guest /poc is created inside initramfs',
+)
+text = text.replace(
+    'rm -rf /poc\nln -s "$POC_WORK_DIR" /poc',
+    ': # host /poc symlink omitted; guest /poc is created inside initramfs',
+)
+if (
+    'BASE=/out/initramfs.base.cpio' not in text
+    and 'cpio -idm --quiet < /out/initramfs.base.cpio' not in text
+):
+    text = text.replace(
+        'cd "$STAGE"\n',
+        'cd "$STAGE"\n'
+        'if [ -r /out/initramfs.base.cpio ]; then\n'
+        '    cpio -idm --quiet < /out/initramfs.base.cpio\n'
+        'fi\n',
+        1,
+    )
+
+device_nodes = {
+    'mknod -m 0600 dev/console c 5 1':
+        '[ -e dev/console ] || mknod -m 0600 dev/console c 5 1 2>/dev/null || true',
+    'mknod -m 0666 dev/null    c 1 3':
+        '[ -e dev/null ] || mknod -m 0666 dev/null c 1 3 2>/dev/null || true',
+    'mknod -m 0666 dev/zero    c 1 5':
+        '[ -e dev/zero ] || mknod -m 0666 dev/zero c 1 5 2>/dev/null || true',
+    'mknod -m 0444 dev/random  c 1 8':
+        '[ -e dev/random ] || mknod -m 0444 dev/random c 1 8 2>/dev/null || true',
+    'mknod -m 0444 dev/urandom c 1 9':
+        '[ -e dev/urandom ] || mknod -m 0444 dev/urandom c 1 9 2>/dev/null || true',
+    'mknod -m 0660 dev/ttyS0   c 4 64':
+        '[ -e dev/ttyS0 ] || mknod -m 0660 dev/ttyS0 c 4 64 2>/dev/null || true',
+}
+for old, new in device_nodes.items():
+    text = text.replace(old, new)
+
+path.write_text(text)
+PY
+chmod +x /src/build.sh
+""",
+    )
 
 
 def setup_linux_evaluation_container(
@@ -972,6 +1133,15 @@ def setup_linux_evaluation_container(
             "build.sh",
             "/src/build.sh",
         )
+        # Privilege-aware init.sh: PoCs run as the privilege declared by
+        # meta.json, so grading matches the agent's run condition. No-op for
+        # rebuilt images that already bake it; required otherwise.
+        _copy_linux_support_script(
+            container_id,
+            instance_dir,
+            "init.sh",
+            "/rootfs/init.sh",
+        )
 
     run_step(
         "Sanitize Linux eval container",
@@ -985,6 +1155,8 @@ def setup_linux_evaluation_container(
             "/out/initramfs.cpio.gz /tmp/serial.log"
         ),
     )
+    _ensure_linux_process_tools(container_id)
+    _prepare_linux_secb_runtime(container_id)
 
     run_step(
         "Sanitize git history",

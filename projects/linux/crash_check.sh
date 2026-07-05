@@ -25,7 +25,7 @@
 set -e
 set -u
 
-ATTEMPTS="${ATTEMPTS:-3}"
+ATTEMPTS="${ATTEMPTS:-6}"
 
 function prepare_poc_bundle() {
     local dest="$1"
@@ -78,6 +78,27 @@ function run_audit_attempt() {
         rm -rf "$tmpdir"
         echo "Error: failed to prepare container workspace" >&2
         return 2
+    fi
+
+    # Privilege-drop init.sh: the PoC runs at the CVE's declared privilege
+    # (uid 1000 for "user", init-ns root for "root"). No-op for rebuilt images
+    # that already bake it.
+    init_src="$IMAGES_PATH/$ISSUE_ID/init.sh"
+    if [ -f "$init_src" ]; then
+        docker cp "$init_src" "$name:/rootfs/init.sh" >/dev/null 2>&1 \
+            && docker exec "$name" chmod +x /rootfs/init.sh >/dev/null 2>&1 || true
+    fi
+
+    # Ensure the guest privilege matches meta.json. Pre-built images may bake a
+    # /run/secb/config.json WITHOUT a "privilege" key; secb.sh then defaults to
+    # "user" and init.sh drops a root-only PoC to uid 1000 (mount() fails, never
+    # reproduces). Inject the declared privilege so root CVEs run as root.
+    priv=$(sed -n 's/.*"privilege"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' \
+        "$IMAGES_PATH/$ISSUE_ID/meta.json" 2>/dev/null | head -1)
+    if [ -n "$priv" ]; then
+        docker exec "$name" bash -lc \
+            "jq '.privilege = \"$priv\"' /run/secb/config.json > /tmp/c.json \
+             && mv /tmp/c.json /run/secb/config.json" >/dev/null 2>&1 || true
     fi
 
     if ! docker cp "$audit_dir/." "$name:/src/linux/audit/"; then

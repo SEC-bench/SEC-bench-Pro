@@ -1,0 +1,9 @@
+# The base image build (build_images.py --mode base) uses the repo ROOT as its
+# Docker context so the Dockerfile can COPY the vendored MCP (mcps/linux). Only
+# base/ and mcps/ are needed there — exclude everything else to keep the context
+# small. Leaf builds use their own per-CVE context and are unaffected.
+*
+!base
+!base/**
+!mcps
+!mcps/**

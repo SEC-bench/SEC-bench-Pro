@@ -1,0 +1,19 @@
+[project]
+name = "secb-linux-vm-mcp"
+version = "0.1.0"
+description = "FastMCP control server for SEC-Bench Pro Linux kernel QEMU runners (build/repro/validate over QEMU+KVM)."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0",
+]
+
+[project.scripts]
+secb-linux-vm-mcp = "secb_linux_vm_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["secb_linux_vm_mcp*"]

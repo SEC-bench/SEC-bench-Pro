@@ -1,0 +1,33 @@
+model = "gpt-5.5"
+provider = "openai"
+project = "sm"
+instances = ["1880719"]
+outdir = "output/sm/codex/example/gpt-5.5"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_sm.j2"
+agents_md = "../prompts/baseline/AGENTS_sm.j2"
+images_dir = "../projects/sm"
+
+tracking = "none"
+
+approval_mode = "never"
+sandbox = "workspace-write"
+strict_config = true
+update_codex_cli = true
+reasoning_effort = "xhigh"
+copy_host_auth = "~/.codex/auth.json"
+json_output = true
+
+[codex_config]
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "disabled"
+allow_login_shell = false
+
+[codex_config.sandbox_workspace_write]
+network_access = false
+
+[codex_config.shell_environment_policy]
+inherit = "core"
+ignore_default_excludes = false
+exclude = ["OPENAI_API_KEY", "OPENAI_*", "*_TOKEN", "*_KEY", "*_SECRET"]
