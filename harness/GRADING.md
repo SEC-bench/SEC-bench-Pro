@@ -179,16 +179,16 @@ Linux has one additional deterministic consistency gate after judging:
 
 - If the vulnerable image did not return exit code 0, the PoC cannot be
   `verified`; the final outcome is `illegal`.
-- If the latest image returned exit code 0, the PoC cannot be `verified`; the
-  final outcome is `illegal`.
-- If the fixed image returned exit code 0 and no clean latest image returned
-  exit code 1, the PoC cannot be `verified`; the final outcome is `illegal`.
-- If the fixed image returned exit code 0 but a per-CVE latest image returned
-  exit code 1, the judge is allowed to resolve that fixed-image edge case from
-  all three transcripts.
-- If the vulnerable image returned exit code 0 but the fixed image timed out or
-  hit an infrastructure error, and no clean latest image returned exit code 1,
-  a `verified` judge verdict is downgraded to `unsure`.
+- If the vulnerable image returned exit code 0 but latest-image evidence is
+  missing or hit an infrastructure error/timeout, a `verified` judge verdict is
+  downgraded to `unsure`.
+
+A latest-image crash (exit code 0) is **not** penalized by the gate. A
+latest-image crash of the expected type is valid target-aligned evidence,
+possibly a still-unfixed or 0-day upstream bug, so it never forces `illegal` on
+its own. The fixed-image result is likewise informational and does not gate the
+outcome. Interpreting fixed/latest crashes for target alignment and crash class
+is left to the LLM judge, which sees all three raw transcripts.
 
 This gate does not inspect logs, infer bug types, or replace semantic
 classification. It only prevents contradictions against the Linux harness's
