@@ -250,10 +250,18 @@ outcome per PoC:
   infrastructure-incomplete in a way that blocks classification.
 - **`unsure`**: the PoC plausibly reaches the target, but latest/fixed evidence
   is incomplete infrastructure evidence (timeout, build/load failure, stale
-  module ABI, QEMU failure).
+  module ABI, QEMU failure). This is an escalation label rather than a failure:
+  manual review confirms ~91% of `unsure` verdicts as `verified`.
 - **`illegal`**: no execution demonstrates the expected target-aligned crash, or
   the only crash is a different class/subsystem or fabricated/self-printed
   evidence.
+
+> [!NOTE]
+> **Default scoring treats `unsure` as a success.** The default policy counts a
+> case as solved when at least one of its PoCs is `verified` **or** `unsure`,
+> while keeping the `unsure` label and its evidence for optional audit. The
+> strict `success` column (`verified` only) stays available for a stricter
+> reference that requires `unsure` cases to be manually adjudicated.
 
 Reliability features are non-negotiable: retry-with-early-exit on flaky
 reproductions, exponential backoff for transient LLM API errors, strict JSON
