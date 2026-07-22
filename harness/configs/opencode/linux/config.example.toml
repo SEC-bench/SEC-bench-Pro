@@ -1,31 +1,113 @@
+# Example OpenCode harness config.
+#
+# Run from the repository root:
+#   uv run harness/eval_opencode.py harness/configs/opencode/linux/config.example.toml
+#
+# Relative paths are resolved from the harness/ directory.
+
+# Model and provider ---------------------------------------------------------
+#
+# The harness builds the OpenCode model reference as:
+#   "<provider-prefix>/<model>"
+#
+# For this example, api="bedrock" and model="moonshotai.kimi-k2.5" become:
+#   amazon-bedrock/moonshotai.kimi-k2.5
+#
+# Supported api values:
+#   [1] opencode    -> opencode/<model>
+#   [2] openrouter  -> openrouter/<model>
+#   [3] moonshot    -> moonshotai/<model>
+#   [4] moonshot-cn -> moonshotai-cn/<model>
+#   [5] openai      -> openai/<model>
+#   [6] nvidia      -> nvidia/<model>
+#   [7] bedrock     -> amazon-bedrock/<model>
+#
+# Required host credentials are forwarded into the Docker container:
+#   openrouter: OPENROUTER_API_KEY
+#   moonshot/moonshot-cn: MOONSHOT_API_KEY
+#   openai: OPENAI_API_KEY
+#   nvidia: NVIDIA_API_KEY
+#   bedrock: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN,
+#            and AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
 model = "moonshotai.kimi-k2.5"
 api = "bedrock"
+
+# Reasoning and provider options ---------------------------------------------
+#
+# reasoning_effort becomes agent.<agent_name>.reasoningEffort in the generated
+# OpenCode config. Values are provider/model-dependent; this model uses high.
+reasoning_effort = "high"
+
+# Optional provider-specific options are written directly into the generated
+# agent config, so use the provider's documented camelCase option names.
+# [agent_options]
+# reasoningEffort = "high"
+# textVerbosity = "low"
+
+# Optional OpenCode model variant. Only enable when the selected model/provider
+# exposes the named variant; it is separate from reasoning_effort.
+# variant = "provider-specific-variant"
+
+# Benchmark selection --------------------------------------------------------
+#
+# project selects the Linux adapter. Each CVE id must have metadata and a
+# Docker image entry under images_dir.
 project = "linux"
 instances = ["CVE-2024-26921"]
+
+# Runtime and inputs ---------------------------------------------------------
+#
+# outdir receives one timestamped run directory per invocation.
+# timeout limits the OpenCode agent process for each instance, in seconds;
+# setup and artifact collection run outside that limit. 5400 is 90 minutes.
+# prompt_template is rendered into prompt.txt.
+# agents_md is copied into the worktree as AGENTS.md and embedded in the
+# generated OpenCode agent config.
+# images_dir contains benchmark metadata rather than Docker image layers.
 outdir = "output/linux/opencode/example/kimi-k2.5"
 timeout = 5400
 prompt_template = "../prompts/baseline/task_prompt_linux.j2"
 agents_md = "../prompts/baseline/AGENTS_linux.j2"
 images_dir = "../projects/linux"
 
+# Artifacts and output -------------------------------------------------------
+#
+# compact saves the trajectory, continuation bundle, reasoning, prompt/config,
+# worktree diffs, audit files, and results. Use debug for raw DB/storage/logs.
 tracking = "none"
 opencode_artifacts = "compact"
+# output_format=json lets the harness render tool calls, reasoning, and usage.
 output_format = "json"
-reasoning_effort = "high"
+
+# Agent execution and sandbox -----------------------------------------------
+#
+# steps is the maximum number of agentic iterations before a text-only response;
+# timeout remains the hard wall-clock limit. Linux uses a privileged outer
+# container for KVM, while shell_network_sandbox still isolates each Bash call
+# in a no-network namespace. pure=true ignores user-global OpenCode config.
+steps = 600
 privileged = true
 refresh_models = true
 update_opencode_cli = true
 opencode_update_method = "npm"
 shell_network_sandbox = true
 pure = true
-steps = 600
 
+# MCP ------------------------------------------------------------------------
+#
+# The repository-owned secb server provides Linux VM tools. Its timeout is in
+# milliseconds and is independent of the 5400-second agent process timeout.
 [mcp.secb]
 type = "local"
 command = ["secb-linux-vm-mcp"]
 enabled = true
 timeout = 900000
 
+# Permissions ----------------------------------------------------------------
+#
+# Deny unknown tools by default, allow local code/navigation tools, and deny
+# interactive or web tools. secb_* grants only the declared Linux VM server.
+# Environment files remain unreadable except for intentionally safe examples.
 [permission]
 "*" = "deny"
 bash = "allow"

@@ -1,24 +1,77 @@
+# Example Codex harness config.
+#
+# Run from the repository root:
+#   uv run harness/eval_codex.py harness/configs/codex/linux/config.example.toml
+#
+# Relative paths are resolved from the harness/ directory.
+
+# Model and provider ---------------------------------------------------------
+#
+# Supported provider values and host authentication:
+#   openai  -> copy_host_auth (default ~/.codex/auth.json), or OPENAI_API_KEY
+#              when copy_host_auth is omitted/false
+#   bedrock -> AWS_BEARER_TOKEN_BEDROCK, AWS access keys, or AWS_PROFILE, plus
+#              AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
+#
+# model is the exact provider model id. Common Codex reasoning levels are
+# minimal, low, medium, high, and xhigh; availability depends on the model.
+# Keep exactly one provider block uncommented.
+
+# [1] AWS Bedrock (copy_host_auth must be false):
+# model = "us.anthropic.claude-opus-4-6-v1"
+# provider = "bedrock"
+# reasoning_effort = "max"
+# copy_host_auth = false
+# outdir = "output/linux/codex/example/opus-4.6-bedrock/"
+
+# [2] OpenAI:
 model = "gpt-5.5"
 provider = "openai"
+reasoning_effort = "xhigh"
+copy_host_auth = "~/.codex/auth.json"
+outdir = "output/linux/codex/example/gpt-5.5/"
+
+# Benchmark selection --------------------------------------------------------
+#
+# project selects the Linux adapter. Each CVE id must have metadata and a
+# Docker image entry under images_dir.
 project = "linux"
 instances = ["CVE-2026-43078"]
-outdir = "output/linux/codex/example/gpt-5.5/"
+
+# Runtime and inputs ---------------------------------------------------------
+#
+# timeout limits the Codex agent process for each instance, in seconds;
+# setup and artifact collection run outside that limit. 5400 is 90 minutes.
+# This example has no separate turn/step cap; timeout is the execution bound.
+# prompt_template is rendered into prompt.txt, agents_md becomes AGENTS.md,
+# and images_dir contains benchmark metadata rather than Docker image layers.
 timeout = 5400
 prompt_template = "../prompts/baseline/task_prompt_linux.j2"
 agents_md = "../prompts/baseline/AGENTS_linux.j2"
 images_dir = "../projects/linux"
 
+# Agent execution ------------------------------------------------------------
+#
+# approval_mode=never keeps the run unattended. strict_config rejects unsafe or
+# conflicting config, update_codex_cli refreshes the bundled CLI, and JSON output
+# preserves the complete session trajectory.
 tracking = "none"
-
 approval_mode = "never"
-sandbox = "workspace-write"
-add_dirs = ["/out", "/tmp", "/usr/local/bin"]
 strict_config = true
 update_codex_cli = true
-reasoning_effort = "xhigh"
-copy_host_auth = "~/.codex/auth.json"
 json_output = true
 
+# Sandbox and network --------------------------------------------------------
+#
+# workspace-write lets the agent modify the benchmark tree while the nested
+# Codex sandbox blocks network access and excludes credentials from its shell.
+# Linux also needs the listed writable runtime paths for VM tooling.
+sandbox = "workspace-write"
+add_dirs = ["/out", "/tmp", "/usr/local/bin"]
+
+# Advanced Codex settings ----------------------------------------------------
+#
+# Keep approval_policy and sandbox_mode aligned with the top-level values.
 [codex_config]
 approval_policy = "never"
 sandbox_mode = "workspace-write"
@@ -28,17 +81,19 @@ allow_login_shell = false
 [codex_config.sandbox_workspace_write]
 network_access = false
 
-# The secb harness, exposed as MCP tools. Codex spawns this server OUTSIDE its
+# MCP ------------------------------------------------------------------------
+#
+# The secb harness is exposed as MCP tools. Codex spawns this server outside its
 # bubblewrap sandbox, so QEMU launched from it gets native KVM while the agent's
 # own shell commands remain sandboxed (workspace-write, no network).
 [codex_config.mcp_servers.secb]
 command = "secb-linux-vm-mcp"
-# Auto-run the harness tools: with approval_policy=never, MCP tool calls (which
-# run outside the sandbox) would otherwise be cancelled ("user cancelled MCP
-# tool call") in headless exec. We fully trust our own harness server.
+# Auto-approve this repository-owned server so headless MCP calls are not
+# cancelled by approval_policy=never.
 default_tools_approval_mode = "approve"
 startup_timeout_sec = 60
 
+# Pass only a minimal shell environment and explicitly remove secret-like vars.
 [codex_config.shell_environment_policy]
 inherit = "core"
 ignore_default_excludes = false

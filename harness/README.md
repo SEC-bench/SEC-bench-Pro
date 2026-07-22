@@ -94,6 +94,28 @@ agents_md       = "../prompts/baseline/AGENTS_v8.j2"        # optional
 images_dir      = "../projects/v8"                          # benchmark ground-truth dir
 ```
 
+Claude Code supports `bedrock`, `anthropic`, and `glm` providers. For a GLM
+Coding Plan run, export the API key under the name required by the
+[Z.AI Claude Code guide](https://docs.z.ai/devpack/tool/claude) and select the
+provider:
+
+```bash
+export ANTHROPIC_AUTH_TOKEN="your_zai_api_key"
+```
+
+```toml
+provider = "glm"
+model = "glm-5.2[1m]"
+reasoning_effort = "max"
+```
+
+The GLM provider configures Z.AI's Anthropic-compatible endpoint, GLM-5.2
+Sonnet/Opus aliases, one-million-token context window, and extended API timeout
+inside the evaluation container. The `model` field is required and is also used
+for the Sonnet/Opus alias mappings. GLM defaults `reasoning_effort` to `max` if
+that field is omitted. Host Claude credentials cannot be copied for this
+provider; authentication is always supplied through `ANTHROPIC_AUTH_TOKEN`.
+
 The evaluator renders `prompt_template` with per-instance `meta.json`, spins
 up the instance's Docker container, runs the agent with the rendered prompt,
 and harvests `audit/`, session logs, and tracking artifacts into
@@ -113,10 +135,26 @@ The example configs are fail-closed against agent-side internet access:
 - **Claude Code** configs can set `claude_sandbox = true`; the harness writes
   the configured `[claude_settings]` to a per-run settings file and requires
   `sandbox.network.deniedDomains = ["*"]`, no unsandboxed Bash commands, and no
-  bypass-permissions mode.
-- **OpenCode** uses `shell_network_sandbox = true` for Linux configs. The
-  harness installs a shell wrapper that executes Bash tool calls in an isolated
-  network namespace, while the model client can still reach its provider API.
+  bypass-permissions mode. Since evaluations already run inside Docker, the
+  harness enables Claude Code's documented `enableWeakerNestedSandbox` mode and
+  relaxes the outer container's AppArmor and seccomp profiles so Linux
+  `bubblewrap` can create its nested namespaces. It does not add `SYS_ADMIN` or
+  any other capability. This nested mode avoids `uid_map` and `/proc` mount
+  failures; it reduces the inner sandbox's strength, so the outer evaluation
+  container remains an important isolation boundary.
+- **OpenCode** uses `shell_network_sandbox = true` for V8, SpiderMonkey, and
+  Linux configs. The harness installs a shell wrapper that executes Bash tool
+  calls in an isolated network namespace with no effective capabilities and
+  `no_new_privs`, while the model client can still reach its provider API.
+
+When an older benchmark image lacks Linux sandbox tools, the harness prepares a
+self-contained `bwrap`/`socat` bundle once from `debian:12-slim`, caches about
+11 MB in a private, owner-only directory under the host temporary directory,
+and copies it into each container. The cache is rejected unless its ownership,
+permissions, file types, and executables validate. This avoids running
+`apt-get update` against stale image mirrors for every instance. Codex uses its
+CLI-bundled `bwrap` when available; the image package manager remains a fallback
+for unsupported architectures or cache failures.
 
 For Linux, all three agents use the `secb-linux-vm-mcp` server as the trusted
 KVM/QEMU harness. The server is installed from the vendored `mcps/linux`

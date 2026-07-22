@@ -1,19 +1,70 @@
-model = "us.anthropic.claude-sonnet-4-6"
-provider = "bedrock"
+# Example Claude Code harness config.
+#
+# Run from the repository root:
+#   uv run harness/eval_claude.py harness/configs/claude/v8/config.example.toml
+#
+# Relative paths are resolved from the harness/ directory.
+
+# Model and provider ---------------------------------------------------------
+#
+# Supported provider values and host authentication:
+#   anthropic -> ANTHROPIC_API_KEY
+#   bedrock   -> AWS credentials, AWS_REGION_NAME, and
+#                CLAUDE_CODE_USE_BEDROCK=1
+#   glm       -> ANTHROPIC_AUTH_TOKEN for the Z.AI Coding Plan
+#
+# model is the exact provider model id. reasoning_effort is passed to Claude
+# Code; supported values are model-dependent. GLM-5.2 defaults to max, and the
+# [1m] suffix selects Z.AI's one-million-token context variant.
+# Keep exactly one provider block uncommented.
+
+# [1] Anthropic API:
+# model = "claude-sonnet-4-6"
+# provider = "anthropic"
+# reasoning_effort = "high"
+# outdir = "output/v8/claude/example/sonnet-4.6-anthropic"
+
+# [2] AWS Bedrock:
+# model = "us.anthropic.claude-sonnet-4-6"
+# provider = "bedrock"
+# reasoning_effort = "high"
+# outdir = "output/v8/claude/example/sonnet-4.6"
+
+# [3] Z.AI GLM Coding Plan:
+model = "glm-5.2[1m]"
+provider = "glm"
+reasoning_effort = "max"
+outdir = "output/v8/claude/example/glm-5.2"
+
+# Benchmark selection --------------------------------------------------------
+#
+# project selects the V8 adapter. Each instance id must have metadata and a
+# Docker image entry under images_dir.
 project = "v8"
 instances = ["472139305"]
-outdir = "output/v8/claude/example/sonnet-4.6"
+
+# Runtime and inputs ---------------------------------------------------------
+#
+# timeout limits the Claude agent process for each instance, in seconds;
+# setup and artifact collection run outside that limit. 5400 is 90 minutes.
+# This example has no separate turn/step cap; timeout is the execution bound.
+# prompt_template is rendered into prompt.txt, agents_md becomes CLAUDE.md,
+# and images_dir contains benchmark metadata rather than Docker image layers.
 timeout = 5400
 prompt_template = "../prompts/baseline/task_prompt_v8.j2"
 agents_md = "../prompts/baseline/AGENTS_v8.j2"
 images_dir = "../projects/v8"
 
+# Agent execution ------------------------------------------------------------
+#
+# update_claude_cli refreshes the image's bundled CLI before the run.
+# output_format=stream-json preserves the complete tool trajectory.
 tracking = "none"
-privileged = false
 update_claude_cli = true
-claude_sandbox = true
-dangerously_skip_permissions = false
+output_format = "stream-json"
 
+# The list is both Claude's built-in tool whitelist and its auto-approval list.
+# Keep MCP wildcards here when adding an MCP server.
 allowed_tools = [
     "Agent",
     "Bash",
@@ -27,9 +78,19 @@ allowed_tools = [
     "TaskList",
     "TaskUpdate",
 ]
-output_format = "stream-json"
-reasoning_effort = "high"
 
+# Sandbox and permissions ----------------------------------------------------
+#
+# V8 does not require a privileged container. claude_sandbox enables Claude
+# Code's Bash sandbox, and deniedDomains=["*"] blocks network access from Bash.
+# Permission bypass must remain disabled for unattended sandboxed evaluations.
+privileged = false
+claude_sandbox = true
+dangerously_skip_permissions = false
+
+# Advanced Claude settings ---------------------------------------------------
+#
+# These settings disable unrelated traffic/features and enforce sandbox use.
 [claude_settings]
 disableClaudeAiConnectors = true
 disableRemoteControl = true
@@ -40,15 +101,19 @@ disableAllHooks = true
 [claude_settings.permissions]
 disableBypassPermissionsMode = "disable"
 
+# Nested Docker cannot use Claude's strongest namespace layout, so the
+# documented weaker nested mode is enabled while fail-closed behavior remains.
 [claude_settings.sandbox]
 enabled = true
 failIfUnavailable = true
 autoAllowBashIfSandboxed = true
 allowUnsandboxedCommands = false
+enableWeakerNestedSandbox = true # Claude's supported nested-Docker mode
 
 [claude_settings.sandbox.network]
 deniedDomains = ["*"]
 
+# Prevent sandboxed Bash commands from reading host/provider credentials.
 [[claude_settings.sandbox.credentials.files]]
 path = "/root/.claude"
 mode = "deny"

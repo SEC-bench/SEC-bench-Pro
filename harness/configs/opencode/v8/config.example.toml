@@ -1,12 +1,12 @@
 # Example OpenCode harness config.
 #
-# Run from the repo root:
+# Run from the repository root:
 #   uv run harness/eval_opencode.py harness/configs/opencode/v8/config.example.toml
 #
 # Paths below are resolved relative to the harness/ directory, matching the
 # Codex and Claude harness configs.
 
-# Model/provider -------------------------------------------------------------
+# Model and provider ---------------------------------------------------------
 #
 # The harness builds the OpenCode model reference as:
 #   "<provider-prefix>/<model>"
@@ -15,13 +15,13 @@
 #   moonshotai-cn/kimi-k2.6
 #
 # Supported api values:
-#   opencode      -> opencode/<model>
-#   openrouter    -> openrouter/<model>
-#   moonshot      -> moonshotai/<model>
-#   moonshot-cn   -> moonshotai-cn/<model>
-#   openai        -> openai/<model>
-#   nvidia        -> nvidia/<model>
-#   bedrock       -> amazon-bedrock/<model>
+#   [1] opencode    -> opencode/<model>
+#   [2] openrouter  -> openrouter/<model>
+#   [3] moonshot    -> moonshotai/<model>
+#   [4] moonshot-cn -> moonshotai-cn/<model>
+#   [5] openai      -> openai/<model>
+#   [6] nvidia      -> nvidia/<model>
+#   [7] bedrock     -> amazon-bedrock/<model>
 #
 # Required host credentials are forwarded into the Docker container:
 #   openrouter: OPENROUTER_API_KEY
@@ -32,52 +32,6 @@
 #            and AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
 model = "kimi-k2.6"
 api = "moonshot-cn"
-project = "v8"
-
-# Benchmark selection --------------------------------------------------------
-#
-# instances are V8 issue/case ids. Each id must have metadata and Docker image
-# information under images_dir.
-instances = ["472139305"]
-
-# Runtime and input paths -----------------------------------------------------
-#
-# outdir receives one timestamped run directory per invocation.
-# timeout is per instance, in seconds.
-# prompt_template is rendered into prompt.txt.
-# agents_md is copied into the container worktree as AGENTS.md and also embedded
-# in the generated OpenCode agent config.
-# images_dir points at benchmark metadata directories, not Docker images.
-outdir = "output/v8/opencode/example"
-timeout = 5400
-prompt_template = "../prompts/baseline/task_prompt_v8.j2"
-agents_md = "../prompts/baseline/AGENTS_v8.j2"
-images_dir = "../projects/v8"
-
-# Tracking and artifacts ------------------------------------------------------
-#
-# tracking:
-#   none  -> no issue tracking setup
-#   beads -> initialize bd sqlite tracking inside the worktree
-#   acov  -> enable acov shims; also set acov_path and optionally acov_subsystems
-#
-# opencode_artifacts:
-#   compact -> default; saves trajectory/, opencode_session/ continuation bundle,
-#              reasoning/, prompt/config/stdout, worktree diffs, audit files,
-#              and results.
-#   debug   -> compact plus raw OpenCode DB/WAL/SHM, storage, logs, tool output,
-#              snapshots, and full project .opencode. This can be much larger.
-tracking = "none"
-opencode_artifacts = "compact"
-# acov_path = "../acov"
-# acov_subsystems = "v8"
-
-# OpenCode run settings -------------------------------------------------------
-#
-# output_format is passed to `opencode run --format`. The latest OpenCode CLI
-# documents: default or json. Keep json so the harness router can render raw
-# tool calls, reasoning parts, and usage events.
-output_format = "json"
 
 # Reasoning and provider options ---------------------------------------------
 #
@@ -85,9 +39,7 @@ output_format = "json"
 #   agent.<agent_name>.reasoningEffort
 #
 # This is intentionally separate from OpenCode's model variant mechanism.
-# Kimi models currently use provider options for reasoning control; do not set
-# variant="high" unless OpenCode reports that the selected model supports that
-# exact variant.
+# Values are provider/model-dependent; this Kimi model uses high.
 reasoning_effort = "high"
 
 # Optional provider-specific options are written directly into the generated
@@ -101,20 +53,67 @@ reasoning_effort = "high"
 # exposes the named variant in OpenCode.
 # variant = "provider-specific-variant"
 
-# Optional harness/OpenCode settings -----------------------------------------
+# Benchmark selection --------------------------------------------------------
+#
+# project selects the V8 adapter. Each instance id must have metadata and a
+# Docker image entry under images_dir.
+project = "v8"
+instances = ["472139305"]
+
+# Runtime and inputs ---------------------------------------------------------
+#
+# outdir receives one timestamped run directory per invocation.
+# timeout limits the OpenCode agent process for each instance, in seconds;
+# setup and artifact collection run outside that limit. 5400 is 90 minutes.
+# prompt_template is rendered into prompt.txt.
+# agents_md is copied into the container worktree as AGENTS.md and also embedded
+# in the generated OpenCode agent config.
+# images_dir points at benchmark metadata directories, not Docker images.
+outdir = "output/v8/opencode/example"
+timeout = 5400
+prompt_template = "../prompts/baseline/task_prompt_v8.j2"
+agents_md = "../prompts/baseline/AGENTS_v8.j2"
+images_dir = "../projects/v8"
+
+# Artifacts and output -------------------------------------------------------
+#
+# opencode_artifacts:
+#   compact -> default; saves trajectory/, opencode_session/ continuation bundle,
+#              reasoning/, prompt/config/stdout, worktree diffs, audit files,
+#              and results.
+#   debug   -> compact plus raw OpenCode DB/WAL/SHM, storage, logs, tool output,
+#              snapshots, and full project .opencode. This can be much larger.
+tracking = "none"
+opencode_artifacts = "compact"
+#
+# output_format is passed to `opencode run --format`. The latest OpenCode CLI
+# documents: default or json. Keep json so the harness router can render raw
+# tool calls, reasoning parts, and usage events.
+output_format = "json"
+
+# Agent execution and sandbox -----------------------------------------------
 #
 # opencode_cli: CLI command available inside each Docker image.
 # agent_name: generated OpenCode primary agent name.
 # privileged: run Docker containers with --privileged when a target requires it.
 # skill_directory: local directory copied to worktree/.opencode/skills.
-# steps: maximum OpenCode agentic iterations before forcing a text-only response.
+# steps: maximum agentic iterations before a text-only response; timeout remains
+#        the hard wall-clock limit.
 # opencode_config: advanced raw config override, deep-merged into generated
 #                  project-root opencode.json.
 # opencode_cli = "opencode"
 # agent_name = "secbench"
-# privileged = false
 # skill_directory = ".agents/skills"
 steps = 100
+privileged = false
+# The image's bundled CLI predates the `shell` setting used by the sandbox.
+refresh_models = true
+update_opencode_cli = true
+opencode_update_method = "npm"
+# Isolate every shell tool call in a no-network namespace and fail if the
+# sandbox cannot be created. pure=true ignores user-global OpenCode config.
+shell_network_sandbox = true
+pure = true
 
 # The harness disables OpenCode's per-edit git snapshots by default (writes
 # snapshot = false into the generated opencode.json) to avoid overloading the

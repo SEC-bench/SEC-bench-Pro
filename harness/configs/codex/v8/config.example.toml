@@ -1,23 +1,75 @@
+# Example Codex harness config.
+#
+# Run from the repository root:
+#   uv run harness/eval_codex.py harness/configs/codex/v8/config.example.toml
+#
+# Relative paths are resolved from the harness/ directory.
+
+# Model and provider ---------------------------------------------------------
+#
+# Supported provider values and host authentication:
+#   openai  -> copy_host_auth (default ~/.codex/auth.json), or OPENAI_API_KEY
+#              when copy_host_auth is omitted/false
+#   bedrock -> AWS_BEARER_TOKEN_BEDROCK, AWS access keys, or AWS_PROFILE, plus
+#              AWS_REGION/AWS_REGION_NAME/AWS_DEFAULT_REGION
+#
+# model is the exact provider model id. Common Codex reasoning levels are
+# minimal, low, medium, high, and xhigh; availability depends on the model.
+# Keep exactly one provider block uncommented.
+
+# [1] AWS Bedrock (copy_host_auth must be false):
+# model = "us.anthropic.claude-sonnet-4-6"
+# provider = "bedrock"
+# reasoning_effort = "high"
+# copy_host_auth = false
+# outdir = "output/v8/codex/example/sonnet-4.6-bedrock"
+
+# [2] OpenAI:
 model = "gpt-5.5"
 provider = "openai"
+reasoning_effort = "xhigh"
+copy_host_auth = "~/.codex/auth.json"
+outdir = "output/v8/codex/example/gpt-5.5"
+
+# Benchmark selection --------------------------------------------------------
+#
+# project selects the V8 adapter. Each instance id must have metadata and a
+# Docker image entry under images_dir.
 project = "v8"
 instances = ["472139305"]
-outdir = "output/v8/codex/example/gpt-5.5"
+
+# Runtime and inputs ---------------------------------------------------------
+#
+# timeout limits the Codex agent process for each instance, in seconds;
+# setup and artifact collection run outside that limit. 5400 is 90 minutes.
+# This example has no separate turn/step cap; timeout is the execution bound.
+# prompt_template is rendered into prompt.txt, agents_md becomes AGENTS.md,
+# and images_dir contains benchmark metadata rather than Docker image layers.
 timeout = 5400
 prompt_template = "../prompts/baseline/task_prompt_v8.j2"
 agents_md = "../prompts/baseline/AGENTS_v8.j2"
 images_dir = "../projects/v8"
 
+# Agent execution ------------------------------------------------------------
+#
+# approval_mode=never keeps the run unattended. strict_config rejects unsafe or
+# conflicting config, update_codex_cli refreshes the bundled CLI, and JSON output
+# preserves the complete session trajectory.
 tracking = "none"
-
 approval_mode = "never"
-sandbox = "workspace-write"
 strict_config = true
 update_codex_cli = true
-reasoning_effort = "xhigh"
-copy_host_auth = "~/.codex/auth.json"
 json_output = true
 
+# Sandbox and network --------------------------------------------------------
+#
+# workspace-write lets the agent modify the benchmark tree while the nested
+# Codex sandbox blocks network access and excludes credentials from its shell.
+sandbox = "workspace-write"
+
+# Advanced Codex settings ----------------------------------------------------
+#
+# Keep approval_policy and sandbox_mode aligned with the top-level values.
 [codex_config]
 approval_policy = "never"
 sandbox_mode = "workspace-write"
@@ -27,6 +79,7 @@ allow_login_shell = false
 [codex_config.sandbox_workspace_write]
 network_access = false
 
+# Pass only a minimal shell environment and explicitly remove secret-like vars.
 [codex_config.shell_environment_policy]
 inherit = "core"
 ignore_default_excludes = false
