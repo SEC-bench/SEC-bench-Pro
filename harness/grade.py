@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -654,7 +655,7 @@ def run_linux_once(
 def _run_with_retries(
     project: str,
     attempts: int,
-    run_once: "Callable[[int], ExecResult]",
+    run_once: Callable[[int], ExecResult],
 ) -> ExecResult:
     """Run a PoC up to ``attempts`` times, stopping on first positive evidence."""
     last: ExecResult | None = None
