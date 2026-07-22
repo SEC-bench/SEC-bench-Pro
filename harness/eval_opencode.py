@@ -189,7 +189,9 @@ if ! command -v setpriv >/dev/null 2>&1; then
   echo "opencode shell sandbox: setpriv unavailable" >&2
   exit 126
 fi
-exec setpriv --bounding-set=-sys_admin,-net_admin --inh-caps=-all --ambient-caps=-all -- "$@"
+exec setpriv --no-new-privs --bounding-set=-all \
+  --inh-caps=-all --ambient-caps=-all \
+  --securebits=+noroot,+noroot_locked -- "$@"
 '
 case "$backend" in
   unshare)
@@ -562,6 +564,7 @@ command -v unshare >/dev/null 2>&1 || command -v bwrap >/dev/null 2>&1
             "END { exit found ? 0 : 1 }' /proc/net/route; then "
             "  echo default route still visible >&2; exit 1; "
             "fi && "
+            "grep -Eq '^CapEff:[[:space:]]+0+$' /proc/self/status && "
             "test \"$(readlink /proc/1/ns/net)\" != "
             "\"$(readlink /proc/self/ns/net)\""
         )

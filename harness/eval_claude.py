@@ -51,6 +51,7 @@ from common import (
     docker_preflight,
     error,
     info,
+    install_cached_sandbox_tools,
     is_timeout_exit_code,
     load_config,
     resolve_instances,
@@ -73,6 +74,8 @@ class ClaudeProviderSettings:
     forwarded_env_vars: tuple[str, ...]
     use_bare: bool
     required_host_env_var: str | None = None
+    settings_env: tuple[tuple[str, object], ...] = ()
+    default_reasoning_effort: str | None = None
 
 
 _CLAUDE_PROVIDER_SETTINGS: dict[str, ClaudeProviderSettings] = {
@@ -90,6 +93,20 @@ _CLAUDE_PROVIDER_SETTINGS: dict[str, ClaudeProviderSettings] = {
         forwarded_env_vars=("ANTHROPIC_API_KEY",),
         use_bare=True,
         required_host_env_var="ANTHROPIC_API_KEY",
+    ),
+    "glm": ClaudeProviderSettings(
+        forwarded_env_vars=("ANTHROPIC_AUTH_TOKEN",),
+        # Bare mode accepts ANTHROPIC_API_KEY only; Z.AI uses the auth token.
+        use_bare=False,
+        required_host_env_var="ANTHROPIC_AUTH_TOKEN",
+        settings_env=(
+            ("ANTHROPIC_BASE_URL", "https://api.z.ai/api/anthropic"),
+            ("ANTHROPIC_DEFAULT_HAIKU_MODEL", "glm-4.7"),
+            ("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "1000000"),
+            ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", 1),
+            ("API_TIMEOUT_MS", "3000000"),
+        ),
+        default_reasoning_effort="max",
     ),
 }
 
@@ -109,6 +126,26 @@ _CLAUDE_AUTH_ENV_VARS = (
 )
 _CLAUDE_EVAL_SETTINGS_CONTAINER_PATH = "/tmp/claude-eval-settings.json"
 _CLAUDE_EVAL_MCP_CONFIG_CONTAINER_PATH = "/tmp/claude-eval-mcp.json"
+
+
+def _claude_container_security_args(
+    *,
+    privileged: bool,
+    claude_sandbox: bool,
+) -> list[str]:
+    if privileged:
+        return ["--privileged"]
+    if claude_sandbox:
+        # Claude's weaker nested sandbox creates its own user namespace. The
+        # outer profiles must permit those syscalls, but no added capability is
+        # needed by the evaluation container itself.
+        return [
+            "--security-opt",
+            "apparmor=unconfined",
+            "--security-opt",
+            "seccomp=unconfined",
+        ]
+    return []
 
 
 def _copy_required_file_to_container(
@@ -165,6 +202,21 @@ def _ensure_claude_sandbox_dependencies(container_id: str) -> int:
     if check_rc == 0:
         step_ok("Ensure Claude sandbox dependencies")
         return 0
+
+    cache_ok, cache_detail = install_cached_sandbox_tools(
+        container_id,
+        ("bwrap", "socat"),
+    )
+    if cache_ok:
+        step_ok(
+            "Ensure Claude sandbox dependencies  "
+            f"{DIM}({cache_detail}){NC}"
+        )
+        return 0
+    step_warn(
+        "Ensure Claude sandbox dependencies  "
+        f"{DIM}(cache unavailable: {cache_detail}; trying package manager){NC}"
+    )
 
     install_cmd = r"""
 set -eu
@@ -224,10 +276,23 @@ def _deep_merge_settings(
 
 
 def _build_claude_settings(config: dict) -> dict[str, object]:
-    custom_settings = config.get("claude_settings")
-    if not custom_settings:
-        return {}
-    return _deep_merge_settings({}, custom_settings)
+    provider = config.get("provider", "bedrock")
+    provider_settings = _CLAUDE_PROVIDER_SETTINGS[provider]
+    defaults: dict[str, object] = {}
+    if config.get("claude_sandbox", False):
+        # The evaluator itself runs in Docker. Claude's documented nested mode
+        # avoids a second user/PID namespace layer that Docker may reject.
+        defaults["sandbox"] = {"enableWeakerNestedSandbox": True}
+    if provider_settings.settings_env:
+        provider_env = dict(provider_settings.settings_env)
+        if provider == "glm":
+            model = config["model"]
+            provider_env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+            provider_env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
+        defaults["env"] = provider_env
+
+    custom_settings = config.get("claude_settings") or {}
+    return _deep_merge_settings(defaults, custom_settings)
 
 
 def _normalize_tool_entries(value: object, key: str) -> list[str] | None:
@@ -381,7 +446,6 @@ def _validate_claude_sandbox_config(config: dict) -> None:
         raise ValueError(
             "claude_sandbox=true requires sandbox.allowUnsandboxedCommands=false."
         )
-
     network = sandbox.get("network")
     denied_domains = (
         network.get("deniedDomains")
@@ -507,9 +571,11 @@ def run_instance(
         "--detach",
         "--name",
         container_name,
+        *_claude_container_security_args(
+            privileged=privileged,
+            claude_sandbox=claude_sandbox,
+        ),
     ]
-    if privileged:
-        docker_run_cmd.append("--privileged")
     docker_run_cmd.extend(
         [
             *env_args,
@@ -934,7 +1000,6 @@ def main() -> int:
         error(str(exc))
         return 1
 
-    model = config["model"]
     timeout_secs: int = config["timeout"]
     outdir = resolve_path(SCRIPT_DIR, config["outdir"])
     prompt_template_path = resolve_path(SCRIPT_DIR, config["prompt_template"])
@@ -954,8 +1019,19 @@ def main() -> int:
         )
         return 1
     config.setdefault("provider", provider)
+    provider_settings = _CLAUDE_PROVIDER_SETTINGS[provider]
 
-    reasoning_effort = config.get("reasoning_effort")
+    model = config.get("model")
+    if not isinstance(model, str) or not model.strip():
+        error("Missing or invalid model. Must be a non-empty string.")
+        return 1
+    model = model.strip()
+    config["model"] = model
+
+    reasoning_effort = config.get(
+        "reasoning_effort",
+        provider_settings.default_reasoning_effort,
+    )
     if not isinstance(reasoning_effort, str) or not reasoning_effort.strip():
         error("Missing or invalid reasoning_effort. Must be a non-empty string.")
         return 1
@@ -1065,6 +1141,12 @@ def main() -> int:
 
     copy_host_auth = config.get("copy_host_auth")
     if copy_host_auth is not None:
+        if provider == "glm":
+            error(
+                "provider='glm' requires ANTHROPIC_AUTH_TOKEN and does not support "
+                "copy_host_auth."
+            )
+            return 1
         if not isinstance(copy_host_auth, str) or not copy_host_auth.strip():
             error("Invalid copy_host_auth. Must be a non-empty path string.")
             return 1

@@ -53,6 +53,7 @@ from common import (
     docker_preflight,
     error,
     info,
+    install_cached_sandbox_tools,
     load_config,
     resolve_instances,
     resolve_path,
@@ -405,19 +406,54 @@ def _setup_secb_mcp(container_id: str, config: dict) -> int:
     return 0
 
 
-def _ensure_codex_sandbox_dependencies(container_id: str, sandbox: str) -> int:
+def _ensure_codex_sandbox_dependencies(
+    container_id: str,
+    sandbox: str,
+    codex_cli: str,
+) -> int:
     if sandbox == "danger-full-access":
         return 0
 
     step_run("Ensure Codex sandbox dependency")
-    check_rc, _stdout, _stderr = docker_exec(
+    quoted_cli = shlex.quote(codex_cli)
+    check_rc, check_stdout, _stderr = docker_exec(
         container_id,
-        "command -v bwrap >/dev/null 2>&1",
+        f"""
+if command -v bwrap >/dev/null 2>&1; then
+  echo system
+  exit 0
+fi
+codex_path=$(command -v {quoted_cli} 2>/dev/null || true)
+if [ -n "$codex_path" ]; then
+  codex_root=$(dirname "$(dirname "$(readlink -f "$codex_path")")")
+  if find "$codex_root" -path '*/codex-resources/bwrap' -type f -perm -111 \
+      -print -quit 2>/dev/null | grep -q .; then
+    echo bundled
+    exit 0
+  fi
+fi
+exit 1
+""",
         30,
     )
     if check_rc == 0:
-        step_ok("Ensure Codex sandbox dependency")
+        source = check_stdout.strip() or "available"
+        step_ok(f"Ensure Codex sandbox dependency  {DIM}({source}){NC}")
         return 0
+
+    cache_ok, cache_detail = install_cached_sandbox_tools(
+        container_id,
+        ("bwrap",),
+    )
+    if cache_ok:
+        step_ok(
+            f"Ensure Codex sandbox dependency  {DIM}({cache_detail}){NC}"
+        )
+        return 0
+    step_warn(
+        "Ensure Codex sandbox dependency  "
+        f"{DIM}(cache unavailable: {cache_detail}; trying package manager){NC}"
+    )
 
     install_cmd = r"""
 set -eu
@@ -827,7 +863,11 @@ def run_instance(
         else:
             step_warn(f"Write Codex config  {DIM}copy failed{NC}")
 
-        sandbox_dep_rc = _ensure_codex_sandbox_dependencies(container_id, sandbox)
+        sandbox_dep_rc = _ensure_codex_sandbox_dependencies(
+            container_id,
+            sandbox,
+            codex_cli,
+        )
         if sandbox_dep_rc != 0:
             return sandbox_dep_rc
 

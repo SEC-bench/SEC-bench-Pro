@@ -11,9 +11,13 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
+import threading
 import tomllib
 from pathlib import Path
 from typing import Any, Callable
@@ -746,6 +750,273 @@ def docker_copy_from(container_id: str, src: str, dst: str) -> bool:
         capture_output=True,
     ).returncode
     return rc == 0
+
+
+_SANDBOX_TOOLS_CONTAINER_PATH = "/opt/sec-bench-pro-sandbox-tools"
+_SANDBOX_TOOLS_CACHE_LOCK = threading.Lock()
+_SANDBOX_TOOLS_CACHE_VERSION = "debian12-amd64-v1"
+_SANDBOX_TOOLS_DONOR_IMAGE = "debian:12-slim"
+_SANDBOX_TOOL_NAMES = frozenset({"bwrap", "socat"})
+
+
+def _safe_sandbox_tools_cache_parent(path: Path) -> bool:
+    """Return whether *path* is a directory safe for a private child cache."""
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return False
+    if not stat.S_ISDIR(metadata.st_mode):
+        return False
+
+    mode = stat.S_IMODE(metadata.st_mode)
+    owned_private = metadata.st_uid == os.getuid() and not mode & 0o022
+    owned_sticky = (
+        metadata.st_uid in {0, os.getuid()}
+        and bool(metadata.st_mode & stat.S_ISVTX)
+        and bool(mode & 0o002)
+    )
+    return owned_private or owned_sticky
+
+
+def _sandbox_tools_cache_dir() -> Path:
+    cache_parent = Path(tempfile.gettempdir())
+    if not _safe_sandbox_tools_cache_parent(cache_parent):
+        raise RuntimeError(
+            f"sandbox tool cache parent is not trusted: {cache_parent}"
+        )
+
+    cache_root = cache_parent / f"sec-bench-pro-sandbox-tools-{os.getuid()}"
+    try:
+        cache_root.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+
+    try:
+        metadata = cache_root.lstat()
+    except OSError as exc:
+        raise RuntimeError(
+            f"could not inspect sandbox tool cache root: {cache_root}"
+        ) from exc
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+    ):
+        raise RuntimeError(
+            "sandbox tool cache root must be a non-symlink directory owned by "
+            f"uid {os.getuid()} with mode 0700: {cache_root}"
+        )
+    return cache_root / _SANDBOX_TOOLS_CACHE_VERSION
+
+
+def _sandbox_tools_bundle_ready(bundle_dir: Path) -> bool:
+    required = (
+        bundle_dir / "READY",
+        bundle_dir / "bin" / "bwrap",
+        bundle_dir / "bin" / "socat",
+        bundle_dir / "libexec" / "bwrap",
+        bundle_dir / "libexec" / "socat",
+        bundle_dir / "lib" / "ld-linux-x86-64.so.2",
+    )
+    executable = set(required[1:])
+    try:
+        bundle_metadata = bundle_dir.lstat()
+        if (
+            not stat.S_ISDIR(bundle_metadata.st_mode)
+            or bundle_metadata.st_uid != os.getuid()
+            or stat.S_IMODE(bundle_metadata.st_mode) & 0o022
+        ):
+            return False
+
+        for path in bundle_dir.rglob("*"):
+            metadata = path.lstat()
+            if metadata.st_uid != os.getuid():
+                return False
+            if not (
+                stat.S_ISDIR(metadata.st_mode)
+                or stat.S_ISREG(metadata.st_mode)
+            ):
+                return False
+            if stat.S_IMODE(metadata.st_mode) & 0o022:
+                return False
+
+        for path in required:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                return False
+            if path in executable and not metadata.st_mode & 0o111:
+                return False
+
+        return (bundle_dir / "READY").read_text(encoding="utf-8") == (
+            f"source={_SANDBOX_TOOLS_DONOR_IMAGE}\n"
+        )
+    except OSError:
+        return False
+
+
+def _remove_sandbox_tools_cache_entry(path: Path) -> None:
+    """Remove one validated-cache child without following a symlink."""
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(metadata.st_mode):
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _build_sandbox_tools_bundle(bundle_dir: Path) -> None:
+    """Build a small, relocatable bwrap/socat runtime using Debian packages."""
+    build_dir = Path(
+        tempfile.mkdtemp(
+            prefix=f".{_SANDBOX_TOOLS_CACHE_VERSION}-",
+            dir=bundle_dir.parent,
+        )
+    )
+    host_uid = os.getuid()
+    host_gid = os.getgid()
+    build_script = rf"""
+set -eu
+restore_owner() {{ chown -R {host_uid}:{host_gid} /cache 2>/dev/null || true; }}
+trap restore_owner EXIT
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq --no-install-recommends bubblewrap socat
+mkdir -p /cache/lib /cache/libexec
+cp /usr/bin/bwrap /usr/bin/socat /cache/libexec/
+ldd /usr/bin/bwrap /usr/bin/socat \
+  | awk '$2 == "=>" && $3 ~ /^\// {{print $3}} $1 ~ /^\// && $1 !~ /:$/ {{print $1}}' \
+  | sort -u \
+  | while read -r lib; do cp -L "$lib" "/cache/lib/$(basename "$lib")"; done
+chmod -R a+rX /cache
+"""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--platform",
+                "linux/amd64",
+                "--mount",
+                f"type=bind,src={build_dir},dst=/cache",
+                _SANDBOX_TOOLS_DONOR_IMAGE,
+                "bash",
+                "-c",
+                build_script,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout)[-1000:].replace("\n", " ")
+            raise RuntimeError(
+                "could not prepare cached sandbox tools from "
+                f"{_SANDBOX_TOOLS_DONOR_IMAGE}: {detail or f'exit {result.returncode}'}"
+            )
+
+        bin_dir = build_dir / "bin"
+        bin_dir.mkdir()
+        for tool in sorted(_SANDBOX_TOOL_NAMES):
+            wrapper = bin_dir / tool
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                f'root={shlex.quote(_SANDBOX_TOOLS_CONTAINER_PATH)}\n'
+                'exec "$root/lib/ld-linux-x86-64.so.2" '
+                '--library-path "$root/lib" '
+                f'"$root/libexec/{tool}" "$@"\n',
+                encoding="utf-8",
+            )
+            wrapper.chmod(0o755)
+        (build_dir / "READY").write_text(
+            f"source={_SANDBOX_TOOLS_DONOR_IMAGE}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            build_dir.rename(bundle_dir)
+        except FileExistsError:
+            # Another harness process populated the shared cache first.
+            pass
+    finally:
+        if build_dir.exists():
+            shutil.rmtree(build_dir, ignore_errors=True)
+
+
+def install_cached_sandbox_tools(
+    container_id: str,
+    tools: tuple[str, ...],
+) -> tuple[bool, str]:
+    """Copy cached sandbox tools into a Linux/amd64 evaluation container."""
+    requested = set(tools)
+    if not requested or not requested <= _SANDBOX_TOOL_NAMES:
+        return False, "unsupported tool set"
+
+    arch_rc, arch_stdout, _arch_stderr = docker_exec(
+        container_id,
+        "uname -m",
+        30,
+    )
+    if arch_rc != 0 or arch_stdout.strip() not in {"x86_64", "amd64"}:
+        return False, f"unsupported container architecture: {arch_stdout.strip() or 'unknown'}"
+
+    try:
+        bundle_dir = _sandbox_tools_cache_dir()
+        with _SANDBOX_TOOLS_CACHE_LOCK:
+            if not _sandbox_tools_bundle_ready(bundle_dir):
+                _remove_sandbox_tools_cache_entry(bundle_dir)
+                _build_sandbox_tools_bundle(bundle_dir)
+        if not _sandbox_tools_bundle_ready(bundle_dir):
+            return False, "sandbox tool cache is incomplete"
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+
+    setup_rc, _stdout, setup_stderr = docker_exec(
+        container_id,
+        f"mkdir -p {shlex.quote(_SANDBOX_TOOLS_CONTAINER_PATH)} /usr/local/bin",
+        30,
+    )
+    if setup_rc != 0:
+        return False, setup_stderr.strip() or f"container setup exited {setup_rc}"
+    if not docker_copy_to(
+        container_id,
+        str(bundle_dir) + "/.",
+        _SANDBOX_TOOLS_CONTAINER_PATH + "/",
+    ):
+        return False, "could not copy cached sandbox tools into the container"
+
+    link_commands = [
+        f"ln -sf {shlex.quote(_SANDBOX_TOOLS_CONTAINER_PATH + '/bin/' + tool)} "
+        f"{shlex.quote('/usr/local/bin/' + tool)}"
+        for tool in sorted(requested)
+    ]
+    check_commands = []
+    for tool in tools:
+        installed = shlex.quote(f"/usr/local/bin/{tool}")
+        if tool == "bwrap":
+            check_commands.append(f"{installed} --version >/dev/null")
+        else:
+            check_commands.append(f"{installed} -V >/dev/null 2>&1")
+    activate_rc, _stdout, activate_stderr = docker_exec(
+        container_id,
+        " && ".join([*link_commands, *check_commands]),
+        30,
+    )
+    if activate_rc != 0:
+        cleanup_commands = [
+            "link="
+            + shlex.quote(f"/usr/local/bin/{tool}")
+            + "; expected="
+            + shlex.quote(f"{_SANDBOX_TOOLS_CONTAINER_PATH}/bin/{tool}")
+            + '; [ "$(readlink "$link" 2>/dev/null || true)" != "$expected" ] '
+            + '|| rm -f "$link"'
+            for tool in sorted(requested)
+        ]
+        docker_exec(container_id, "; ".join(cleanup_commands), 30)
+        return False, activate_stderr.strip() or f"activation exited {activate_rc}"
+    return True, f"cached from {_SANDBOX_TOOLS_DONOR_IMAGE}"
 
 
 def docker_pipe_stdin(container_id: str, content: str, dest_path: str) -> bool:
