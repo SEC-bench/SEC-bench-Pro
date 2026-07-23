@@ -14,6 +14,28 @@ The aggregate numbers below are derived from the current snapshot in this direct
 - Source tree: `/src/gecko-dev` (revision pinned per-instance via Dockerfile)
 - Fixed-image definitions: 104 instances include `Dockerfile.fixed` and `patches/`
 
+## Fixed Images
+
+The public fixed-image convention is
+`hwiwonlee/sm.x86_64.fixed:<Bugzilla issue id>`. The grader uses this repository
+by default. Build one tag locally with:
+
+```sh
+projects/sm/build_fixed_images.sh 1675905
+python projects/sm/patch_check.py 1675905
+```
+
+For a release, validate and publish only tags absent from Docker Hub:
+
+```sh
+projects/sm/push_images.sh --fixed --missing --verify
+```
+
+`--verify` runs the packaged PoC against each fixed image before publishing.
+Builds are per-instance SpiderMonkey builds and can require substantial CPU,
+memory, disk, and elapsed time. Use `--image-repo` and grade with
+`--fixed-repo` when publishing to a separate registry.
+
 Mozilla Foundation does not run a structured per-bug VRP payout for SpiderMonkey comparable to Chrome's VRP; every instance in this directory has `vrp: null`. The dataset is drawn from Bugzilla `sec-high` / `sec-critical` entries, MFSA advisories (2018 – 2026), Pwn2Own winners, CISA KEV in-the-wild exploited bugs, and the Anthropic/Claude-reported Firefox 148 batch (MFSA 2026-13 / 14 / 15).
 
 ## Vulnerability Type Distribution

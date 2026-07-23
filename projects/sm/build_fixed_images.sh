@@ -18,7 +18,7 @@ SKIP_EXISTING="${SKIP_EXISTING:-0}"
 
 usage() {
   cat <<'EOF'
-Usage: spidermonkey/build_fixed_images.sh [options] [instance_id ...]
+Usage: projects/sm/build_fixed_images.sh [options] [instance_id ...]
 
 Build fixed SpiderMonkey Docker images from per-instance Dockerfile.fixed files.
 
@@ -37,8 +37,8 @@ Environment equivalents:
   PARALLEL, NINJA_JOBS, IMAGE_REPO, NO_CACHE=1, PUSH=1, SKIP_EXISTING=1
 
 Examples:
-  spidermonkey/build_fixed_images.sh --parallel 4
-  spidermonkey/build_fixed_images.sh 1820543
+  projects/sm/build_fixed_images.sh --parallel 4
+  projects/sm/build_fixed_images.sh 1820543
 EOF
 }
 

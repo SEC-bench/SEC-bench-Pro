@@ -7,17 +7,22 @@ set -euo pipefail
 
 IMAGE_REPO="hwiwonlee/sm.x86_64"
 IMAGE_KIND="vulnerable"
+MISSING_ONLY=0
+VERIFY_FIXED=0
 target_ids=()
 
 usage() {
     cat <<'EOF'
-Usage: push_images.sh [--fixed] [id ...] [-h|--help]
+Usage: projects/sm/push_images.sh [--fixed] [--missing] [--verify] [id ...]
 
 Push SpiderMonkey Docker images for verified instance directories.
 When IDs are provided, push only those verified instance directories.
 
 Options:
   --fixed       Push fixed images: hwiwonlee/sm.x86_64.fixed:<id>
+  --missing     Skip tags that are already available in Docker Hub.
+  --verify      Before pushing a fixed image, run patch_check.py against its
+                packaged PoC. Cannot be used for vulnerable images.
   -h, --help    Show this help.
 
 Default:
@@ -30,6 +35,14 @@ while [[ $# -gt 0 ]]; do
         --fixed)
             IMAGE_REPO="hwiwonlee/sm.x86_64.fixed"
             IMAGE_KIND="fixed"
+            shift
+            ;;
+        --missing)
+            MISSING_ONLY=1
+            shift
+            ;;
+        --verify)
+            VERIFY_FIXED=1
             shift
             ;;
         -h|--help)
@@ -47,6 +60,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$VERIFY_FIXED" -eq 1 ] && [ "$IMAGE_KIND" != "fixed" ]; then
+    echo "Error: --verify is only valid with --fixed." >&2
+    exit 1
+fi
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -93,6 +111,8 @@ if [ "$total_verified" -eq 0 ]; then
 fi
 
 push_count=0
+remote_skip_count=0
+verified_count=0
 
 echo "Found $total_verified verified images to push."
 
@@ -103,12 +123,24 @@ for dir in "${verified_dirs[@]}"; do
 
     image="$IMAGE_REPO:$id"
 
+    if [ "$MISSING_ONLY" -eq 1 ] && docker manifest inspect "$image" >/dev/null 2>&1; then
+        echo "[SKIP] Docker Hub already has $image"
+        remote_skip_count=$((remote_skip_count + 1))
+        continue
+    fi
+
     echo -e "\033[1;34m[$current/$total_verified] Pushing $IMAGE_KIND image for ID: $id\033[0m"
 
     if ! docker image inspect "$image" >/dev/null 2>&1; then
         echo "Error: local image not found: $image" >&2
         echo "Build it before pushing." >&2
         exit 1
+    fi
+
+    if [ "$VERIFY_FIXED" -eq 1 ]; then
+        echo "Validating fixed image: $image"
+        python3 "$SCRIPT_DIR/patch_check.py" "$id"
+        verified_count=$((verified_count + 1))
     fi
 
     # Push the Docker image
@@ -121,3 +153,7 @@ done
 
 echo "Pushed $push_count $IMAGE_KIND verified images successfully."
 echo "Skipped $skip_count non-verified directories."
+echo "Skipped $remote_skip_count tags already available in Docker Hub."
+if [ "$VERIFY_FIXED" -eq 1 ]; then
+    echo "Validated $verified_count fixed images before push."
+fi

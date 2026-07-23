@@ -135,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "poc_path",
         nargs="?",
-        help="Optional PoC path. Defaults to spidermonkey/<issue_id>/poc.js.",
+        help="Optional PoC path. Defaults to projects/sm/<issue_id>/poc.js.",
     )
     parser.add_argument(
         "--fixed-repo",
@@ -195,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: Fixed image '{fixed_image}' not found.", file=sys.stderr)
         print(
             f"Build it using {instance_dir / 'Dockerfile.fixed'} or "
-            "spidermonkey/build_fixed_images.sh.",
+            "projects/sm/build_fixed_images.sh.",
             file=sys.stderr,
         )
         return 2
