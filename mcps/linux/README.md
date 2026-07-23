@@ -9,14 +9,15 @@ build a PoC, boot the pinned kernel under QEMU, run the PoC, and read the verdic
 ## Why an MCP server
 
 The agent runs under a sandbox (e.g. Codex's bubblewrap `workspace-write`), which
-gives the guest a minimal `/dev` without `/dev/kvm`. QEMU launched from inside the
-sandbox therefore falls back to slow TCG emulation.
+gives the guest a minimal `/dev` without `/dev/kvm`.
 
 An MCP server is spawned by the agent host **outside** that per-command sandbox, so
-QEMU launched from it gets **native KVM** (the container exposes `/dev/kvm`) while
-the agent's own shell commands stay sandboxed. As a bonus, the agent never touches
-`secb`, the kernel image, or QEMU directly — it only submits `audit/poc.c` and
-receives a verdict — which makes the harness tamper-proof (stronger anti-cheat).
+QEMU launched from it gets **native KVM** while the agent's own shell commands stay
+sandboxed. This still requires the outer privileged Docker container to expose a
+readable and writable `/dev/kvm`; MCP does not provide virtualization on a host
+without KVM. As a bonus, the agent never touches `secb`, the kernel image, or QEMU
+directly — it only submits `audit/poc.c` and receives a verdict — which makes the
+harness tamper-proof (stronger anti-cheat).
 
 ```
 [ sandboxed agent ]  --(MCP tool call)-->  [ secb-linux-vm-mcp server, unsandboxed ]
@@ -44,8 +45,9 @@ pip install .          # provides the `secb-linux-vm-mcp` console script
 ```
 
 Requires Python ≥ 3.10 and `fastmcp`. Intended to run **inside** a per-CVE
-SEC-bench Linux image (which provides `/usr/local/bin/secb`, `/src/linux/audit`,
-`/run/secb/config.json`, QEMU, and `/dev/kvm`).
+SEC-bench Linux image on an x86-64 Linux Docker host that exposes writable KVM
+(which provides `/usr/local/bin/secb`, `/src/linux/audit`, `/run/secb/config.json`,
+QEMU, and `/dev/kvm`).
 
 ## Use from Codex
 

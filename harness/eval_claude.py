@@ -630,6 +630,11 @@ def run_instance(
         info("Container removed.")
 
     try:
+        if common.is_linux_project(project) and not common.require_linux_kvm(
+            container_id
+        ):
+            return 1
+
         if update_claude_cli:
             update_rc = run_step(
                 "Update Claude CLI",

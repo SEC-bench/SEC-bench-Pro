@@ -803,6 +803,11 @@ def run_instance(
         # Setup steps
         # ==================================================================
 
+        if common.is_linux_project(project) and not common.require_linux_kvm(
+            container_id
+        ):
+            return 1
+
         if update_codex_cli:
             update_rc = run_step(
                 "Update Codex CLI",

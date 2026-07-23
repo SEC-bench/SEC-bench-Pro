@@ -608,29 +608,36 @@ def run_linux_once(
             stderr = start.stderr
         else:
             container_id = start.stdout.strip() or name
-            # Latest images bake the same per-CVE config with only
-            # kernel.build_commit rewritten to the latest checkout.
-            container_secb_config = (
-                None if image_kind == "latest" else secb_config_content
-            )
-            common.setup_linux_evaluation_container(
-                container_id,
-                secb_config_content=container_secb_config,
-                instance_dir=benchmark_instance_dir,
-            )
-            validate_cmd = (
-                "cd /src/linux && "
-                "rm -rf /tmp/secb/poc /out/initramfs.cpio.gz /src/linux/audit && "
-                f"/usr/local/bin/secb validate {shlex.quote(audit_path)}"
-            )
-            proc = run_interruptible_command(
-                ["docker", "exec", name, "bash", "-lc", validate_cmd],
-                timeout_sec=timeout_sec,
-            )
-            exit_code = proc.exit_code
-            timed_out = proc.timed_out or is_timeout_exit_code(proc.exit_code)
-            stdout = proc.stdout
-            stderr = proc.stderr
+            if not common.require_linux_kvm(container_id):
+                exit_code = 2
+                stderr = (
+                    "Linux evaluation requires a readable and writable /dev/kvm "
+                    "in the privileged Docker container."
+                )
+            else:
+                # Latest images bake the same per-CVE config with only
+                # kernel.build_commit rewritten to the latest checkout.
+                container_secb_config = (
+                    None if image_kind == "latest" else secb_config_content
+                )
+                common.setup_linux_evaluation_container(
+                    container_id,
+                    secb_config_content=container_secb_config,
+                    instance_dir=benchmark_instance_dir,
+                )
+                validate_cmd = (
+                    "cd /src/linux && "
+                    "rm -rf /tmp/secb/poc /out/initramfs.cpio.gz /src/linux/audit && "
+                    f"/usr/local/bin/secb validate {shlex.quote(audit_path)}"
+                )
+                proc = run_interruptible_command(
+                    ["docker", "exec", name, "bash", "-lc", validate_cmd],
+                    timeout_sec=timeout_sec,
+                )
+                exit_code = proc.exit_code
+                timed_out = proc.timed_out or is_timeout_exit_code(proc.exit_code)
+                stdout = proc.stdout
+                stderr = proc.stderr
     except GradingInterrupted:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         raise

@@ -55,9 +55,15 @@ layout.
 
 - **Docker** with access to the project's image repos
   (`hwiwonlee/v8.x86_64`, `hwiwonlee/v8.x86_64.fixed`, `hwiwonlee/sm.x86_64`,
+  `hwiwonlee/sm.x86_64.fixed`,
   `hwiwonlee/linux.x86_64`, `hwiwonlee/linux.x86_64.fixed`,
   `hwiwonlee/linux.x86_64.latest`, ...). Images are per-instance tags, and
   `--pull-missing` will pull them on demand during grading.
+- **Linux evaluations:** an x86-64 Linux Docker host that makes `/dev/kvm`
+  readable and writable inside a privileged container. This commonly requires
+  nested virtualization to be enabled for cloud VMs. The harness fails before
+  agent execution or grading if KVM is unavailable; TCG is not a supported
+  equivalent because it changes timing and can exceed per-case timeouts.
 - **Python 3.11+** with the project's dependencies installed from the
   repository root (`uv sync`; dependencies are declared in `pyproject.toml`).
 - **Agent CLI binaries** for whichever evaluator(s) you run
@@ -176,7 +182,9 @@ The Linux configs point at `../projects/linux` (the repo-root
 `/src/linux`, run the instance container with Docker `--privileged`, remove any
 baked ground-truth PoC material and stale generated initramfs, and install the
 vendored `secb-linux-vm-mcp` package into the container when the config enables
-the `secb` MCP server.
+the `secb` MCP server. Before an agent starts, the harness verifies that the
+resulting container can read and write `/dev/kvm`; a cloud executor without
+KVM is rejected instead of silently switching to TCG.
 
 Agents should write `audit/poc.c`, then validate through the MCP tool
 `secb_validate`. The tool stages `./audit/`, rebuilds the initramfs, boots the

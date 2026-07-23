@@ -690,6 +690,33 @@ def docker_exec(
         _active_proc = None
 
 
+def require_linux_kvm(container_id: str) -> bool:
+    """Return whether *container_id* can run the Linux VM harness with KVM.
+
+    Linux benchmark leaves set ``qemu.requires_kvm`` because TCG changes both
+    execution time and scheduling behaviour. Check the actual evaluation
+    container rather than only the host: managed runners and rootless Docker
+    can hide or deny ``/dev/kvm`` even when the host has the device node.
+    """
+    rc, _stdout, stderr = docker_exec(
+        container_id,
+        "test -c /dev/kvm && test -r /dev/kvm && test -w /dev/kvm",
+        15,
+    )
+    if rc == 0:
+        step_ok("Verify Linux KVM  " f"{DIM}(/dev/kvm available){NC}")
+        return True
+
+    detail = stderr.strip().splitlines()[-1] if stderr.strip() else "not available"
+    step_err("Verify Linux KVM  " f"{DIM}({detail}){NC}")
+    error(
+        "Linux evaluation requires a readable and writable /dev/kvm in the "
+        "privileged Docker container. Use an x86-64 Linux host with KVM "
+        "(including nested virtualization when applicable)."
+    )
+    return False
+
+
 def docker_exec_streaming(
     container_id: str,
     cmd: str,

@@ -39,6 +39,18 @@ Prerequisites:
 - `uv`
 - Agent credentials for the config you run. Codex configs use `OPENAI_API_KEY` or `~/.codex/auth.json` with `copy_host_auth = true`; Claude and OpenCode configs use the provider credentials declared in their TOML files.
 
+Linux evaluations additionally require an x86-64 Linux host whose Docker daemon
+can expose a readable and writable `/dev/kvm` to a privileged container. This
+includes enabling nested virtualization when evaluating from a cloud VM.
+The benchmark does not support QEMU TCG as an equivalent grading mode: it
+changes execution time and scheduling, and can invalidate time-sensitive PoCs.
+Check the actual container environment before starting an evaluation:
+
+```sh
+docker run --rm --privileged hwiwonlee/linux.x86_64:CVE-2022-0185 \
+  bash -lc 'test -r /dev/kvm && test -w /dev/kvm && echo KVM-ready'
+```
+
 Install Python dependencies from the repo root:
 
 ```sh
@@ -107,6 +119,15 @@ Summary CSVs are written to `<timestamp_dir>/summary` unless `--out-dir` is set.
 
 ```sh
 python projects/linux/build_images.py --mode latest --linux-ref origin/master -j 4
+```
+
+SpiderMonkey fixed images use `hwiwonlee/sm.x86_64.fixed:<issue_id>`. To build
+a local replacement for a tag, run:
+
+```sh
+projects/sm/build_fixed_images.sh 1675905
+# Or use a different repository and pass it to the grader with --fixed-repo.
+projects/sm/build_fixed_images.sh --image-repo myorg/sm.x86_64.fixed 1675905
 ```
 
 ## Reproduce Ground Truth
