@@ -115,11 +115,16 @@ WORKDIR $SRC
 # path the instance Dockerfiles use). gecko-dev is fetched as a second
 # remote without --filter so legacy `git checkout <gecko-dev sha>` doesn't
 # need to lazy-fetch from a partial-clone promisor that points elsewhere.
+ARG FIREFOX_REF=dab03896ede1413be148884e054b311767bcf1a0
+ARG GECKO_DEV_REF=5836a062726f715fda621338a17b51aff30d0a8c
 RUN git clone --filter=blob:none --single-branch --branch main https://github.com/mozilla-firefox/firefox.git $SRC/gecko-dev && \
     cd $SRC/gecko-dev && \
     git remote rename origin firefox && \
     git remote add gecko-dev https://github.com/mozilla/gecko-dev.git && \
-    git fetch gecko-dev master
+    git fetch firefox "$FIREFOX_REF" && \
+    git checkout --detach "$FIREFOX_REF" && \
+    git fetch gecko-dev "$GECKO_DEV_REF:refs/remotes/gecko-dev/master" && \
+    git clean -xdf
 
 WORKDIR $SRC/gecko-dev
 

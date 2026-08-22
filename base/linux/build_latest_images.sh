@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 IMAGE_REPO="${IMAGE_REPO:-hwiwonlee/linux.x86_64.latest}"
-LINUX_REF="${LINUX_REF:-origin/master}"
+LINUX_REF="${LINUX_REF:-d2c9a99135da931377240942d44f3dea104cedb8}"
 LINUX_REF_CACHE_BUST="${LINUX_REF_CACHE_BUST:-}"
 KBUILD_JOBS="${KBUILD_JOBS:-}"
 PARALLEL="${PARALLEL:-1}"
@@ -33,7 +33,8 @@ Options:
   --benchmark-dir DIR  Linux benchmark root containing CVE-* directories.
                        Defaults to ./projects/linux if present, else ~/work/benchmark/linux.
   -j, --parallel N     Number of docker builds to run concurrently (default: 1).
-  --linux-ref REF      Linux ref/commit to build (default: origin/master).
+  --linux-ref REF      Linux ref/commit to build.
+                       Default: d2c9a99135da931377240942d44f3dea104cedb8.
   --linux-ref-cache-bust VALUE
                        Cache-bust value for moving refs. Defaults to current
                        UTC timestamp for origin/* refs.

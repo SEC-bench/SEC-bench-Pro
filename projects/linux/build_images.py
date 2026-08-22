@@ -43,6 +43,7 @@ from rich.text import Text
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LINUX_DIR = Path(__file__).resolve().parent
 BASE_DIR = REPO_ROOT / "base" / "linux"
+DEFAULT_LINUX_REF = "d2c9a99135da931377240942d44f3dea104cedb8"
 
 IMAGE_REPOS = {
     "base": "hwiwonlee/linux.base",
@@ -306,8 +307,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--linux-ref",
-        default="origin/master",
-        help="Git ref for latest images (default: origin/master).",
+        default=DEFAULT_LINUX_REF,
+        help=f"Git ref for latest images (default: {DEFAULT_LINUX_REF}).",
     )
     parser.add_argument(
         "--no-cache",

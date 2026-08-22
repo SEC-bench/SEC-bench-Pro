@@ -118,8 +118,12 @@ uv run harness/grade.py --project linux --target-dir harness/output/linux/codex/
 Summary CSVs are written to `<timestamp_dir>/summary` unless `--out-dir` is set. Linux latest validation uses per-CVE images from `hwiwonlee/linux.x86_64.latest:<instance_id>`; build local copies with:
 
 ```sh
-python projects/linux/build_images.py --mode latest --linux-ref origin/master -j 4
+python projects/linux/build_images.py --mode latest -j 4
 ```
+
+The default latest snapshot is pinned to Linux commit
+`d2c9a99135da931377240942d44f3dea104cedb8`. Pass `--linux-ref` only when
+intentionally building a different snapshot.
 
 SpiderMonkey fixed images use `hwiwonlee/sm.x86_64.fixed:<issue_id>`. To build
 a local replacement for a tag, run:

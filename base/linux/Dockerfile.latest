@@ -1,9 +1,9 @@
-# Per-CVE upstream-latest Linux kernel image.
+# Per-CVE pinned latest-snapshot Linux kernel image.
 #
 # Build with a validated Linux CVE directory as the Docker context:
 #
 #   docker build -f base/linux/Dockerfile.latest \
-#     --build-arg LINUX_REF=origin/master \
+#     --build-arg LINUX_REF=d2c9a99135da931377240942d44f3dea104cedb8 \
 #     -t hwiwonlee/linux.x86_64.latest:CVE-2022-0185 \
 #     /path/to/linux/CVE-2022-0185
 #
@@ -16,7 +16,7 @@ FROM hwiwonlee/linux.base:latest
 
 SHELL ["/bin/bash", "-lc"]
 
-ARG LINUX_REF=origin/master
+ARG LINUX_REF=d2c9a99135da931377240942d44f3dea104cedb8
 # Set by build_latest_images.sh for moving refs such as origin/master so Docker
 # does not incorrectly reuse an old fetched commit.
 ARG LINUX_REF_CACHE_BUST=manual
@@ -48,12 +48,10 @@ RUN set -eux; \
     if [[ "$ref" == origin/* ]]; then \
     branch="${ref#origin/}"; \
     git -C /src/linux.git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"; \
-    elif git -C /src/linux.git rev-parse --verify -q "${ref}^{commit}" >/dev/null; then \
-    :; \
-    else \
-    git -C /src/linux.git fetch origin "$ref" || true; \
+    elif ! git -C /src/linux.git rev-parse --verify -q "${ref}^{commit}" >/dev/null; then \
+    git -C /src/linux.git fetch origin "$ref"; \
     fi; \
-    latest_commit="$(git -C /src/linux.git rev-parse "${ref}^{commit}" 2>/dev/null || git -C /src/linux.git rev-parse FETCH_HEAD^{commit})"; \
+    latest_commit="$(git -C /src/linux.git rev-parse "${ref}^{commit}")"; \
     rm -rf /src/linux; \
     git -C /src/linux.git worktree prune; \
     git -C /src/linux.git worktree add --detach /src/linux "$latest_commit"; \

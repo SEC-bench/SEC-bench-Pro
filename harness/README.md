@@ -241,8 +241,12 @@ latest-kernel checkout/tooling layers across leaves:
 
 ```bash
 python projects/linux/build_images.py --mode base
-python projects/linux/build_images.py --mode latest --linux-ref origin/master -j 4
+python projects/linux/build_images.py --mode latest -j 4
 ```
+
+The default latest snapshot is pinned to Linux commit
+`d2c9a99135da931377240942d44f3dea104cedb8`. Pass `--linux-ref` only when
+intentionally building a different snapshot.
 
 Useful flags for large benchmark sweeps:
 
