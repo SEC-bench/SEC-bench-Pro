@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 IMAGE_REPO="${IMAGE_REPO:-hwiwonlee/linux.x86_64.latest}"
+IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 LINUX_REF="${LINUX_REF:-d2c9a99135da931377240942d44f3dea104cedb8}"
 LINUX_REF_CACHE_BUST="${LINUX_REF_CACHE_BUST:-}"
 KBUILD_JOBS="${KBUILD_JOBS:-}"
@@ -40,6 +41,7 @@ Options:
                        UTC timestamp for origin/* refs.
   --kbuild-jobs N      KBUILD_JOBS build arg passed to the kernel build.
   --image-repo REPO    Image repository (default: hwiwonlee/linux.x86_64.latest).
+  --platform PLATFORM  Docker target platform (default: linux/amd64).
   --no-cache           Pass --no-cache to docker build.
   --push               Push each leaf after successful build.
   --skip-existing      Skip tags already present locally.
@@ -47,7 +49,7 @@ Options:
 
 Environment equivalents:
   BENCHMARK_DIR, PARALLEL, LINUX_REF, LINUX_REF_CACHE_BUST, KBUILD_JOBS,
-  IMAGE_REPO, NO_CACHE=1, PUSH=1, SKIP_EXISTING=1
+  IMAGE_REPO, IMAGE_PLATFORM, NO_CACHE=1, PUSH=1, SKIP_EXISTING=1
 
 Examples:
   base/linux/build_latest_images.sh --benchmark-dir /home/xeon/work/benchmark/linux -j 2
@@ -88,6 +90,11 @@ while [[ $# -gt 0 ]]; do
     --image-repo)
       [[ $# -ge 2 ]] || die "$1 requires a value"
       IMAGE_REPO="$2"
+      shift 2
+      ;;
+    --platform)
+      [[ $# -ge 2 ]] || die "$1 requires a value"
+      IMAGE_PLATFORM="$2"
       shift 2
       ;;
     --no-cache)
@@ -139,11 +146,17 @@ BENCHMARK_DIR="$(cd "$BENCHMARK_DIR" && pwd)"
 DOCKERFILE="$SCRIPT_DIR/Dockerfile.latest"
 [[ -f "$DOCKERFILE" ]] || die "missing Dockerfile.latest: $DOCKERFILE"
 
+INSTANCES=()
 if [[ $# -gt 0 ]]; then
-  mapfile -t INSTANCES < <(printf '%s\n' "$@" | sort -u)
+  while IFS= read -r id; do
+    INSTANCES+=("$id")
+  done < <(printf '%s\n' "$@" | sort -u)
 else
-  mapfile -t INSTANCES < <(
-    find "$BENCHMARK_DIR" -maxdepth 1 -type d -name 'CVE-*' -printf '%f\n' | sort -u
+  while IFS= read -r id; do
+    INSTANCES+=("$id")
+  done < <(
+    find "$BENCHMARK_DIR" -maxdepth 1 -type d -name 'CVE-*' \
+      -exec basename {} \; | sort -u
   )
 fi
 [[ "${#INSTANCES[@]}" -gt 0 ]] || die "no instances selected"
@@ -173,6 +186,7 @@ build_one() {
   local log_file="$BUILD_LOG_DIR/$id.log"
   local -a cmd=(
     docker build
+    --platform "$IMAGE_PLATFORM"
     -f "$DOCKERFILE"
     -t "$tag"
     --build-arg "LINUX_REF=$LINUX_REF"
@@ -204,7 +218,7 @@ build_one() {
   return 1
 }
 
-export BENCHMARK_DIR DOCKERFILE IMAGE_REPO
+export BENCHMARK_DIR DOCKERFILE IMAGE_REPO IMAGE_PLATFORM
 export LINUX_REF LINUX_REF_CACHE_BUST KBUILD_JOBS
 export NO_CACHE PUSH SKIP_EXISTING BUILD_LOG_DIR SCRIPT_DIR
 export -f log die validate_instance build_one
@@ -217,6 +231,7 @@ log "selected ${#INSTANCES[@]} instance(s)"
 log "benchmark dir: $BENCHMARK_DIR"
 log "logs: $BUILD_LOG_DIR"
 log "image repo: $IMAGE_REPO"
+log "platform: $IMAGE_PLATFORM"
 log "linux ref: $LINUX_REF"
 [[ -n "$LINUX_REF_CACHE_BUST" ]] && log "linux ref cache-bust: $LINUX_REF_CACHE_BUST"
 log "parallel: $PARALLEL"
