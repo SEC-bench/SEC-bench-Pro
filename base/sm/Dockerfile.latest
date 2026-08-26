@@ -29,6 +29,8 @@ ac_add_options --enable-debug
 ac_add_options --enable-debug-symbols
 ac_add_options --enable-application=js
 ac_add_options --disable-bootstrap
+ac_add_options --host=x86_64-unknown-linux-gnu
+ac_add_options --target=x86_64-unknown-linux-gnu
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-debug-asan
 EOF
 RUN ./mach build
@@ -40,6 +42,8 @@ ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --enable-application=js
 ac_add_options --disable-bootstrap
+ac_add_options --host=x86_64-unknown-linux-gnu
+ac_add_options --target=x86_64-unknown-linux-gnu
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-release
 EOF
 RUN ./mach build
