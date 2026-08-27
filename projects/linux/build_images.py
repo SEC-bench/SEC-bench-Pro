@@ -43,6 +43,7 @@ from rich.text import Text
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LINUX_DIR = Path(__file__).resolve().parent
 BASE_DIR = REPO_ROOT / "base" / "linux"
+DEFAULT_LINUX_REF = "d2c9a99135da931377240942d44f3dea104cedb8"
 
 IMAGE_REPOS = {
     "base": "hwiwonlee/linux.base",
@@ -87,6 +88,7 @@ def discover_instances() -> list[str]:
 def build_image(
     tag: str,
     context: Path,
+    platform: str,
     dockerfile: Path | None = None,
     build_args: dict[str, str] | None = None,
     no_cache: bool = False,
@@ -105,7 +107,7 @@ def build_image(
                 log_file.write_text(f"SKIPPED existing {tag}\n")
             return tag, True, 0.0
 
-    cmd = ["docker", "build", "-t", tag]
+    cmd = ["docker", "build", "--platform", platform, "-t", tag]
     if dockerfile:
         cmd += ["-f", str(dockerfile)]
     if no_cache:
@@ -154,6 +156,7 @@ def build_base(
     tag, ok, elapsed = build_image(
         tag=tag,
         context=REPO_ROOT,
+        platform=args.platform,
         dockerfile=BASE_DIR / "Dockerfile",
         build_args=build_args,
         no_cache=args.no_cache,
@@ -214,6 +217,7 @@ def build_instances_parallel(
         _, ok, elapsed = build_image(
             tag=tag,
             context=cve_dir,
+            platform=args.platform,
             dockerfile=dockerfile,
             build_args=build_args,
             no_cache=args.no_cache,
@@ -306,8 +310,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--linux-ref",
-        default="origin/master",
-        help="Git ref for latest images (default: origin/master).",
+        default=DEFAULT_LINUX_REF,
+        help=f"Git ref for latest images (default: {DEFAULT_LINUX_REF}).",
+    )
+    parser.add_argument(
+        "--platform",
+        default="linux/amd64",
+        help="Docker target platform (default: linux/amd64).",
     )
     parser.add_argument(
         "--no-cache",
@@ -357,6 +366,7 @@ def main() -> int:
         log(f"instances: {len(instances)}", progress)
         log(f"modes: {', '.join(modes)}", progress)
         log(f"parallel: {args.parallel}", progress)
+        log(f"platform: {args.platform}", progress)
         if args.kbuild_jobs:
             log(f"kbuild jobs: {args.kbuild_jobs}", progress)
         log(f"logs: {log_dir}", progress)
@@ -365,6 +375,9 @@ def main() -> int:
             if mode == "base":
                 if not build_base(args, log_dir, progress):
                     all_failed["base"] = ["linux.base"]
+                    if len(modes) > 1:
+                        log("base failed; skipping dependent image builds", progress)
+                        return
                 continue
 
             eligible = filter_instances(instances, mode)

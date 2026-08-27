@@ -56,7 +56,11 @@ ENV LC_ALL=en_US.UTF-8
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # ---- Install depot_tools (provides gclient, gn, autoninja, fetch, etc.) ----
-RUN git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools
+ARG DEPOT_TOOLS_REF=1ea94929dc77e2b9b9b9e2ede3bbc0f39c10ebc9
+ENV DEPOT_TOOLS_UPDATE=0
+RUN git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools && \
+    git -C /opt/depot_tools checkout --detach "$DEPOT_TOOLS_REF" && \
+    /opt/depot_tools/ensure_bootstrap
 ENV PATH="/opt/depot_tools:$PATH"
 
 # Make git fetches more robust in Docker (big repos + googlesource mirrors)
@@ -65,8 +69,12 @@ ENV GIT_HTTP_VERSION=HTTP/1.1
 # ---- Fetch V8 source ----
 WORKDIR $SRC
 
-# fetch v8: creates .gclient in $SRC and clones source into $SRC/src
-RUN fetch v8
+# fetch v8: creates .gclient in $SRC and clones source into $SRC/v8
+ARG V8_BASE_REF=dbb6746443d3db53c5067d4a846a1dd192844558
+RUN fetch v8 && \
+    git -C "$SRC/v8" fetch origin "$V8_BASE_REF" && \
+    git -C "$SRC/v8" checkout --detach "$V8_BASE_REF" && \
+    git -C "$SRC/v8" clean -xdf
 
 WORKDIR $SRC/v8
 

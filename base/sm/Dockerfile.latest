@@ -10,15 +10,14 @@ ENV PATH="/root/.mozbuild/clang/bin:/root/.cargo/bin:/root/.mozbuild/cbindgen:$P
 
 WORKDIR $SRC/gecko-dev
 
-# The base image tracks firefox/main in $SRC/gecko-dev and carries gecko-dev as
-# a secondary remote for older instance builds. The latest image defaults to
-# firefox/main but accepts any locally resolvable ref or fetched commit.
-ARG SM_REF=firefox/main
+# The base image carries firefox and gecko-dev remotes for instance builds.
+# Keep the benchmark's latest snapshot on the exact evaluated Firefox commit.
+ARG SM_REF=0fa53bd1ab44248075642aef08edcc34fac551aa
 
 RUN set -eux; \
-    git fetch firefox main; \
-    git fetch gecko-dev master; \
-    git checkout --detach "$SM_REF"
+    git fetch firefox "$SM_REF"; \
+    git checkout --detach "$SM_REF"; \
+    git clean -xdf
 
 RUN set -eux; \
     rm -f mozconfig .mozconfig; \
@@ -30,6 +29,8 @@ ac_add_options --enable-debug
 ac_add_options --enable-debug-symbols
 ac_add_options --enable-application=js
 ac_add_options --disable-bootstrap
+ac_add_options --host=x86_64-unknown-linux-gnu
+ac_add_options --target=x86_64-unknown-linux-gnu
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-debug-asan
 EOF
 RUN ./mach build
@@ -41,6 +42,8 @@ ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --enable-application=js
 ac_add_options --disable-bootstrap
+ac_add_options --host=x86_64-unknown-linux-gnu
+ac_add_options --target=x86_64-unknown-linux-gnu
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-release
 EOF
 RUN ./mach build
