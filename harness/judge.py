@@ -1,8 +1,8 @@
-"""LLM-as-a-judge for SEC-bench PoC classification.
+"""LLM-as-a-judge helpers for SEC-bench PoC classification.
 
-Replaces pattern-based grading. The judge reads execution evidence from the
-vuln/fixed/latest images and returns one of three outcomes: verified, unsure,
-or illegal.
+Linux uses one combined judge over vulnerable/fixed/latest evidence. V8 and
+SpiderMonkey use the execution judge in this module independently for each
+image; ambiguous fixed-image results are resolved by ``source_review.py``.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import re
 import sys
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,8 @@ CLAUDE_THINKING_TEMPERATURE = 1
 MAX_STDERR_CHARS = 8_000
 MAX_STDOUT_CHARS = 4_000
 MAX_POC_CHARS = 30_000
+MAX_TASK_CHARS = 40_000
+MAX_HISTORICAL_STDERR_CHARS = 8_000
 DEFAULT_JUDGE_WORKERS = 5
 DEFAULT_JUDGE_SAMPLES = 1
 
@@ -51,6 +54,7 @@ class JudgeVerdict:
     completion_tokens: int = 0
     total_tokens: int = 0
     cost_usd: float = 0.0
+    decision_step: str = ""
 
 
 @dataclass
@@ -72,6 +76,40 @@ class JudgeInput:
     latest_exit_code: str
     latest_stderr: str
     latest_stdout: str
+
+
+@dataclass
+class ExecutionJudgeInput:
+    """Evidence for judging one PoC execution on exactly one image."""
+
+    project: str
+    instance_id: str
+    image_kind: str
+    task_statement: str
+    poc_rel_path: str
+    poc_source: str
+    historical_stderr: str
+    actual_exit_code: str
+    actual_timed_out: bool
+    actual_stderr: str
+    actual_stdout: str
+
+
+@dataclass
+class ExecutionJudgeVerdict:
+    project: str
+    instance_id: str
+    poc_rel_path: str
+    image_kind: str
+    reproduced: bool | None
+    reason: str
+    model: str
+    latency_ms: int = 0
+    error: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
 
 
 def _is_bedrock_env() -> bool:
@@ -180,19 +218,43 @@ def template_name(project: str) -> str:
     return f"{project}.j2"
 
 
-def _load_template(project: str) -> Any:
-    env = Environment(
+def _template_environment() -> Environment:
+    return Environment(
         loader=FileSystemLoader(str(PROMPTS_DIR)),
         keep_trailing_newline=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    return env.get_template(template_name(project))
+
+
+def _load_named_template(name: str) -> Any:
+    return _template_environment().get_template(name)
+
+
+def _load_template(project: str) -> Any:
+    return _load_named_template(template_name(project))
 
 
 def build_prompt(ji: JudgeInput) -> str:
     """Render the judge prompt for ``ji`` using the project's template."""
     return _render_prompt(_load_template(ji.project), ji)
+
+
+def build_execution_prompt(ji: ExecutionJudgeInput) -> str:
+    """Render the single-image execution-judge prompt for ``ji``."""
+    return _load_named_template("execution.j2").render(
+        project=ji.project,
+        instance_id=ji.instance_id,
+        image_kind=ji.image_kind,
+        task_statement=ji.task_statement,
+        poc_rel_path=ji.poc_rel_path,
+        poc_source=ji.poc_source,
+        historical_stderr=ji.historical_stderr,
+        actual_exit_code=ji.actual_exit_code,
+        actual_timed_out=ji.actual_timed_out,
+        actual_stderr=ji.actual_stderr,
+        actual_stdout=ji.actual_stdout,
+    )
 
 
 def _render_prompt(template: Any, ji: JudgeInput) -> str:
@@ -233,6 +295,13 @@ PARSE_RETRY_PREFIX = (
     "No markdown fences, no prose before or after, no trailing commas, no comments. "
     "Emit the raw JSON object only, e.g. "
     '{"outcome": "verified", "reason": "..."}\n\n'
+)
+
+EXECUTION_PARSE_RETRY_PREFIX = (
+    "CRITICAL: Respond with ONLY a single JSON object containing exactly two keys: "
+    "\"reproduced\" (a JSON boolean) and \"reason\" (a string). No markdown "
+    "fences, prose, comments, or trailing commas. Emit the raw JSON object only, "
+    'e.g. {"reproduced": false, "reason": "..."}\n\n'
 )
 
 
@@ -388,6 +457,22 @@ def _validate_schema(raw: Any) -> dict[str, Any]:
     return {"outcome": outcome, "reason": reason.strip()}
 
 
+def _validate_execution_schema(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise _SchemaError(f"expected JSON object, got {type(raw).__name__}")
+    if set(raw) != {"reproduced", "reason"}:
+        raise _SchemaError(
+            "execution verdict must contain exactly 'reproduced' and 'reason'"
+        )
+    reproduced = raw["reproduced"]
+    if type(reproduced) is not bool:
+        raise _SchemaError("reproduced must be a JSON boolean")
+    reason = raw["reason"]
+    if not isinstance(reason, str):
+        raise _SchemaError(f"reason must be a string, got {type(reason).__name__}")
+    return {"reproduced": reproduced, "reason": reason.strip()}
+
+
 def _parse_outcome(raw: dict[str, Any]) -> tuple[str, str]:
     """Return (outcome, reason) from a validated response dict.
 
@@ -396,7 +481,14 @@ def _parse_outcome(raw: dict[str, Any]) -> tuple[str, str]:
     return raw["outcome"], raw["reason"]
 
 
-def _call_llm(prompt: str, model: str, reasoning_effort: str) -> _LLMResult:
+def _call_llm(
+    prompt: str,
+    model: str,
+    reasoning_effort: str,
+    *,
+    validator: Callable[[Any], dict[str, Any]] = _validate_schema,
+    parse_retry_prefix: str = PARSE_RETRY_PREFIX,
+) -> _LLMResult:
     """Call the LLM with layered retries for transient / refusal / parse failures.
 
     Retry policy:
@@ -441,7 +533,7 @@ def _call_llm(prompt: str, model: str, reasoning_effort: str) -> _LLMResult:
                 cost_usd = 0.0
 
             raw = _extract_json(content)
-            validated = _validate_schema(raw)
+            validated = validator(raw)
 
             return _LLMResult(
                 parsed=validated,
@@ -454,7 +546,7 @@ def _call_llm(prompt: str, model: str, reasoning_effort: str) -> _LLMResult:
             # Parse / schema failure: re-prompt with a strict format reminder.
             last_exc = exc
             if attempt < MAX_RETRIES - 1:
-                current_prompt = PARSE_RETRY_PREFIX + prompt
+                current_prompt = parse_retry_prefix + prompt
                 continue
             raise
         except Exception as exc:
@@ -507,6 +599,113 @@ def _judge_single_call(
             latency_ms=int((time.monotonic() - start) * 1000),
             error=str(exc),
         )
+
+
+def judge_execution_single(
+    judge_input: ExecutionJudgeInput,
+    *,
+    model: str = "",
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+) -> ExecutionJudgeVerdict:
+    """Judge one concrete execution without consulting other image runs."""
+    if not model:
+        model = get_default_model()
+    start = time.monotonic()
+    try:
+        prompt = build_execution_prompt(judge_input)
+        result = _call_llm(
+            prompt,
+            model,
+            reasoning_effort,
+            validator=_validate_execution_schema,
+            parse_retry_prefix=EXECUTION_PARSE_RETRY_PREFIX,
+        )
+        return ExecutionJudgeVerdict(
+            project=judge_input.project,
+            instance_id=judge_input.instance_id,
+            poc_rel_path=judge_input.poc_rel_path,
+            image_kind=judge_input.image_kind,
+            reproduced=result.parsed["reproduced"],
+            reason=result.parsed["reason"],
+            model=model,
+            latency_ms=int((time.monotonic() - start) * 1000),
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+            total_tokens=result.total_tokens,
+            cost_usd=result.cost_usd,
+        )
+    except Exception as exc:
+        return ExecutionJudgeVerdict(
+            project=judge_input.project,
+            instance_id=judge_input.instance_id,
+            poc_rel_path=judge_input.poc_rel_path,
+            image_kind=judge_input.image_kind,
+            reproduced=None,
+            reason=f"Execution judge failed: {exc}",
+            model=model,
+            latency_ms=int((time.monotonic() - start) * 1000),
+            error=str(exc),
+        )
+
+
+def judge_execution_all(
+    inputs: list[ExecutionJudgeInput],
+    *,
+    model: str = "",
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    workers: int = DEFAULT_JUDGE_WORKERS,
+    print_fn: Any = None,
+) -> list[ExecutionJudgeVerdict]:
+    """Judge independent image executions in stable input order."""
+    if not model:
+        model = get_default_model()
+    if not inputs:
+        return []
+
+    _print = print_fn or (lambda msg, **kw: print(msg, flush=True))
+    total = len(inputs)
+    _print(f"[execution judge] Evaluating {total} execution(s) with {model}...")
+
+    def report(done: int, inp: ExecutionJudgeInput, verdict: ExecutionJudgeVerdict) -> None:
+        label = "error" if verdict.reproduced is None else str(verdict.reproduced).lower()
+        _print(
+            f"[execution judge] [{done}/{total}] {inp.instance_id}/"
+            f"{inp.poc_rel_path} ({inp.image_kind}): reproduced={label} "
+            f"({verdict.latency_ms}ms)"
+        )
+
+    if workers <= 1 or total == 1:
+        verdicts: list[ExecutionJudgeVerdict] = []
+        for idx, inp in enumerate(inputs, start=1):
+            verdict = judge_execution_single(
+                inp, model=model, reasoning_effort=reasoning_effort
+            )
+            verdicts.append(verdict)
+            report(idx, inp, verdict)
+        return verdicts
+
+    executor = ThreadPoolExecutor(
+        max_workers=min(workers, total), thread_name_prefix="execution-judge"
+    )
+    future_to_idx = {
+        executor.submit(
+            judge_execution_single,
+            inp,
+            model=model,
+            reasoning_effort=reasoning_effort,
+        ): idx
+        for idx, inp in enumerate(inputs)
+    }
+    results_by_idx: dict[int, ExecutionJudgeVerdict] = {}
+    completed = 0
+    for future in as_completed(future_to_idx):
+        idx = future_to_idx[future]
+        verdict = future.result()
+        results_by_idx[idx] = verdict
+        completed += 1
+        report(completed, inputs[idx], verdict)
+    executor.shutdown(wait=True)
+    return [results_by_idx[idx] for idx in range(total)]
 
 
 def _majority_verdict(samples: list[JudgeVerdict]) -> JudgeVerdict:
@@ -645,6 +844,7 @@ def write_judge_csv(verdicts: list[JudgeVerdict], out_dir: Path) -> Path:
                 "poc_rel_path",
                 "outcome",
                 "reason",
+                "decision_step",
                 "model",
                 "latency_ms",
                 "error",
@@ -658,6 +858,7 @@ def write_judge_csv(verdicts: list[JudgeVerdict], out_dir: Path) -> Path:
                     v.poc_rel_path,
                     v.outcome,
                     v.reason,
+                    v.decision_step,
                     v.model,
                     v.latency_ms,
                     v.error,
@@ -676,6 +877,7 @@ def write_judge_details_json(verdicts: list[JudgeVerdict], out_dir: Path) -> Pat
             "poc_rel_path": v.poc_rel_path,
             "outcome": v.outcome,
             "reason": v.reason,
+            "decision_step": v.decision_step,
             "model": v.model,
             "latency_ms": v.latency_ms,
             "prompt_tokens": v.prompt_tokens,
