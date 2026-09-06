@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/439771269: ArrayBuffer Use-after-Free in WebAssembly.Validate
-RUN git fetch origin cda27e3cbf57d5eab628ea251d0bb3df15af92e2 && git checkout cda27e3cbf57d5eab628ea251d0bb3df15af92e2
+RUN git fetch --depth=1 --no-tags origin cda27e3cbf57d5eab628ea251d0bb3df15af92e2 && git checkout cda27e3cbf57d5eab628ea251d0bb3df15af92e2
 
 RUN gclient sync -D
 

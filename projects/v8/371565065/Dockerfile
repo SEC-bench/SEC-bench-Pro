@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/371565065: Arbitrary WASM type confusion due to module confusion in wasm-to-js tier-up
-RUN git fetch origin b93d4a929e4ef9a364cd835835d21caff92212f6 && git checkout b93d4a929e4ef9a364cd835835d21caff92212f6
+RUN git fetch --depth=1 --no-tags origin b93d4a929e4ef9a364cd835835d21caff92212f6 && git checkout b93d4a929e4ef9a364cd835835d21caff92212f6
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/457989902: High impact issue in V8: Hole leak due to Maglev’s Array Ctor optimization
-RUN git fetch origin 7cacf0331ea3a79ca5f5b2587358de213fc36d6d && git checkout 7cacf0331ea3a79ca5f5b2587358de213fc36d6d
+RUN git fetch --depth=1 --no-tags origin 7cacf0331ea3a79ca5f5b2587358de213fc36d6d && git checkout 7cacf0331ea3a79ca5f5b2587358de213fc36d6d
 
 RUN gclient sync -D
 

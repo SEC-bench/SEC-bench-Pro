@@ -33,7 +33,7 @@ WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/446113732: V8 Sandbox Bypass: OOB using WASM type feedback
 # Revalidated with the source revision used by image tag 446113730.
-RUN git fetch origin 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb && git checkout 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb
+RUN git fetch --depth=1 --no-tags origin 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb && git checkout 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb
 
 RUN gclient sync -D
 

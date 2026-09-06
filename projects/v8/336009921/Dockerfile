@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/336009921: V8 Sandbox Bypass: wrapper and call target mismatch in wasm
-RUN git fetch origin 75884e3ab36afbc7503aa7e4dfa37cb4e8df181b && git checkout 75884e3ab36afbc7503aa7e4dfa37cb4e8df181b
+RUN git fetch --depth=1 --no-tags origin 75884e3ab36afbc7503aa7e4dfa37cb4e8df181b && git checkout 75884e3ab36afbc7503aa7e4dfa37cb4e8df181b
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

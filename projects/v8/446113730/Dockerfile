@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/446113730: V8 Sandbox Bypass: WasmCPT handle UAF by import dispatch table growth
-RUN git fetch origin 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb && git checkout 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb
+RUN git fetch --depth=1 --no-tags origin 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb && git checkout 1d31b8f6e9496e7fff8bb510bf6fe31452d537bb
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/390993097: V8 Sandbox Bypass: BytecodeGenerator asyncness inconsistency
-RUN git fetch origin 4214050d22b23574c89eebecdc2147a85699de68 && git checkout 4214050d22b23574c89eebecdc2147a85699de68
+RUN git fetch --depth=1 --no-tags origin 4214050d22b23574c89eebecdc2147a85699de68 && git checkout 4214050d22b23574c89eebecdc2147a85699de68
 
 RUN gclient sync -D
 

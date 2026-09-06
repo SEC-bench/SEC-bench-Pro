@@ -5,7 +5,7 @@ ENV SRC=/src
 ENV PATH="/opt/depot_tools:$PATH"
 WORKDIR $SRC/v8
 
-RUN git fetch origin e1e92700d354a5d8ea7568b9a136674ee0e79449 && git checkout e1e92700d354a5d8ea7568b9a136674ee0e79449
+RUN git fetch --depth=1 --no-tags origin e1e92700d354a5d8ea7568b9a136674ee0e79449 && git checkout e1e92700d354a5d8ea7568b9a136674ee0e79449
 RUN rm -rf $SRC/.cipd
 RUN gclient sync -D
 COPY patches/ /tmp/secb-fix-patches/

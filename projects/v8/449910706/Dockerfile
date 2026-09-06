@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/449910706: High impact issue in V8: Hole leak in Ignition interpreter due to invalid hole-check removal
-RUN git fetch origin e53002532ca9428582bf8726322d5fe191b8a094 && git checkout e53002532ca9428582bf8726322d5fe191b8a094
+RUN git fetch --depth=1 --no-tags origin e53002532ca9428582bf8726322d5fe191b8a094 && git checkout e53002532ca9428582bf8726322d5fe191b8a094
 
 RUN gclient sync -D
 

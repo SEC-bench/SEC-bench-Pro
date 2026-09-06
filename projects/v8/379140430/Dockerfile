@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/379140430: V8 Sandbox Bypass: ARR/W by sig confusion in WasmToJsWrapper tier-up with in-sandbox Tuple2 corruption
-RUN git fetch origin 5774972853d7bb893505377b0808af3535f12368 && git checkout 5774972853d7bb893505377b0808af3535f12368
+RUN git fetch --depth=1 --no-tags origin 5774972853d7bb893505377b0808af3535f12368 && git checkout 5774972853d7bb893505377b0808af3535f12368
 
 RUN gclient sync -D
 

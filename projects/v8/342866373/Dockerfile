@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/342866373: V8 Sandbox Bypass: JSToWasmWrapperAsm accessible and allows type confusion
-RUN git fetch origin d4b2933dd0e9b51bd86227556062270384409c14 && git checkout d4b2933dd0e9b51bd86227556062270384409c14
+RUN git fetch --depth=1 --no-tags origin d4b2933dd0e9b51bd86227556062270384409c14 && git checkout d4b2933dd0e9b51bd86227556062270384409c14
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

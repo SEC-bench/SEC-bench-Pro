@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/390743124: SIGSEGV in v8 regexp
-RUN git fetch origin d1e497387a953db6daa37792e73150e397fbf7e3 && git checkout d1e497387a953db6daa37792e73150e397fbf7e3
+RUN git fetch --depth=1 --no-tags origin d1e497387a953db6daa37792e73150e397fbf7e3 && git checkout d1e497387a953db6daa37792e73150e397fbf7e3
 
 RUN gclient sync -D
 

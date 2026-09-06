@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/445966259: V8 Sandbox Bypass: AAW/PC control via DebugBreakTrampoline
-RUN git fetch origin 3d0f462a17ffa08869805874ac46726783512fef && git checkout 3d0f462a17ffa08869805874ac46726783512fef
+RUN git fetch --depth=1 --no-tags origin 3d0f462a17ffa08869805874ac46726783512fef && git checkout 3d0f462a17ffa08869805874ac46726783512fef
 
 RUN gclient sync -D
 

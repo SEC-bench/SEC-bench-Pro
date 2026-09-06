@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/41494611: Debug check failed: !type.is_uninhabited()
-RUN git fetch origin 16f9aac2b8b4fd89768519b130afff47728b9136 && git checkout 16f9aac2b8b4fd89768519b130afff47728b9136
+RUN git fetch --depth=1 --no-tags origin 16f9aac2b8b4fd89768519b130afff47728b9136 && git checkout 16f9aac2b8b4fd89768519b130afff47728b9136
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

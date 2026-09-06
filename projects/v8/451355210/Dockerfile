@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/451355210: V8 Sandbox Bypass: AAW/PC control via OOB builtin in SharedFunctionInfo
-RUN git fetch origin 0a96df301fdaadc26a059ee5cd06fc47f9a662b6 && git checkout 0a96df301fdaadc26a059ee5cd06fc47f9a662b6
+RUN git fetch --depth=1 --no-tags origin 0a96df301fdaadc26a059ee5cd06fc47f9a662b6 && git checkout 0a96df301fdaadc26a059ee5cd06fc47f9a662b6
 
 RUN gclient sync -D
 

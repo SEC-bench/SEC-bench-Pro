@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/445209324: V8 Sandbox Bypass: AAW/PC control by dispatching CEntry and CCall functions
-RUN git fetch origin 17e54fe092d2454daa9c91b56fca39ff51ae8589 && git checkout 17e54fe092d2454daa9c91b56fca39ff51ae8589
+RUN git fetch --depth=1 --no-tags origin 17e54fe092d2454daa9c91b56fca39ff51ae8589 && git checkout 17e54fe092d2454daa9c91b56fca39ff51ae8589
 
 RUN gclient sync -D
 

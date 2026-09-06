@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/404285918: V8 Sandbox Bypass via Wasm JSPI central stack top confusion
-RUN git fetch origin b28b0a72d3c35e796223beaa3e61a5f3b15c249f && git checkout b28b0a72d3c35e796223beaa3e61a5f3b15c249f
+RUN git fetch --depth=1 --no-tags origin b28b0a72d3c35e796223beaa3e61a5f3b15c249f && git checkout b28b0a72d3c35e796223beaa3e61a5f3b15c249f
 
 RUN gclient sync -D
 

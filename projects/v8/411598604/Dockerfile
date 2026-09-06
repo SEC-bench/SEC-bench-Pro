@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/411598604: V8 Sandbox Bypass: UAF during LargeObjectSpace tear down
-RUN git fetch origin 9a9a2b2d796da6e8b4ae1bb294aff41294b882fc && git checkout 9a9a2b2d796da6e8b4ae1bb294aff41294b882fc
+RUN git fetch --depth=1 --no-tags origin 9a9a2b2d796da6e8b4ae1bb294aff41294b882fc && git checkout 9a9a2b2d796da6e8b4ae1bb294aff41294b882fc
 
 RUN gclient sync -D
 

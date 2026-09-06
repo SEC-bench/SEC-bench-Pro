@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/443182220: V8 Sandbox violation: UAF in RemoveFromAsyncWaiterQueueList
-RUN git fetch origin e12b49eed57d6e3b9e75b93df252ec45d1c5dc95 && git checkout e12b49eed57d6e3b9e75b93df252ec45d1c5dc95
+RUN git fetch --depth=1 --no-tags origin e12b49eed57d6e3b9e75b93df252ec45d1c5dc95 && git checkout e12b49eed57d6e3b9e75b93df252ec45d1c5dc95
 
 RUN gclient sync -D
 

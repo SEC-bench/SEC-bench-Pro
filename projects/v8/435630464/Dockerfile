@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/435630464: V8 Sandbox Bypass: In-sandbox corruption allows execution of dangerous / experimental code
-RUN git fetch origin 5215b80bfc46139986e080e049e8af70e73d0055 && git checkout 5215b80bfc46139986e080e049e8af70e73d0055
+RUN git fetch --depth=1 --no-tags origin 5215b80bfc46139986e080e049e8af70e73d0055 && git checkout 5215b80bfc46139986e080e049e8af70e73d0055
 
 RUN gclient sync -D
 

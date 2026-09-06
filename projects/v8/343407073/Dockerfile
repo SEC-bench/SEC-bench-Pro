@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/343407073: V8 Sandbox Bypass: control-flow hijacking via WASM Table Indirect call
-RUN git fetch origin 8c46911f080ea752530fb12b4c796e86f9884554 && git checkout 8c46911f080ea752530fb12b4c796e86f9884554
+RUN git fetch --depth=1 --no-tags origin 8c46911f080ea752530fb12b4c796e86f9884554 && git checkout 8c46911f080ea752530fb12b4c796e86f9884554
 
 RUN gclient sync -D
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

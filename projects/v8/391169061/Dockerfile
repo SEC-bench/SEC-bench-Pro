@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/391169061: V8 Sandbox Bypass: AAW (wildcopy) due to %TypedArray%.prototype.set bounds check integer overflow
-RUN git fetch origin 3ea3463b15b1e8f1fe6c6ee6d4d77cf7f13de1a7 && git checkout 3ea3463b15b1e8f1fe6c6ee6d4d77cf7f13de1a7
+RUN git fetch --depth=1 --no-tags origin 3ea3463b15b1e8f1fe6c6ee6d4d77cf7f13de1a7 && git checkout 3ea3463b15b1e8f1fe6c6ee6d4d77cf7f13de1a7
 
 RUN gclient sync -D
 

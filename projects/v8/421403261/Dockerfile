@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/421403261: V8 Sandbox Bypass: AAW via clobbered i32 high word on return value in Liftoff
-RUN git fetch origin bb53a5d844b6020c7144e433166a98b1d7428b98 && git checkout bb53a5d844b6020c7144e433166a98b1d7428b98
+RUN git fetch --depth=1 --no-tags origin bb53a5d844b6020c7144e433166a98b1d7428b98 && git checkout bb53a5d844b6020c7144e433166a98b1d7428b98
 
 RUN gclient sync -D
 

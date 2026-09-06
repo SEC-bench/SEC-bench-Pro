@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/430960844: V8 Sandbox Bypass: InstantiateAsmJs builtin doesn't protect against mid-builtin dispatch handle swaps
-RUN git fetch origin 1786d269d8275be400579d52b3fd19fd8a6ea0b3 && git checkout 1786d269d8275be400579d52b3fd19fd8a6ea0b3
+RUN git fetch --depth=1 --no-tags origin 1786d269d8275be400579d52b3fd19fd8a6ea0b3 && git checkout 1786d269d8275be400579d52b3fd19fd8a6ea0b3
 
 RUN gclient sync -D
 

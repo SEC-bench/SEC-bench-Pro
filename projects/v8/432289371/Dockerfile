@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/432289371: V8 sandbox bypass due to recreating funcref for imported wasm function
-RUN git fetch origin 1786d269d8275be400579d52b3fd19fd8a6ea0b3 && git checkout 1786d269d8275be400579d52b3fd19fd8a6ea0b3
+RUN git fetch --depth=1 --no-tags origin 1786d269d8275be400579d52b3fd19fd8a6ea0b3 && git checkout 1786d269d8275be400579d52b3fd19fd8a6ea0b3
 
 RUN gclient sync -D
 

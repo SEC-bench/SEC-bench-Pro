@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/398065918: V8 Maglev improper folded allocation handling (leading to memory safety issues)
-RUN git fetch origin f30c2930794e1347a85909c0272964692e4311f6 && git checkout f30c2930794e1347a85909c0272964692e4311f6
+RUN git fetch --depth=1 --no-tags origin f30c2930794e1347a85909c0272964692e4311f6 && git checkout f30c2930794e1347a85909c0272964692e4311f6
 
 RUN gclient sync -D
 

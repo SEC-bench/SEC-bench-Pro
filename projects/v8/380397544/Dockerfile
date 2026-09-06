@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/380397544: Arbitrary WASM type confusion due to improper fix of b/379009132
-RUN git fetch origin 20d9a7f760c018183c836283017a321638b66810 && git checkout 20d9a7f760c018183c836283017a321638b66810
+RUN git fetch --depth=1 --no-tags origin 20d9a7f760c018183c836283017a321638b66810 && git checkout 20d9a7f760c018183c836283017a321638b66810
 
 RUN gclient sync -D
 

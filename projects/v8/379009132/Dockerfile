@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/379009132: Potential type confusion in wasm and js interaction
-RUN git fetch origin 7a9e78e98f59b7adf79e6ead0459718e4ed249e7 && git checkout 7a9e78e98f59b7adf79e6ead0459718e4ed249e7
+RUN git fetch --depth=1 --no-tags origin 7a9e78e98f59b7adf79e6ead0459718e4ed249e7 && git checkout 7a9e78e98f59b7adf79e6ead0459718e4ed249e7
 
 RUN gclient sync -D
 

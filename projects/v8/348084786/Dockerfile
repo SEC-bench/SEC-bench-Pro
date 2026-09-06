@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/348084786: V8 Sandbox Bypass with Shared Function Info
-RUN git fetch origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
+RUN git fetch --depth=1 --no-tags origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
 
 RUN gclient sync -D
 

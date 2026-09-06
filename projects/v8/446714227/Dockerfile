@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/446714227: V8 Sandbox Bypass: OOB write in maglev::VirtualObject::set
-RUN git fetch origin 51c277a84683b54a8ca62c6388849616f307a46c && git checkout 51c277a84683b54a8ca62c6388849616f307a46c
+RUN git fetch --depth=1 --no-tags origin 51c277a84683b54a8ca62c6388849616f307a46c && git checkout 51c277a84683b54a8ca62c6388849616f307a46c
 
 RUN gclient sync -D
 

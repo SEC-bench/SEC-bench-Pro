@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/444141029: High impact issue in V8: Integer truncation during Maglev compilation leading to memory corruption
-RUN git fetch origin c049b3c5fea34a05e9cc0b15e896cddc85f6a98a && git checkout c049b3c5fea34a05e9cc0b15e896cddc85f6a98a
+RUN git fetch --depth=1 --no-tags origin c049b3c5fea34a05e9cc0b15e896cddc85f6a98a && git checkout c049b3c5fea34a05e9cc0b15e896cddc85f6a98a
 
 RUN gclient sync -D
 

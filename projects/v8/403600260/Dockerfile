@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/403600260: V8 Sandbox Bypass: Uninitialized read to switch-case OOB jump in Maglev JSGeneratorObject allocation inlining
-RUN git fetch origin 5734b2e5e74b850cbc629cf56309c1f3cf97c532 && git checkout 5734b2e5e74b850cbc629cf56309c1f3cf97c532
+RUN git fetch --depth=1 --no-tags origin 5734b2e5e74b850cbc629cf56309c1f3cf97c532 && git checkout 5734b2e5e74b850cbc629cf56309c1f3cf97c532
 
 RUN gclient sync -D
 

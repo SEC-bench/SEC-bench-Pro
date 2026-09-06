@@ -33,7 +33,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/390205877: V8 Sandbox Bypass: UB in ShouldResetInterruptBudgetByICChange because of invalid CachedTieringDecision enum variant
-RUN git fetch origin ab875b6ed878b0b1934ab935366224ee4c761985 && git checkout ab875b6ed878b0b1934ab935366224ee4c761985
+RUN git fetch --depth=1 --no-tags origin ab875b6ed878b0b1934ab935366224ee4c761985 && git checkout ab875b6ed878b0b1934ab935366224ee4c761985
 
 RUN gclient sync -D
 

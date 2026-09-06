@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/401732698: V8 sandbox violation in v8
-RUN git fetch origin fec6c4c97ac26259c4633142dd6423de1592fbf0 && git checkout fec6c4c97ac26259c4633142dd6423de1592fbf0
+RUN git fetch --depth=1 --no-tags origin fec6c4c97ac26259c4633142dd6423de1592fbf0 && git checkout fec6c4c97ac26259c4633142dd6423de1592fbf0
 
 RUN gclient sync -D
 

@@ -38,7 +38,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/439521654: High impact issue in V8: race condition during TypedArray.sort leads to memory corruption
-RUN git fetch origin bcdacbf04300b83755ae4a3770c442412d23cbe8 && git checkout bcdacbf04300b83755ae4a3770c442412d23cbe8
+RUN git fetch --depth=1 --no-tags origin bcdacbf04300b83755ae4a3770c442412d23cbe8 && git checkout bcdacbf04300b83755ae4a3770c442412d23cbe8
 
 RUN gclient sync -D
 

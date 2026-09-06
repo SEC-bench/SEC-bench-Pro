@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/359949835: Unexpected instance type encountered
-RUN git fetch origin dc555f6637ddad30b67632ad7f37c2792d0c81fb && git checkout dc555f6637ddad30b67632ad7f37c2792d0c81fb
+RUN git fetch --depth=1 --no-tags origin dc555f6637ddad30b67632ad7f37c2792d0c81fb && git checkout dc555f6637ddad30b67632ad7f37c2792d0c81fb
 
 RUN gclient sync -D
 

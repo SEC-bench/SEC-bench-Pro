@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/384186547: V8 Sandbox Bypass: Attacker manipulation of ArrayBufferSweeper linked lists results in dangling ArrayBufferExtension pointers
-RUN git fetch origin 80f2beddcf2e43a5f937196639ca37938553649a && git checkout 80f2beddcf2e43a5f937196639ca37938553649a
+RUN git fetch --depth=1 --no-tags origin 80f2beddcf2e43a5f937196639ca37938553649a && git checkout 80f2beddcf2e43a5f937196639ca37938553649a
 
 RUN gclient sync -D
 

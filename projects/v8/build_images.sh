@@ -2,7 +2,7 @@
 
 # Build Docker images for all subdirectories in v8/
 # Each subdirectory name is used as the image ID
-# Usage: build_images.sh [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]
+# Usage: build_images.sh [-b] [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]
 
 # Require bash >= 4.3 for wait -n support
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) )); then
@@ -11,12 +11,21 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) ))
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_COMPAT_HELPER="$SCRIPT_DIR/base_compat.sh"
+if [[ ! -r "$BASE_COMPAT_HELPER" ]]; then
+    echo "Error: V8 base compatibility helper is missing: $BASE_COMPAT_HELPER" >&2
+    exit 1
+fi
+# shellcheck source=base_compat.sh
+source "$BASE_COMPAT_HELPER"
 NUM_WORKERS=1
 NINJA_JOBS="${NINJA_JOBS:-}"
 INPUT_FILE=""
+REBUILD_BASE=0
 
 usage() {
-    echo "Usage: $(basename "$0") [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]"
+    echo "Usage: $(basename "$0") [-b] [-j NUM_WORKERS] [-f INPUT_FILE] [--ninja-jobs N]"
+    echo "  -b, --rebuild-base Rebuild $V8_BASE_IMAGE before leaf images"
     echo "  -j, --parallel N  Number of parallel build workers (default: 1)"
     echo "  -f INPUT_FILE     File with case IDs to build (one per line); builds all if omitted"
     echo "  --ninja-jobs N    Maximum ninja jobs/vCPUs per Docker build (default: nproc)"
@@ -25,6 +34,10 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -b|--rebuild-base)
+            REBUILD_BASE=1
+            shift
+            ;;
         -j|--parallel)
             [[ $# -ge 2 ]] || { echo "Error: $1 requires an argument" >&2; usage; }
             NUM_WORKERS="$2"
@@ -127,6 +140,8 @@ build_one() {
     local result_file="$TMP_DIR/${id}.result"
     local -a cmd=(docker build -t "hwiwonlee/v8.x86_64:$id")
 
+    cmd+=(--label "$V8_BASE_LINEAGE_LABEL=$V8_BASE_ID")
+
     if [[ -n "$NINJA_JOBS" ]]; then
         cmd+=(--build-arg "NINJA_JOBS=$NINJA_JOBS")
     fi
@@ -162,20 +177,47 @@ build_one() {
 # Collect directories sorted in descending order, same as original behaviour
 # If an input file was given, restrict to only those IDs
 all_dirs=()
+declare -A discovered_ids
 while IFS= read -r dir; do
     [[ -d "$dir" ]] || continue
     id=$(basename "$dir")
+    discovered_ids["$id"]=1
     if [[ -n "$INPUT_FILE" && -z "${allowed_ids[$id]+x}" ]]; then
         continue
     fi
     all_dirs+=("$dir")
 done < <(find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
 
+if [[ -n "$INPUT_FILE" ]]; then
+    for id in "${!allowed_ids[@]}"; do
+        if [[ -z "${discovered_ids[$id]+x}" ]]; then
+            echo "Error: requested instance directory not found: '$id'" >&2
+            exit 1
+        fi
+        if [[ ! -f "$SCRIPT_DIR/$id/Dockerfile" ]]; then
+            echo "Error: requested instance has no Dockerfile: '$id'" >&2
+            exit 1
+        fi
+    done
+fi
+
 # Pre-count buildable images for progress display
 total_buildable=0
 for dir in "${all_dirs[@]}"; do
     [[ -f "$dir/Dockerfile" ]] && total_buildable=$(( total_buildable + 1 ))
 done
+
+if (( total_buildable == 0 )); then
+    echo "Error: no buildable instances selected" >&2
+    exit 1
+fi
+v8_ensure_compatible_base "$REBUILD_BASE" || exit 1
+V8_BASE_ID="$(v8_image_id "$V8_BASE_IMAGE")" || {
+    echo "Error: could not resolve immutable ID for $V8_BASE_IMAGE" >&2
+    exit 1
+}
+export V8_BASE_ID V8_BASE_LINEAGE_LABEL
+
 echo "Total images to build : $total_buildable  |  skippable: $(( ${#all_dirs[@]} - total_buildable ))"
 echo ""
 

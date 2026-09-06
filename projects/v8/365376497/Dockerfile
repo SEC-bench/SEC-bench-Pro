@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/365376497: JSPI stack switching breaks lazy deoptimization guarantees, leading to type confusion
-RUN git fetch origin 6f7722597815e33071508c02a0f2add34e83dd1d && git checkout 6f7722597815e33071508c02a0f2add34e83dd1d
+RUN git fetch --depth=1 --no-tags origin 6f7722597815e33071508c02a0f2add34e83dd1d && git checkout 6f7722597815e33071508c02a0f2add34e83dd1d
 
 RUN gclient sync -D
 
