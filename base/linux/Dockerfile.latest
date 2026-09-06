@@ -23,22 +23,6 @@ ARG LINUX_REF=d2c9a99135da931377240942d44f3dea104cedb8
 ARG LINUX_REF_CACHE_BUST=manual
 ARG KBUILD_JOBS
 
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
-# The validated leaves install locales/ripgrep, with a small minority also
-# needing pkg-config or 32-bit libc support. Install the superset once in a
-# cacheable layer before per-CVE files are copied.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc-multilib \
-    libc6-dev-i386 \
-    locales \
-    pkg-config \
-    ripgrep \
-    && sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
-    && locale-gen en_US.UTF-8 \
-    && rm -rf /var/lib/apt/lists/*
-
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
     LC_ALL=en_US.UTF-8
