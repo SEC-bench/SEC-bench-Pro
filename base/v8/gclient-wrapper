@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_gclient=/opt/depot_tools/gclient.unbounded
+jobs="${GCLIENT_JOBS:-16}"
+sync_timeout="${GCLIENT_SYNC_TIMEOUT_SEC:-3600}"
+
+if ! [[ "$jobs" =~ ^[1-9][0-9]*$ ]]; then
+  echo "GCLIENT_JOBS must be a positive integer, got: $jobs" >&2
+  exit 2
+fi
+
+if ! [[ "$sync_timeout" =~ ^[1-9][0-9]*$ ]]; then
+  echo "GCLIENT_SYNC_TIMEOUT_SEC must be a positive integer, got: $sync_timeout" >&2
+  exit 2
+fi
+
+if [[ "${1:-}" == "sync" ]]; then
+  for arg in "$@"; do
+    case "$arg" in
+      -j|--jobs|-j[0-9]*|--jobs=*)
+        exec timeout --kill-after=30s "${sync_timeout}s" "$real_gclient" "$@"
+        ;;
+    esac
+  done
+  # gclient accepts global options only after the subcommand.  Putting
+  # --jobs before `sync` prints the top-level help and exits 0 without doing
+  # any work, which is especially dangerous in a Docker build.
+  exec timeout --kill-after=30s "${sync_timeout}s" \
+    "$real_gclient" "$@" --jobs="$jobs"
+fi
+
+exec "$real_gclient" "$@"
