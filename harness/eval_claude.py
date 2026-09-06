@@ -593,12 +593,12 @@ def run_instance(
     )
     container_id = result.stdout.strip()
     info(f"Container started: {container_id[:12]}")
-    common._active_containers.add(container_name)
+    common.register_active_container(container_name)
 
     agent_exit = 1
 
     def _cleanup_container() -> None:
-        if container_name not in common._active_containers:
+        if not common.is_active_container(container_name):
             return
         if not common.INTERRUPTED:
             info("Fixing file ownership before cleanup...")
@@ -617,17 +617,11 @@ def run_instance(
                 )
             except subprocess.TimeoutExpired:
                 warn("Ownership fix timed out -- skipping")
-        info(f"Removing container: {container_name}")
-        try:
-            subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                capture_output=True,
-                timeout=30,
-            )
-        except subprocess.TimeoutExpired:
-            warn(f"docker rm -f timed out for {container_name}")
-        common._active_containers.discard(container_name)
-        info("Container removed.")
+        common.remove_registered_container(
+            container_name,
+            info_fn=info,
+            warn_fn=warn,
+        )
 
     try:
         if common.is_linux_project(project) and not common.require_linux_kvm(

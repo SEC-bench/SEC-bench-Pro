@@ -22,6 +22,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+import common
+
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts" / "judge"
 DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_OPENAI_MODEL = "gpt-5.4"
@@ -31,11 +33,17 @@ DEFAULT_TEMPERATURE = 0
 CLAUDE_THINKING_TEMPERATURE = 1
 MAX_STDERR_CHARS = 8_000
 MAX_STDOUT_CHARS = 4_000
+# Preserve the combined/Linux judge's established prompt size. The staged
+# JavaScript judge receives the complete selected PoC under its separate cap.
 MAX_POC_CHARS = 30_000
+MAX_EXECUTION_POC_CHARS = 128 * 1024
 MAX_TASK_CHARS = 40_000
 MAX_HISTORICAL_STDERR_CHARS = 8_000
 DEFAULT_JUDGE_WORKERS = 5
 DEFAULT_JUDGE_SAMPLES = 1
+DEFAULT_LLM_REQUEST_TIMEOUT_SEC = 120.0
+DEFAULT_LLM_OVERALL_TIMEOUT_SEC = 360.0
+MAX_EXECUTION_JUDGE_OUTPUT_TOKENS = 2_048
 
 OUTCOMES = ("verified", "unsure", "illegal")
 
@@ -93,6 +101,17 @@ class ExecutionJudgeInput:
     actual_timed_out: bool
     actual_stderr: str
     actual_stdout: str
+    actual_engine_started: bool = True
+    actual_oom_killed: bool = False
+    actual_infrastructure_error: str = ""
+    actual_infrastructure_kind: str = ""
+    actual_input_integrity_error: bool = False
+    actual_stdout_sha256: str = ""
+    actual_stderr_sha256: str = ""
+    authoritative_target_source_files: tuple[str, ...] = ()
+    authoritative_target_vulnerability_type: str = ""
+    authoritative_error_type: str = ""
+    authoritative_command_options: str = ""
 
 
 @dataclass
@@ -254,6 +273,19 @@ def build_execution_prompt(ji: ExecutionJudgeInput) -> str:
         actual_timed_out=ji.actual_timed_out,
         actual_stderr=ji.actual_stderr,
         actual_stdout=ji.actual_stdout,
+        actual_engine_started=ji.actual_engine_started,
+        actual_oom_killed=ji.actual_oom_killed,
+        actual_infrastructure_error=ji.actual_infrastructure_error,
+        actual_infrastructure_kind=ji.actual_infrastructure_kind,
+        actual_input_integrity_error=ji.actual_input_integrity_error,
+        actual_stdout_sha256=ji.actual_stdout_sha256,
+        actual_stderr_sha256=ji.actual_stderr_sha256,
+        authoritative_target_source_files=ji.authoritative_target_source_files,
+        authoritative_target_vulnerability_type=(
+            ji.authoritative_target_vulnerability_type
+        ),
+        authoritative_error_type=ji.authoritative_error_type,
+        authoritative_command_options=ji.authoritative_command_options,
     )
 
 
@@ -470,7 +502,10 @@ def _validate_execution_schema(raw: Any) -> dict[str, Any]:
     reason = raw["reason"]
     if not isinstance(reason, str):
         raise _SchemaError(f"reason must be a string, got {type(reason).__name__}")
-    return {"reproduced": reproduced, "reason": reason.strip()}
+    reason = reason.strip()
+    if not reason:
+        raise _SchemaError("reason must be a non-empty string")
+    return {"reproduced": reproduced, "reason": reason}
 
 
 def _parse_outcome(raw: dict[str, Any]) -> tuple[str, str]:
@@ -488,6 +523,9 @@ def _call_llm(
     *,
     validator: Callable[[Any], dict[str, Any]] = _validate_schema,
     parse_retry_prefix: str = PARSE_RETRY_PREFIX,
+    request_timeout_sec: float | None = None,
+    overall_timeout_sec: float | None = None,
+    max_output_tokens: int = 16_000,
 ) -> _LLMResult:
     """Call the LLM with layered retries for transient / refusal / parse failures.
 
@@ -509,16 +547,43 @@ def _call_llm(
 
     current_prompt = prompt
     last_exc: Exception | None = None
+    deadline = (
+        time.monotonic() + max(0.001, float(overall_timeout_sec))
+        if overall_timeout_sec is not None
+        else common.js_grading_budget_deadline()
+    )
+    if deadline is not None:
+        deadline = common.clamp_js_grading_deadline(
+            deadline, "an LLM judge request"
+        )
 
     for attempt in range(MAX_RETRIES):
+        remaining = deadline - time.monotonic() if deadline is not None else None
+        if remaining is not None and remaining <= 0:
+            raise TimeoutError("judge model requests exceeded their overall deadline")
         kwargs: dict[str, Any] = {
             "model": resolved_model,
             "messages": [{"role": "user", "content": current_prompt}],
             "reasoning_effort": reasoning_effort,
             "temperature": temperature,
-            "max_tokens": 16000,
+            "max_tokens": max_output_tokens,
         }
+        if request_timeout_sec is not None or remaining is not None:
+            request_cap = (
+                float(request_timeout_sec)
+                if request_timeout_sec is not None
+                else float(remaining)
+            )
+            kwargs["timeout"] = max(
+                0.001,
+                min(request_cap, float(remaining))
+                if remaining is not None
+                else request_cap,
+            )
 
+        # Count every real provider attempt, including retries for transport,
+        # refusal, and malformed output. Reservation is atomic across workers.
+        common.consume_js_llm_call("an LLM judge provider call")
         try:
             response = litellm.completion(**kwargs)
             content = response.choices[0].message.content or ""
@@ -558,6 +623,13 @@ def _call_llm(
                 delay = TRANSIENT_BACKOFF_SEC[
                     min(attempt, len(TRANSIENT_BACKOFF_SEC) - 1)
                 ]
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(
+                            "judge model requests exceeded their overall deadline"
+                        ) from exc
+                    delay = min(delay, remaining)
                 time.sleep(delay)
                 continue
             raise
@@ -619,6 +691,9 @@ def judge_execution_single(
             reasoning_effort,
             validator=_validate_execution_schema,
             parse_retry_prefix=EXECUTION_PARSE_RETRY_PREFIX,
+            request_timeout_sec=DEFAULT_LLM_REQUEST_TIMEOUT_SEC,
+            overall_timeout_sec=DEFAULT_LLM_OVERALL_TIMEOUT_SEC,
+            max_output_tokens=MAX_EXECUTION_JUDGE_OUTPUT_TOKENS,
         )
         return ExecutionJudgeVerdict(
             project=judge_input.project,
