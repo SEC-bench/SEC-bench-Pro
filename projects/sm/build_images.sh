@@ -2,7 +2,7 @@
 
 # Build Docker images for all subdirectories in spidermonkey/
 # Each subdirectory name is used as the image ID
-# Usage: build_images.sh [-n NUM_WORKERS] [instance_id ...]
+# Usage: build_images.sh [-b] [-n NUM_WORKERS] [instance_id ...]
 
 # Require bash >= 4.3 for wait -n support
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) )); then
@@ -14,20 +14,27 @@ set -o pipefail
 shopt -s nullglob
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BASE_BUILDER="$REPO_ROOT/base/build_base_images.sh"
+BASE_IMAGE="hwiwonlee/sm.base:latest"
 LOG_DIR="$SCRIPT_DIR/logs"
 RUN_TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
 NUM_WORKERS=1
+REBUILD_BASE=0
 
 usage() {
-    echo "Usage: $(basename "$0") [-n NUM_WORKERS] [instance_id ...]"
-    echo "  -n NUM_WORKERS  Number of parallel build workers (default: 1)"
+    echo "Usage: $(basename "$0") [-b] [-n NUM_WORKERS] [instance_id ...]"
+    echo "  -b              Rebuild $BASE_IMAGE from base/sm before leaf images"
+    echo "  -n NUM_WORKERS  Number of parallel leaf build workers (default: 1)"
     echo "  instance_id     Optional explicit instance IDs to build"
-    exit 1
+    exit "${1:-1}"
 }
 
-while getopts ":n:" opt; do
+while getopts ":bn:h" opt; do
     case $opt in
+        b) REBUILD_BASE=1 ;;
         n) NUM_WORKERS="$OPTARG" ;;
+        h) usage 0 ;;
         :) echo "Error: -$OPTARG requires an argument" >&2; usage ;;
         \?) echo "Error: Unknown option -$OPTARG" >&2; usage ;;
     esac
@@ -149,6 +156,44 @@ done
 if (( total_buildable == 0 )); then
     echo "Error: no buildable instances selected" >&2
     exit 1
+fi
+
+base_is_compatible() {
+    docker image inspect "$BASE_IMAGE" >/dev/null 2>&1 &&
+        docker run --rm --network none --entrypoint /bin/sh "$BASE_IMAGE" \
+            -c 'set -eu
+                test -x /usr/local/bin/secb-sanitize-git
+                test -s /etc/secb-agent-versions
+                rustc --version | grep -Eq "^rustc 1[.]95[.]0( |$)"
+                cbindgen --version | grep -Eq "^cbindgen 0[.]28[.]0( |$)"
+                for tool in bwrap socat setpriv unshare gdb strace ltrace valgrind rg jq xxd codex opencode claude; do
+                    command -v "$tool" >/dev/null
+                done' \
+            >/dev/null 2>&1
+}
+
+build_base() {
+    if [[ ! -x "$BASE_BUILDER" ]]; then
+        echo "Error: canonical base builder is missing or not executable: $BASE_BUILDER" >&2
+        return 1
+    fi
+
+    echo "Building canonical base image: $BASE_IMAGE"
+    "$BASE_BUILDER" sm
+}
+
+if (( REBUILD_BASE )) || ! base_is_compatible; then
+    if (( REBUILD_BASE )); then
+        echo "Rebuilding SpiderMonkey base image by request."
+    else
+        echo "SpiderMonkey base image is missing required tooling or Rust 1.95.0; rebuilding it."
+    fi
+    if ! build_base || ! base_is_compatible; then
+        echo "Error: failed to build a compatible $BASE_IMAGE" >&2
+        exit 1
+    fi
+else
+    echo "Using compatible base image: $BASE_IMAGE"
 fi
 
 echo "Total images to build : $total_buildable  |  skippable: $(( ${#all_dirs[@]} - total_buildable ))"

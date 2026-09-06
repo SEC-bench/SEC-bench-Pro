@@ -14,6 +14,25 @@ The aggregate numbers below are derived from the current snapshot in this direct
 - Source tree: `/src/gecko-dev` (revision pinned per-instance via Dockerfile)
 - Fixed-image definitions: 104 instances include `Dockerfile.fixed` and `patches/`
 
+## Base and Vulnerable Images
+
+`base/sm/Dockerfile` is the canonical definition of
+`hwiwonlee/sm.base:latest`. Build a vulnerable image with:
+
+```sh
+projects/sm/build_images.sh 1880719
+```
+
+The build script verifies that the local base image contains the benchmark
+cleanup tool required by every vulnerable leaf and uses Rust 1.95.0. If the
+base is absent or outdated, it rebuilds it from `base/sm` before starting the
+selected leaf builds. Pass `-b` to force that canonical base rebuild even when
+the local image already satisfies the compatibility check:
+
+```sh
+projects/sm/build_images.sh -b 1880719
+```
+
 ## Fixed Images
 
 The public fixed-image convention is

@@ -26,6 +26,7 @@ results/
 trajectories/
 harness/output/
 harness/results/
+projects/*/logs/
 
 *_logs
 fix_validation

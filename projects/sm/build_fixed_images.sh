@@ -9,6 +9,9 @@ set -euo pipefail
 #     flag is accepted for CLI parity.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
+BASE_BUILDER="$REPO_ROOT/base/build_base_images.sh"
+BASE_IMAGE="hwiwonlee/sm.base:latest"
 IMAGE_REPO="${IMAGE_REPO:-hwiwonlee/sm.x86_64.fixed}"
 NINJA_JOBS="${NINJA_JOBS:-}"
 PARALLEL="${PARALLEL:-1}"
@@ -125,6 +128,30 @@ validate_instance() {
   fi
 }
 
+base_is_compatible() {
+  docker image inspect "$BASE_IMAGE" >/dev/null 2>&1 &&
+    docker run --rm --network none --entrypoint /bin/sh "$BASE_IMAGE" \
+      -c 'set -eu
+          test -x /usr/local/bin/secb-sanitize-git
+          test -s /etc/secb-agent-versions
+          rustc --version | grep -Eq "^rustc 1[.]95[.]0( |$)"
+          cbindgen --version | grep -Eq "^cbindgen 0[.]28[.]0( |$)"
+          for tool in bwrap socat setpriv unshare gdb strace ltrace valgrind rg jq xxd codex opencode claude; do
+              command -v "$tool" >/dev/null
+          done' \
+      >/dev/null 2>&1
+}
+
+build_base() {
+  if [[ ! -x "$BASE_BUILDER" ]]; then
+    echo "Error: canonical base builder is missing or not executable: $BASE_BUILDER" >&2
+    return 1
+  fi
+
+  echo "Building canonical base image: $BASE_IMAGE"
+  "$BASE_BUILDER" sm
+}
+
 build_one() {
   local id="$1"
   local dir="$ROOT_DIR/$id"
@@ -165,11 +192,35 @@ for id in "${INSTANCES[@]}"; do
   validate_instance "$id"
 done
 
+PENDING_INSTANCES=()
+for id in "${INSTANCES[@]}"; do
+  tag="$IMAGE_REPO:$id"
+  if [[ "$SKIP_EXISTING" == "1" ]] && docker image inspect "$tag" >/dev/null 2>&1; then
+    log "$id skip existing $tag"
+    printf 'SKIPPED existing %s\n' "$tag" >"$BUILD_ROOT/$id.log"
+  else
+    PENDING_INSTANCES+=("$id")
+  fi
+done
+
+if (( ${#PENDING_INSTANCES[@]} > 0 )); then
+  if ! base_is_compatible; then
+    echo "SpiderMonkey base image is missing required tooling or Rust 1.95.0; rebuilding it."
+    if ! build_base || ! base_is_compatible; then
+      die "failed to build a compatible $BASE_IMAGE"
+    fi
+  else
+    echo "Using compatible base image: $BASE_IMAGE"
+  fi
+fi
+
 log "selected ${#INSTANCES[@]} instance(s)"
 log "logs: $BUILD_ROOT"
 log "image repo: $IMAGE_REPO"
 log "parallel: $PARALLEL"
 
-printf '%s\n' "${INSTANCES[@]}" | xargs -r -n1 -P "$PARALLEL" bash -c 'build_one "$0"'
+if (( ${#PENDING_INSTANCES[@]} > 0 )); then
+  printf '%s\n' "${PENDING_INSTANCES[@]}" | xargs -r -n1 -P "$PARALLEL" bash -c 'build_one "$0"'
+fi
 
 log "all selected fixed images built"
