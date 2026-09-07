@@ -53,6 +53,8 @@ RUN gn gen out/x64.asan --args=' \
 
 RUN autoninja -j"${NINJA_JOBS:-$(nproc)}" -C out/x64.asan d8
 
+RUN /usr/bin/python3 build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+
 RUN gn gen out/x64.release --args=' \
   is_debug=false \
   is_asan=false \
