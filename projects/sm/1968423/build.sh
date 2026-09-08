@@ -2,12 +2,15 @@
 # Build 1: ASAN+debug
 rm -rf obj-debug-asan
 rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-address-sanitizer
 ac_add_options --disable-jemalloc
 ac_add_options --enable-optimize="-O1"
 ac_add_options --enable-debug
 ac_add_options --enable-debug-symbols
 ac_add_options --enable-application=js
+ac_add_options --disable-shared-js
+ac_add_options --enable-gczeal
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-debug-asan
 EOF
 ./mach build
@@ -15,6 +18,7 @@ EOF
 # Build 2: Release
 rm -rf obj-release
 rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --enable-application=js
