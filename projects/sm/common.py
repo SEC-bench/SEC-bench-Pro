@@ -41,12 +41,13 @@ _RUNTIME_RE = re.compile(
 )
 
 _OOM_RE = re.compile(
-    r"out of memory"
-    r"|js_ReportOutOfMemory"
+    r"js_ReportOutOfMemory"
     r"|alloc::oom::oom_impl"
     r"|moz_xmalloc: out of memory"
-    r"|NS_ABORT_OOM",
-    re.IGNORECASE,
+    r"|NS_ABORT_OOM"
+    r"|^(?:uncaught exception:\s*)?out of memory(?:\b.*)?$"
+    r"|^(?:InternalError|Error):\s*out of memory(?:\b.*)?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
