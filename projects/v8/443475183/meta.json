@@ -3,6 +3,7 @@
   "work_dir": "/src/v8",
   "verification_binary": "out/x64.asan/d8",
   "command_options": "--fuzzing --sandbox-fuzzing --single-threaded",
+  "disable_aslr": true,
   "target_source_files": [
     "third_party/partition_alloc/src/partition_alloc/partition_page.h",
     "src/init/isolate-group.cc"
