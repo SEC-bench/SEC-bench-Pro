@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/417636716: V8 Sandbox Bypass: Stack corruption via signature mismatch during call baseline code
-RUN git fetch origin bb53a5d844b6020c7144e433166a98b1d7428b98 && git checkout bb53a5d844b6020c7144e433166a98b1d7428b98
+RUN git fetch --depth=1 --no-tags origin bb53a5d844b6020c7144e433166a98b1d7428b98 && git checkout bb53a5d844b6020c7144e433166a98b1d7428b98
 
 RUN gclient sync -D
 

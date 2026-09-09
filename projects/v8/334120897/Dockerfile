@@ -32,7 +32,10 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/334120897: V8 Sandbox Bypass: wasm function signature confusion leading to out of sandbox arbitrary read/write
-RUN mkdir -p out/x64.release && \
+# The attached binary was compiled from this revision (Report.md, VERSION).
+RUN git fetch --depth=1 --no-tags origin 1778ccde8eb86a01b4c16c34490a597235203b2d && \
+    git checkout --detach FETCH_HEAD && \
+    mkdir -p out/x64.release && \
     curl -L -o out/x64.release/d8 'https://issues.chromium.org/action/issues/334120897/attachments/55482930?download=true' && \
     curl -L -o out/x64.release/snapshot_blob.bin 'https://issues.chromium.org/action/issues/334120897/attachments/55482932?download=true' && \
     chmod +x out/x64.release/d8

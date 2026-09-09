@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/392541992: V8 Sandbox Bypass: UAF in ValueSerializer::WriteRawBytes
-RUN git fetch origin a4167ecedefcb215facaa9feca98eeb8c225bc15 && git checkout a4167ecedefcb215facaa9feca98eeb8c225bc15
+RUN git fetch --depth=1 --no-tags origin a4167ecedefcb215facaa9feca98eeb8c225bc15 && git checkout a4167ecedefcb215facaa9feca98eeb8c225bc15
 
 RUN gclient sync -D
 

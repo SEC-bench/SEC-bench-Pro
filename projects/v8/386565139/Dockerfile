@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/386565139: V8 Sandbox Bypass: Integer Overflow in TypedArraySet leading to out-of-sandbox write
-RUN git fetch origin c39d21639f3dbbdacf39e9fd0ffe5624c54a3f15 && git checkout c39d21639f3dbbdacf39e9fd0ffe5624c54a3f15
+RUN git fetch --depth=1 --no-tags origin c39d21639f3dbbdacf39e9fd0ffe5624c54a3f15 && git checkout c39d21639f3dbbdacf39e9fd0ffe5624c54a3f15
 
 # Patch: change TypedArraySet argument count from 2 to 4
 RUN sed -i 's/F(TypedArraySet, 2, 1)/F(TypedArraySet, 4, 1)/' src/runtime/runtime.h

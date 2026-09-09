@@ -32,7 +32,10 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/350292240: V8 Sandbox Bypass: AAR/W via generic function table call_indirect rtt check bypass
-RUN mkdir -p out/x64.release /tmp/d8bin && \
+# The downloaded ClusterFuzz component 94793 maps to this V8 commit.
+RUN git fetch --depth=1 --no-tags origin b7cb9392b793435808a5d9dd82b3ed1fed060bfa && \
+    git checkout --detach FETCH_HEAD && \
+    mkdir -p out/x64.release /tmp/d8bin && \
     curl -L -o /tmp/d8.zip https://storage.googleapis.com/v8-asan/linux-release/d8-sandbox-testing-linux-release-v8-component-94793.zip && \
     python3 -c "import zipfile; zipfile.ZipFile('/tmp/d8.zip').extractall('/tmp/d8bin')" && \
     cp /tmp/d8bin/d8 out/x64.release/d8 && \

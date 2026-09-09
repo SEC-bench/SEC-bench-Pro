@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/446113731: V8 Sandbox Bypass: OOB using WASM type feedback
-RUN git fetch origin 25a0fc85f9131623a80bea4cec3951b68be26247 && git checkout 25a0fc85f9131623a80bea4cec3951b68be26247
+RUN git fetch --depth=1 --no-tags origin 25a0fc85f9131623a80bea4cec3951b68be26247 && git checkout 25a0fc85f9131623a80bea4cec3951b68be26247
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/444189152: Medium impact issue in V8: Integer overflow in TryEmitLoadForLoadWord64AndShiftRight leading to out-of-bounds read
-RUN git fetch origin bfbbaaa7a28577fd940f4e01cb3a4c12e9df7d0f && git checkout bfbbaaa7a28577fd940f4e01cb3a4c12e9df7d0f
+RUN git fetch --depth=1 --no-tags origin bfbbaaa7a28577fd940f4e01cb3a4c12e9df7d0f && git checkout bfbbaaa7a28577fd940f4e01cb3a4c12e9df7d0f
 
 RUN gclient sync -D
 

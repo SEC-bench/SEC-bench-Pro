@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/420697404: Debug check failed: escapes >= 0 in CountAdditionalEscapeChars
-RUN git fetch origin 4228bca8aa58dae12a7d2db05b3204d7e51e9166 && git checkout 4228bca8aa58dae12a7d2db05b3204d7e51e9166
+RUN git fetch --depth=1 --no-tags origin 4228bca8aa58dae12a7d2db05b3204d7e51e9166 && git checkout 4228bca8aa58dae12a7d2db05b3204d7e51e9166
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/441949792: V8 Sandbox Bypass: Argument count inconsistency due to bound args double-fetch in Generate_PushBoundArguments
-RUN git fetch origin cda27e3cbf57d5eab628ea251d0bb3df15af92e2 && git checkout cda27e3cbf57d5eab628ea251d0bb3df15af92e2
+RUN git fetch --depth=1 --no-tags origin cda27e3cbf57d5eab628ea251d0bb3df15af92e2 && git checkout cda27e3cbf57d5eab628ea251d0bb3df15af92e2
 
 RUN gclient sync -D
 

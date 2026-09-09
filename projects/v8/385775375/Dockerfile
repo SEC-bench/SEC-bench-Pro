@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/385775375: V8 sandbox violation due to concurrent ArrayBuffer modifications during std::sort
-RUN git fetch origin 4715559d4fe2ce6e2c0f6de3c966347b6da6a489 && git checkout 4715559d4fe2ce6e2c0f6de3c966347b6da6a489
+RUN git fetch --depth=1 --no-tags origin 4715559d4fe2ce6e2c0f6de3c966347b6da6a489 && git checkout 4715559d4fe2ce6e2c0f6de3c966347b6da6a489
 
 RUN gclient sync -D
 

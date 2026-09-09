@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/348793144: Abrt in Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit
-RUN git fetch origin 125189fa267b75cc8b7d4db870daa98958ee11dd && git checkout 125189fa267b75cc8b7d4db870daa98958ee11dd
+RUN git fetch --depth=1 --no-tags origin 125189fa267b75cc8b7d4db870daa98958ee11dd && git checkout 125189fa267b75cc8b7d4db870daa98958ee11dd
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

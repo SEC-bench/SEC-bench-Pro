@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/452319320: High impact issue in V8: Out-of-bounds access in JSON.parse
-RUN git fetch origin de86034ae78261f1b15ec93ccdf5cecfe175f466 && git checkout de86034ae78261f1b15ec93ccdf5cecfe175f466
+RUN git fetch --depth=1 --no-tags origin de86034ae78261f1b15ec93ccdf5cecfe175f466 && git checkout de86034ae78261f1b15ec93ccdf5cecfe175f466
 
 RUN gclient sync -D
 

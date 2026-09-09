@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/446122633: Wasm type confusion due to wrong reachability analysis in `WasmGCTypeAnalyzer::ProcessBranchOnTarget()` with custom descriptor casts
-RUN git fetch origin 04a92d6a85419c705384a2fa9effd886fc30009b && git checkout 04a92d6a85419c705384a2fa9effd886fc30009b
+RUN git fetch --depth=1 --no-tags origin 04a92d6a85419c705384a2fa9effd886fc30009b && git checkout 04a92d6a85419c705384a2fa9effd886fc30009b
 
 RUN gclient sync -D
 

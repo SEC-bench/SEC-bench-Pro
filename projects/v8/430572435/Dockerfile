@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/430572435: JIT type confusion via corrupted inlining metadata
-RUN git fetch origin 20102ebba5257dc6d0dcd0c602cba80db80dc911 && git checkout 20102ebba5257dc6d0dcd0c602cba80db80dc911
+RUN git fetch --depth=1 --no-tags origin 20102ebba5257dc6d0dcd0c602cba80db80dc911 && git checkout 20102ebba5257dc6d0dcd0c602cba80db80dc911
 
 RUN gclient sync -D
 

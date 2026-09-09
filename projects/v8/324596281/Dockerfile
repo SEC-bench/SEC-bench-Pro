@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/324596281: Debug check failed: !type.has_index() in v8
-RUN git fetch origin efbf9582701a82345d3a523624c3d3635f4737ee && git checkout efbf9582701a82345d3a523624c3d3635f4737ee
+RUN git fetch --depth=1 --no-tags origin efbf9582701a82345d3a523624c3d3635f4737ee && git checkout efbf9582701a82345d3a523624c3d3635f4737ee
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

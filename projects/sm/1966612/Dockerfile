@@ -13,6 +13,7 @@ RUN git checkout d4f9495ebcf3295ea5a1b2c45bf84a790e7afbd8~1
 
 # Build 1: ASAN+debug (for crash verification)
 RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-address-sanitizer
 ac_add_options --disable-jemalloc
 ac_add_options --enable-optimize="-O1"
@@ -25,6 +26,7 @@ RUN ./mach build
 
 # Build 2: Release (for normal execution)
 RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --enable-application=js

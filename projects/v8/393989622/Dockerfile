@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/393989622: V8 sandbox violation in icu_74::UnicodeString::doAppend
-RUN git fetch origin 69b47d88cb8f3bff0966000cd039b50786bbd891 && git checkout 69b47d88cb8f3bff0966000cd039b50786bbd891
+RUN git fetch --depth=1 --no-tags origin 69b47d88cb8f3bff0966000cd039b50786bbd891 && git checkout 69b47d88cb8f3bff0966000cd039b50786bbd891
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/377620832: Wasm type confusion due to DefaultReferenceValue() JS null for noexn type
-RUN git fetch origin 9997fc01395257cffd7231f14bb4d9fa7eaa9665 && git checkout 9997fc01395257cffd7231f14bb4d9fa7eaa9665
+RUN git fetch --depth=1 --no-tags origin 9997fc01395257cffd7231f14bb4d9fa7eaa9665 && git checkout 9997fc01395257cffd7231f14bb4d9fa7eaa9665
 
 RUN gclient sync -D
 

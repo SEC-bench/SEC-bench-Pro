@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/340221135: RCE in V8 maglev - Don't build AccessInfo for storing to module exports
-RUN git fetch origin 473318dfdb09464902c7633cad03b16431145800 && git checkout 473318dfdb09464902c7633cad03b16431145800
+RUN git fetch --depth=1 --no-tags origin 473318dfdb09464902c7633cad03b16431145800 && git checkout 473318dfdb09464902c7633cad03b16431145800
 
 RUN gclient sync -D --nohooks
 

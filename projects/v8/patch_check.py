@@ -67,11 +67,11 @@ def classify_fixed_output(
         if match.matched:
             return f"REPRODUCED:{match.reason}", False
 
-    if is_oom_output(output):
-        return f"RESOURCE_FAILURE:{OOM_ALERT_TYPE}", False
-
     if output.strip() and is_defensive_block(output):
         return "BLOCKED_DEFENSIVE", True
+
+    if is_oom_output(output):
+        return f"RESOURCE_FAILURE:{OOM_ALERT_TYPE}", False
 
     if any(pattern.search(output) for pattern in HARMLESS_PATTERNS):
         return "BLOCKED_HARMLESS", True
@@ -92,6 +92,7 @@ def run_attempt(
     poc_path: Path,
     attempt: int,
     timeout: int,
+    disable_aslr: bool,
 ) -> tuple[int | None, bool, str]:
     run_command = " ".join(
         part
@@ -109,15 +110,24 @@ def run_attempt(
         "--name",
         name,
         "--rm",
-        "-v",
-        f"{poc_path}:/testcase/poc.js:ro",
-        "-v",
-        f"{poc_path}:/src/v8/poc.js:ro",
-        image,
-        "sh",
-        "-lc",
-        f"cd /src/v8 && {run_command}",
     ]
+    if disable_aslr:
+        # Docker's default seccomp profile blocks personality(2), which
+        # setarch uses to disable ASLR.  Some historical reproducers contain
+        # addresses captured under gdb and explicitly require that layout.
+        cmd.extend(["--security-opt", "seccomp=unconfined"])
+    cmd.extend(
+        [
+            "-v",
+            f"{poc_path}:/testcase/poc.js:ro",
+            "-v",
+            f"{poc_path}:/src/v8/poc.js:ro",
+            image,
+        ]
+    )
+    if disable_aslr:
+        cmd.extend(["setarch", "x86_64", "-R"])
+    cmd.extend(["sh", "-lc", f"cd /src/v8 && {run_command}"])
     try:
         proc = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
         return proc.returncode, False, (proc.stdout or "") + (proc.stderr or "")
@@ -191,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     binary = meta["verification_binary"]
     options = meta.get("command_options") or ""
+    disable_aslr = meta.get("disable_aslr") is True
     expected_type = meta.get("error_type") or ""
     expected_output = expected_path.read_text(encoding="utf-8", errors="replace")
     fixed_image = f"{args.fixed_repo}:{instance_id}"
@@ -221,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
                 poc_path,
                 attempt,
                 args.timeout,
+                disable_aslr,
             )
             output_file = tmp_dir / f"attempt-{attempt}.output"
             output_file.write_text(output, encoding="utf-8", errors="replace")

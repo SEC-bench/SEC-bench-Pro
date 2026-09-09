@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/372269618: Type confusion due to DefaultReferenceValue() undefined default value for kNoExtern
-RUN git fetch origin 4abe42af97f118712098caeb8c71cae0a155f2f3 && git checkout 4abe42af97f118712098caeb8c71cae0a155f2f3
+RUN git fetch --depth=1 --no-tags origin 4abe42af97f118712098caeb8c71cae0a155f2f3 && git checkout 4abe42af97f118712098caeb8c71cae0a155f2f3
 
 RUN gclient sync -D
 

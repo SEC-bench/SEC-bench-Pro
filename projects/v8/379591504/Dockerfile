@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/379591504: V8 Sandbox Bypass: heap-buffer-overflow in __cxx_atomic_load<long>
-RUN git fetch origin 8cf8962d3f8125a9a3d0fcab40a6b59582bbd349 && git checkout 8cf8962d3f8125a9a3d0fcab40a6b59582bbd349
+RUN git fetch --depth=1 --no-tags origin 8cf8962d3f8125a9a3d0fcab40a6b59582bbd349 && git checkout 8cf8962d3f8125a9a3d0fcab40a6b59582bbd349
 
 RUN gclient sync -D
 

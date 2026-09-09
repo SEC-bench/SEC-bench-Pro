@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/325878101: Debug check failed: IsWasmDispatchTable(table)
-RUN git fetch origin 6d26d2b5f88fbb3e3ea7020c2ec16e47ed1aceb6 && git checkout 6d26d2b5f88fbb3e3ea7020c2ec16e47ed1aceb6
+RUN git fetch --depth=1 --no-tags origin 6d26d2b5f88fbb3e3ea7020c2ec16e47ed1aceb6 && git checkout 6d26d2b5f88fbb3e3ea7020c2ec16e47ed1aceb6
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/327740539: Check failed: !v8::internal::v8_flags.enable_slow_asserts.value() || (IsDereferenceAllowed())
-RUN git fetch origin 5461427b8b5347c002f13033bfbe9e2dbadfc5cb && git checkout 5461427b8b5347c002f13033bfbe9e2dbadfc5cb
+RUN git fetch --depth=1 --no-tags origin 5461427b8b5347c002f13033bfbe9e2dbadfc5cb && git checkout 5461427b8b5347c002f13033bfbe9e2dbadfc5cb
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

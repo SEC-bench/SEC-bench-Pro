@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/374790906: Wasm type nullability confusion due to non-nullable exnref in catch(_all)_ref
-RUN git fetch origin 7cb6188cf9132d43e6c631befb0584a47a0e7d69 && git checkout 7cb6188cf9132d43e6c631befb0584a47a0e7d69
+RUN git fetch --depth=1 --no-tags origin 7cb6188cf9132d43e6c631befb0584a47a0e7d69 && git checkout 7cb6188cf9132d43e6c631befb0584a47a0e7d69
 
 RUN gclient sync -D
 

@@ -18,6 +18,7 @@ COPY patches/ /tmp/secb-fix-patches/
 RUN set -eux; for p in /tmp/secb-fix-patches/*.patch; do git apply "$p"; done
 
 RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-address-sanitizer
 ac_add_options --disable-jemalloc
 ac_add_options --enable-optimize="-O1"
@@ -32,6 +33,7 @@ RUN ./mach build
 
 # Build 2: Release (for normal execution)
 RUN rm -f mozconfig .mozconfig && cat > .mozconfig <<'EOF'
+ac_add_options --enable-bootstrap=no-update
 ac_add_options --enable-optimize
 ac_add_options --disable-debug
 ac_add_options --enable-application=js

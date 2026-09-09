@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/325866363: Signal SIGSEGV in v8
-RUN git fetch origin a8ebbdaa7682de435750db680d3e127c441c2d68 && git checkout a8ebbdaa7682de435750db680d3e127c441c2d68
+RUN git fetch --depth=1 --no-tags origin a8ebbdaa7682de435750db680d3e127c441c2d68 && git checkout a8ebbdaa7682de435750db680d3e127c441c2d68
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

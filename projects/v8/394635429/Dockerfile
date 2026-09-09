@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/394635429: V8 Sandbox Bypass: AAW & Control flow hijack via RegExp pattern parse TOCTOU to RegExpCapture OOB
-RUN git fetch origin 4f7e475b21d83b1e4f617981bd56adfc8a860868 && git checkout 4f7e475b21d83b1e4f617981bd56adfc8a860868
+RUN git fetch --depth=1 --no-tags origin 4f7e475b21d83b1e4f617981bd56adfc8a860868 && git checkout 4f7e475b21d83b1e4f617981bd56adfc8a860868
 
 RUN gclient sync -D
 

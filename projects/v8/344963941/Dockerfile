@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/344963941: V8 Sandbox Bypass: Irregexp engine bytecode modification leads to arbitrary read/write outside the sandbox
-RUN git fetch origin 2106d9c81a1fb9d758ebda1560e2251b0f05150c && git checkout 2106d9c81a1fb9d758ebda1560e2251b0f05150c
+RUN git fetch --depth=1 --no-tags origin 2106d9c81a1fb9d758ebda1560e2251b0f05150c && git checkout 2106d9c81a1fb9d758ebda1560e2251b0f05150c
 
 RUN gclient sync -D
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

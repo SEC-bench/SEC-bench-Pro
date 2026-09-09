@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/351327767: WebAssembly OOB memory access due to cached memory index confusion
-RUN git fetch origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
+RUN git fetch --depth=1 --no-tags origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
 
 RUN gclient sync -D
 

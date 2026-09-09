@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/381999810: V8 Sandbox Bypass: Memory corruption outside the V8 sandbox
-RUN git fetch origin bd2671b973062afc614b852ec190524b80aaef8a && git checkout bd2671b973062afc614b852ec190524b80aaef8a
+RUN git fetch --depth=1 --no-tags origin bd2671b973062afc614b852ec190524b80aaef8a && git checkout bd2671b973062afc614b852ec190524b80aaef8a
 
 RUN gclient sync -D
 

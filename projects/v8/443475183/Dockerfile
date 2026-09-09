@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/443475183: V8 Sandbox Bypass: OOB write to controlled address
-RUN git fetch origin b5aa4c8b718d75f9cf4d4afd635ffd217f0acb38 && git checkout b5aa4c8b718d75f9cf4d4afd635ffd217f0acb38
+RUN git fetch --depth=1 --no-tags origin b5aa4c8b718d75f9cf4d4afd635ffd217f0acb38 && git checkout b5aa4c8b718d75f9cf4d4afd635ffd217f0acb38
 
 RUN gclient sync -D
 

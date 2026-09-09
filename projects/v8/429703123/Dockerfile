@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/429703123: V8 Sandbox Bypass: Arbitrary code execution via interpreter-to-baseline OSR Code type confusion
-RUN git fetch origin 232b79049cc8aedb47a752d12b2a5e3754817d5a && git checkout 232b79049cc8aedb47a752d12b2a5e3754817d5a
+RUN git fetch --depth=1 --no-tags origin 232b79049cc8aedb47a752d12b2a5e3754817d5a && git checkout 232b79049cc8aedb47a752d12b2a5e3754817d5a
 
 RUN gclient sync -D
 

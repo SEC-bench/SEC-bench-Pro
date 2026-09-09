@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/443875388: High impact issue in V8: Bytecode corruption due to integer truncation when writing exception handler offset
-RUN git fetch origin 6002d3ae186f974cd2013b410e487e2631f61f16 && git checkout 6002d3ae186f974cd2013b410e487e2631f61f16
+RUN git fetch --depth=1 --no-tags origin 6002d3ae186f974cd2013b410e487e2631f61f16 && git checkout 6002d3ae186f974cd2013b410e487e2631f61f16
 
 RUN gclient sync -D
 

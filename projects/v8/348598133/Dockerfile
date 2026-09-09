@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/348598133: DCHECK failure in size() > index in small-vector.h
-RUN git fetch origin 0c2b15100d997a8f1b74fcc448da319c75f2e045 && git checkout 0c2b15100d997a8f1b74fcc448da319c75f2e045
+RUN git fetch --depth=1 --no-tags origin 0c2b15100d997a8f1b74fcc448da319c75f2e045 && git checkout 0c2b15100d997a8f1b74fcc448da319c75f2e045
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

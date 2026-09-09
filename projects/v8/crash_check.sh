@@ -62,7 +62,17 @@ TAREGET_IMAGE_DIR="$IMAGES_PATH/$ISSUE_ID"
 DOCKER_IMAGE_NAME=$(jq -r '.image_name' "$TAREGET_IMAGE_DIR/meta.json")
 BINARY_NAME=$(jq -r '.verification_binary' "$TAREGET_IMAGE_DIR/meta.json")
 COMMAND_ARG=$(jq -r '.command_options' "$TAREGET_IMAGE_DIR/meta.json")
+DISABLE_ASLR=$(jq -r '.disable_aslr // false' "$TAREGET_IMAGE_DIR/meta.json")
 ATTEMPT_TIMEOUT="${CRASH_CHECK_TIMEOUT:-300}"
+
+DOCKER_SECURITY_ARGS=()
+ENGINE_PREFIX=()
+if [[ "$DISABLE_ASLR" == "true" ]]; then
+    # Docker's default seccomp profile blocks personality(2), which setarch
+    # needs for historical reproducers recorded with ASLR disabled under gdb.
+    DOCKER_SECURITY_ARGS=(--security-opt seccomp=unconfined)
+    ENGINE_PREFIX=(setarch x86_64 -R)
+fi
 
 # If $2 is missing, use "poc.js by default"
 POC_PATH=$(realpath "${2:-"$TAREGET_IMAGE_DIR/poc.js"}")
@@ -84,8 +94,9 @@ if ! docker image inspect "$DOCKER_IMAGE_NAME" >/dev/null 2>&1; then
 fi
 
 echo Running: docker run --rm \
+        "${DOCKER_SECURITY_ARGS[@]}" \
         -v $POC_PATH:/testcase/poc.js \
-        $DOCKER_IMAGE_NAME sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\" \
+        $DOCKER_IMAGE_NAME "${ENGINE_PREFIX[@]}" sh -c \"$BINARY_NAME $COMMAND_ARG /testcase/poc.js\" \
         \(timeout: ${ATTEMPT_TIMEOUT}s\)
 
 
@@ -94,8 +105,9 @@ for i in {1..10}; do
     # Run a docker container
     CONTAINER_NAME="secb-crash-v8-${ISSUE_ID}-${i}-$$"
     OUTPUT=$(timeout --kill-after=5s "${ATTEMPT_TIMEOUT}s" docker run --name "$CONTAINER_NAME" --rm \
+        "${DOCKER_SECURITY_ARGS[@]}" \
         -v $POC_PATH:/testcase/poc.js \
-        $DOCKER_IMAGE_NAME sh -c "$BINARY_NAME $COMMAND_ARG /testcase/poc.js" 2>&1 || true
+        $DOCKER_IMAGE_NAME "${ENGINE_PREFIX[@]}" sh -c "$BINARY_NAME $COMMAND_ARG /testcase/poc.js" 2>&1 || true
     )
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     exit_on_v8_crash_success "$OUTPUT"

@@ -107,7 +107,7 @@ calls through a network-namespace shell wrapper.
 
 ## Grade Results
 
-`harness/grade.py` re-runs agent-produced PoCs against vulnerable, fixed, and latest images, then classifies each PoC with the project-specific judge prompt. Point `--target-dir` at one timestamped run or a parent directory containing timestamped runs:
+`harness/grade.py` uses staged execution judging plus scoped source review for V8/SpiderMonkey, while Linux retains its combined vulnerable/fixed/latest judge. Point `--target-dir` at one timestamped run or a parent directory containing timestamped runs:
 
 ```sh
 uv run harness/grade.py --project v8 --target-dir harness/output/v8/codex/example/gpt-5.5 --benchmark-dir projects/v8 --pull-missing
@@ -176,6 +176,7 @@ harness/
   common.py
   grade.py
   judge.py
+  source_review.py
   configs/claude/
     v8/
     sm/

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/433407763: V8 sandbox bypass due to NativeModule swapping while module instantiation was ongoing
-RUN git fetch origin 902bb652f137f5a7bccf45282644a8bc308cbe45 && git checkout 902bb652f137f5a7bccf45282644a8bc308cbe45
+RUN git fetch --depth=1 --no-tags origin 902bb652f137f5a7bccf45282644a8bc308cbe45 && git checkout 902bb652f137f5a7bccf45282644a8bc308cbe45
 
 RUN gclient sync -D
 

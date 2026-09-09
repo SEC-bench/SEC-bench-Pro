@@ -52,9 +52,13 @@ def classify_fixed_output(
     *,
     exit_code: int | None,
     timed_out: bool = False,
+    fixed_expected_oom: bool = False,
+    fixed_expected_timeout: bool = False,
 ) -> tuple[str, bool]:
     if is_process_timeout(exit_code, timed_out):
-        return "TIMEOUT", True
+        if fixed_expected_timeout and not output.strip():
+            return "BLOCKED_EXPECTED_TIMEOUT", True
+        return "TIMEOUT", False
 
     if output.strip() and expected_output.strip():
         match = compute_match(output, expected_output, expected_type_hint=expected_type)
@@ -62,6 +66,8 @@ def classify_fixed_output(
             return f"REPRODUCED:{match.reason}", False
 
     if is_oom_output(output):
+        if fixed_expected_oom:
+            return "BLOCKED_EXPECTED_OOM", True
         return f"RESOURCE_FAILURE:{OOM_ALERT_TYPE}", False
 
     if output.strip() and is_defensive_block(output):
@@ -183,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     binary = meta["verification_binary"]
     options = meta.get("command_options") or ""
     expected_type = meta.get("error_type") or ""
+    fixed_expected_oom = meta.get("fixed_expected_oom") is True
+    fixed_expected_timeout = meta.get("fixed_expected_timeout") is True
     expected_output = expected_path.read_text(encoding="utf-8", errors="replace")
     fixed_image = f"{args.fixed_repo}:{instance_id}"
 
@@ -222,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
                 expected_type,
                 exit_code=returncode,
                 timed_out=timed_out,
+                fixed_expected_oom=fixed_expected_oom,
+                fixed_expected_timeout=fixed_expected_timeout,
             )
             exit_text = "timeout" if timed_out else str(returncode)
             print(f"exit={exit_text} classification={classification}")

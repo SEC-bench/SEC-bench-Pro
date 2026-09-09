@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/427918760: V8 Sandbox Bypass: OOB write in the WasmFullDecoder EndControl handler
-RUN git fetch origin 8eb6cba8e5afc6513042f5ea3da82973da0183c5 && git checkout 8eb6cba8e5afc6513042f5ea3da82973da0183c5
+RUN git fetch --depth=1 --no-tags origin 8eb6cba8e5afc6513042f5ea3da82973da0183c5 && git checkout 8eb6cba8e5afc6513042f5ea3da82973da0183c5
 
 RUN gclient sync -D
 

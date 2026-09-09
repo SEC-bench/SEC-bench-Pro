@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/383356864: WasmGCTypeAnalyzer improperly revisits single-block loops, leading to type confusion
-RUN git fetch origin 86ffa19a533bdec3b9ce4a56106a2d9e8015e108 && git checkout 86ffa19a533bdec3b9ce4a56106a2d9e8015e108
+RUN git fetch --depth=1 --no-tags origin 86ffa19a533bdec3b9ce4a56106a2d9e8015e108 && git checkout 86ffa19a533bdec3b9ce4a56106a2d9e8015e108
 
 RUN gclient sync -D
 

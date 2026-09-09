@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/343748812: Debug check failed: offset == var.offset() (128 vs. 112) in liftoff-assembler.cc
-RUN git fetch origin b2df50672c06c070ecb137570d1072a3835ac4ca && git checkout b2df50672c06c070ecb137570d1072a3835ac4ca
+RUN git fetch --depth=1 --no-tags origin b2df50672c06c070ecb137570d1072a3835ac4ca && git checkout b2df50672c06c070ecb137570d1072a3835ac4ca
 
 RUN gclient sync -D --nohooks
 

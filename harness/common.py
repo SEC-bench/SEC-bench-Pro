@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import tomllib
 from pathlib import Path
 from typing import Any, Callable
@@ -140,10 +141,265 @@ class ProgressDisplay:
 INTERRUPTED = False
 _active_proc: subprocess.Popen | None = None
 _active_containers: set[str] = set()
+# Python signal handlers run on the main thread between bytecode instructions.
+# Use a re-entrant lock so SIGINT cleanup cannot deadlock when it interrupts a
+# registry operation on that same thread.
+_active_containers_lock = threading.RLock()
 _display: ProgressDisplay | None = None
 
 
 TIMEOUT_EXIT_CODE = 124
+DEFAULT_MAX_JS_CONTAINERS = 1
+MAX_JS_CONTAINERS_HARD_LIMIT = 256
+DEFAULT_JS_GRADING_TIME_BUDGET_SEC = 3_600
+MAX_JS_GRADING_TIME_BUDGET_SEC = 21_600
+# By default the grader grants capacity from the admitted workload as each
+# timestamp is discovered.  The absolute cap remains a defence-in-depth bound:
+# 256 instances * 4 PoCs * 30 provider attempts per complete PoC lifecycle is
+# 30,720, so 32,768 covers every already-bounded input without being unlimited.
+DEFAULT_JS_LLM_CALL_BUDGET: int | None = None
+INVALID_JS_LLM_CALL_BUDGET_FALLBACK = 64
+MAX_JS_LLM_CALL_BUDGET = 32_768
+
+
+def parse_max_js_containers(raw: str | None) -> int:
+    """Parse the shared JavaScript-container cap, failing closed to one."""
+    value = "" if raw is None else raw.strip()
+    if len(value) > 3 or not re.fullmatch(r"[0-9]+", value):
+        return DEFAULT_MAX_JS_CONTAINERS
+    try:
+        parsed = int(value)
+    except (ValueError, OverflowError):
+        return DEFAULT_MAX_JS_CONTAINERS
+    if not 1 <= parsed <= MAX_JS_CONTAINERS_HARD_LIMIT:
+        return DEFAULT_MAX_JS_CONTAINERS
+    return parsed
+
+
+MAX_JS_CONTAINERS = parse_max_js_containers(os.environ.get("SECB_MAX_JS_CONTAINERS"))
+_js_container_slots = threading.BoundedSemaphore(MAX_JS_CONTAINERS)
+
+
+def _parse_js_budget(
+    raw: str | None, *, default: int, maximum: int
+) -> int:
+    """Parse a positive bounded budget, falling back to the safe default."""
+    value = "" if raw is None else raw.strip()
+    if len(value) > 10 or not re.fullmatch(r"[0-9]+", value):
+        return default
+    try:
+        parsed = int(value)
+    except (ValueError, OverflowError):
+        return default
+    if not 1 <= parsed <= maximum:
+        return default
+    return parsed
+
+
+def parse_js_grading_time_budget(raw: str | None) -> int:
+    return _parse_js_budget(
+        raw,
+        default=DEFAULT_JS_GRADING_TIME_BUDGET_SEC,
+        maximum=MAX_JS_GRADING_TIME_BUDGET_SEC,
+    )
+
+
+def parse_js_llm_call_budget(raw: str | None) -> int | None:
+    if raw is None:
+        return DEFAULT_JS_LLM_CALL_BUDGET
+    value = raw.strip()
+    if len(value) > 10 or not re.fullmatch(r"[0-9]+", value):
+        return INVALID_JS_LLM_CALL_BUDGET_FALLBACK
+    try:
+        parsed = int(value)
+    except (ValueError, OverflowError):
+        return INVALID_JS_LLM_CALL_BUDGET_FALLBACK
+    if not 1 <= parsed <= MAX_JS_LLM_CALL_BUDGET:
+        return INVALID_JS_LLM_CALL_BUDGET_FALLBACK
+    return parsed
+
+
+JS_GRADING_TIME_BUDGET_SEC = parse_js_grading_time_budget(
+    os.environ.get("SECB_JS_GRADING_TIME_BUDGET_SEC")
+)
+JS_LLM_CALL_BUDGET = parse_js_llm_call_budget(
+    os.environ.get("SECB_JS_LLM_CALL_BUDGET")
+)
+
+
+class JsGradingBudgetExceeded(RuntimeError):
+    """The process-wide V8/SpiderMonkey grading budget was exhausted."""
+
+
+_js_grading_budget_lock = threading.Lock()
+_js_grading_deadline: float | None = None
+_js_llm_calls_remaining: int | None = None
+_js_llm_call_limit: int | None = None
+_js_llm_budget_automatic = False
+
+
+def configure_js_grading_budget(
+    *, time_budget_sec: int, llm_call_budget: int | None
+) -> None:
+    """Start one process-wide JS deadline and atomic fixed/automatic call budget."""
+    if not 1 <= time_budget_sec <= MAX_JS_GRADING_TIME_BUDGET_SEC:
+        raise ValueError(
+            "JavaScript grading time budget must be between 1 and "
+            f"{MAX_JS_GRADING_TIME_BUDGET_SEC} seconds"
+        )
+    if llm_call_budget is not None and not (
+        1 <= llm_call_budget <= MAX_JS_LLM_CALL_BUDGET
+    ):
+        raise ValueError(
+            "JavaScript LLM call budget must be between 1 and "
+            f"{MAX_JS_LLM_CALL_BUDGET}"
+        )
+    with _js_grading_budget_lock:
+        global _js_grading_deadline, _js_llm_calls_remaining, _js_llm_call_limit
+        global _js_llm_budget_automatic
+        _js_grading_deadline = time.monotonic() + time_budget_sec
+        _js_llm_budget_automatic = llm_call_budget is None
+        _js_llm_calls_remaining = llm_call_budget or 0
+        _js_llm_call_limit = llm_call_budget or 0
+
+
+def add_automatic_js_llm_call_capacity(additional_calls: int) -> int:
+    """Grant bounded capacity for newly admitted PoCs under automatic mode."""
+    if additional_calls < 0:
+        raise ValueError("additional JavaScript LLM-call capacity may not be negative")
+    with _js_grading_budget_lock:
+        global _js_llm_calls_remaining, _js_llm_call_limit
+        if _js_grading_deadline is None:
+            raise RuntimeError("JavaScript grading budget is not configured")
+        if _js_grading_deadline - time.monotonic() <= 0:
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading wall-clock budget exhausted before "
+                "reserving automatic LLM-call capacity"
+            )
+        if not _js_llm_budget_automatic:
+            assert _js_llm_call_limit is not None
+            return _js_llm_call_limit
+        assert _js_llm_calls_remaining is not None
+        assert _js_llm_call_limit is not None
+        new_limit = _js_llm_call_limit + additional_calls
+        if new_limit > MAX_JS_LLM_CALL_BUDGET:
+            raise JsGradingBudgetExceeded(
+                "automatic JavaScript LLM-call budget would exceed hard maximum "
+                f"{MAX_JS_LLM_CALL_BUDGET}"
+            )
+        _js_llm_calls_remaining += additional_calls
+        _js_llm_call_limit = new_limit
+        return new_limit
+
+
+def clear_js_grading_budget() -> None:
+    """Disable the process-wide JS budget after a grader invocation."""
+    with _js_grading_budget_lock:
+        global _js_grading_deadline, _js_llm_calls_remaining, _js_llm_call_limit
+        global _js_llm_budget_automatic
+        _js_grading_deadline = None
+        _js_llm_calls_remaining = None
+        _js_llm_call_limit = None
+        _js_llm_budget_automatic = False
+
+
+def js_grading_budget_deadline() -> float | None:
+    with _js_grading_budget_lock:
+        return _js_grading_deadline
+
+
+def js_grading_budget_remaining(operation: str = "operation") -> float | None:
+    """Return remaining JS wall time or fail as a grader error at exhaustion."""
+    deadline = js_grading_budget_deadline()
+    if deadline is None:
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise JsGradingBudgetExceeded(
+            "JavaScript grading wall-clock budget exhausted before " + operation
+        )
+    return remaining
+
+
+def clamp_js_grading_timeout(timeout_sec: float, operation: str) -> float:
+    """Clamp one blocking JS operation to the process-wide remaining budget."""
+    requested = max(0.001, float(timeout_sec))
+    remaining = js_grading_budget_remaining(operation)
+    if remaining is None:
+        return requested
+    return max(0.001, min(requested, remaining))
+
+
+def clamp_js_grading_deadline(deadline: float, operation: str) -> float:
+    """Clamp an absolute operation deadline to the process-wide JS deadline."""
+    js_grading_budget_remaining(operation)
+    global_deadline = js_grading_budget_deadline()
+    return min(deadline, global_deadline) if global_deadline is not None else deadline
+
+
+def consume_js_llm_call(operation: str) -> tuple[int, int] | None:
+    """Atomically reserve one real provider call under the active JS budget."""
+    global _js_llm_calls_remaining
+    with _js_grading_budget_lock:
+        deadline = _js_grading_deadline
+        if deadline is None:
+            return None
+        if deadline - time.monotonic() <= 0:
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading wall-clock budget exhausted before " + operation
+            )
+        assert _js_llm_calls_remaining is not None
+        assert _js_llm_call_limit is not None
+        if _js_llm_calls_remaining <= 0:
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading LLM-call budget exhausted before " + operation
+            )
+        _js_llm_calls_remaining -= 1
+        return _js_llm_call_limit - _js_llm_calls_remaining, _js_llm_call_limit
+
+
+def require_js_llm_call_capacity(operation: str) -> None:
+    """Fail before expensive setup when no JS provider call can remain."""
+    with _js_grading_budget_lock:
+        if _js_grading_deadline is None:
+            return
+        if _js_grading_deadline - time.monotonic() <= 0:
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading wall-clock budget exhausted before " + operation
+            )
+        assert _js_llm_calls_remaining is not None
+        if _js_llm_calls_remaining <= 0:
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading LLM-call budget exhausted before " + operation
+            )
+
+
+def acquire_js_container_slot() -> threading.BoundedSemaphore:
+    """Wait interruptibly for one shared V8/SM Docker-container slot."""
+    slots = _js_container_slots
+    while True:
+        remaining = js_grading_budget_remaining("acquiring a JavaScript container slot")
+        wait_timeout = 0.2 if remaining is None else min(0.2, remaining)
+        acquired = slots.acquire(timeout=max(0.001, wait_timeout))
+        if acquired:
+            if INTERRUPTED:
+                slots.release()
+                raise KeyboardInterrupt
+            try:
+                js_grading_budget_remaining(
+                    "using an acquired JavaScript container slot"
+                )
+            except BaseException:
+                slots.release()
+                raise
+            return slots
+        if INTERRUPTED:
+            raise KeyboardInterrupt
+
+
+def release_js_container_slot(slots: threading.BoundedSemaphore) -> None:
+    """Release the exact limiter from which a container slot was acquired."""
+    slots.release()
 
 
 def set_display(d: ProgressDisplay | None) -> None:
@@ -156,18 +412,108 @@ def set_display(d: ProgressDisplay | None) -> None:
 # ---------------------------------------------------------------------------
 
 
+def register_active_container(name: str) -> None:
+    """Register a container for signal/atexit cleanup."""
+    with _active_containers_lock:
+        _active_containers.add(name)
+
+
+def unregister_active_container(name: str) -> None:
+    """Forget a container only after it is known to have been removed."""
+    with _active_containers_lock:
+        _active_containers.discard(name)
+
+
+def is_active_container(name: str) -> bool:
+    """Return whether *name* is still registered for cleanup."""
+    with _active_containers_lock:
+        return name in _active_containers
+
+
+def take_active_containers() -> list[str]:
+    """Atomically claim all registered containers for cleanup."""
+    with _active_containers_lock:
+        names = list(_active_containers)
+        _active_containers.clear()
+    return names
+
+
+def remove_registered_container(
+    name: str,
+    *,
+    info_fn: Callable[[str], None],
+    warn_fn: Callable[[str], None],
+    timeout: float = 30,
+) -> bool:
+    """Remove one container, retaining failed removals for atexit cleanup."""
+    if not is_active_container(name):
+        return True
+
+    info_fn(f"Removing container: {name}")
+    try:
+        result = subprocess.run(
+            ["docker", "rm", "-f", name],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        warn_fn(
+            f"docker rm -f timed out for {name}; "
+            "container remains registered for exit cleanup"
+        )
+        return False
+    except OSError as exc:
+        warn_fn(
+            f"docker rm -f failed for {name}: {exc}; "
+            "container remains registered for exit cleanup"
+        )
+        return False
+
+    output = "\n".join((result.stdout or "", result.stderr or ""))
+    already_absent = "no such container" in output.casefold()
+    if result.returncode == 0 or already_absent:
+        unregister_active_container(name)
+        if already_absent and result.returncode != 0:
+            info_fn("Container already absent.")
+        else:
+            info_fn("Container removed.")
+        return True
+
+    detail = (result.stderr or result.stdout or "").strip().replace("\n", " ")
+    suffix = f": {detail[:240]}" if detail else ""
+    warn_fn(
+        f"docker rm -f failed for {name} (exit {result.returncode}{suffix}); "
+        "container remains registered for exit cleanup"
+    )
+    return False
+
+
 def force_cleanup_containers() -> None:
     """Force-remove every tracked Docker container (best-effort)."""
-    for name in list(_active_containers):
-        try:
-            subprocess.run(
-                ["docker", "rm", "-f", name],
-                capture_output=True,
-                timeout=30,
-            )
-        except Exception:
-            pass
-    _active_containers.clear()
+    for name in take_active_containers():
+        removed = False
+        for attempt in range(3):
+            try:
+                result = subprocess.run(
+                    ["docker", "rm", "-f", "-v", name],
+                    capture_output=True,
+                    text=True,
+                    errors="replace",
+                    timeout=30,
+                )
+                removed = result.returncode == 0 or "no such container" in (
+                    result.stderr or ""
+                ).casefold()
+                if removed:
+                    break
+            except Exception:
+                pass
+            if attempt < 2:
+                time.sleep(0.1 * (attempt + 1))
+        if not removed:
+            register_active_container(name)
 
 
 def _kill_proc_tree(proc: subprocess.Popen) -> None:
@@ -641,21 +987,38 @@ def render_prompt(template_path: Path, meta_path: Path) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def docker_preflight() -> None:
+def docker_preflight(*, deadline: float | None = None) -> None:
+    """Verify Docker availability, optionally within one absolute deadline."""
+
+    def run_check(command: list[str], operation: str) -> None:
+        kwargs: dict[str, Any] = {
+            "capture_output": True,
+            "check": True,
+        }
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise JsGradingBudgetExceeded(
+                    "JavaScript grading wall-clock budget exhausted before "
+                    f"Docker preflight ({operation})"
+                )
+            kwargs["timeout"] = remaining
+        try:
+            subprocess.run(command, **kwargs)
+        except subprocess.TimeoutExpired as exc:
+            # With a deadline, the subprocess timeout is exactly the remaining
+            # process-wide allowance rather than an independent local limit.
+            raise JsGradingBudgetExceeded(
+                "JavaScript grading wall-clock budget exhausted during "
+                f"Docker preflight ({operation})"
+            ) from exc
+
     try:
-        subprocess.run(
-            ["docker", "--version"],
-            capture_output=True,
-            check=True,
-        )
+        run_check(["docker", "--version"], "version check")
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
         raise RuntimeError("Docker is not installed or not in PATH") from exc
     try:
-        subprocess.run(
-            ["docker", "info"],
-            capture_output=True,
-            check=True,
-        )
+        run_check(["docker", "info"], "daemon check")
     except subprocess.CalledProcessError as exc:
         raise RuntimeError("Docker daemon is not running") from exc
 

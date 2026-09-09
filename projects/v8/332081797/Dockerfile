@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/332081797: Type confusion in v8 wasm
-RUN git fetch origin 29dcf5b084221074483f797bf528069b424c463d && git checkout 29dcf5b084221074483f797bf528069b424c463d
+RUN git fetch --depth=1 --no-tags origin 29dcf5b084221074483f797bf528069b424c463d && git checkout 29dcf5b084221074483f797bf528069b424c463d
 
 RUN gclient sync -D --nohooks
 RUN mkdir -p /usr/local/ssl && ln -sf /etc/ssl/certs/ca-certificates.crt /usr/local/ssl/cert.pem

@@ -1,0 +1,30 @@
+#!/bin/sh
+
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    echo "usage: $0 REPOSITORY MANIFEST" >&2
+    exit 2
+fi
+
+repository=$1
+manifest=$2
+
+while read -r commit remote extra; do
+    printf '%s\n' "$commit" | grep -Eq '^[0-9a-f]{40}$'
+    test -n "$remote"
+    test -z "${extra:-}"
+    case "$remote" in
+        https://*) ;;
+        *) exit 1 ;;
+    esac
+
+    if ! git -C "$repository" cat-file -e "${commit}^{commit}" 2>/dev/null; then
+        timeout --kill-after=30s 600s \
+            git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=60 \
+            -C "$repository" fetch --no-tags --depth=1 "$remote" "$commit"
+    fi
+
+    git -C "$repository" cat-file -e "${commit}^{commit}"
+    git -C "$repository" update-ref "refs/secb-required/${commit}" "$commit"
+done < "$manifest"

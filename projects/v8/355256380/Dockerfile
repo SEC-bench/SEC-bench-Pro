@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/355256380: Type Confusion between WasmObject and JSObject in V8 MaglevGraphBuilder::TryBuildFastOrdinaryHasInstance
-RUN git fetch origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
+RUN git fetch --depth=1 --no-tags origin cdbc1d9684a3602c77c39d23b4e95a8522a0cc90 && git checkout cdbc1d9684a3602c77c39d23b4e95a8522a0cc90
 
 RUN gclient sync -D
 

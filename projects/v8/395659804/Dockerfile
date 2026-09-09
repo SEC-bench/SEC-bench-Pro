@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/395659804: V8 Sandbox Bypass: Arbitrary code execution via OSR DeoptimizationData confusion
-RUN git fetch origin 1d65fd393d1ec867001774f0119e9c60256e748b && git checkout 1d65fd393d1ec867001774f0119e9c60256e748b
+RUN git fetch --depth=1 --no-tags origin 1d65fd393d1ec867001774f0119e9c60256e748b && git checkout 1d65fd393d1ec867001774f0119e9c60256e748b
 
 RUN gclient sync -D
 

@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/400086889: Arbitrary Wasm type confusion due to transient canonical index overflow
-RUN git fetch origin f5fba01dabb7f8677c3e2e737c9017fe6576f041 && git checkout f5fba01dabb7f8677c3e2e737c9017fe6576f041
+RUN git fetch --depth=1 --no-tags origin f5fba01dabb7f8677c3e2e737c9017fe6576f041 && git checkout f5fba01dabb7f8677c3e2e737c9017fe6576f041
 
 RUN gclient sync -D
 

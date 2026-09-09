@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/438786702: Corrupt Map of Externalized String Cause OOB Read
-RUN git fetch origin e12b49eed57d6e3b9e75b93df252ec45d1c5dc95 && git checkout e12b49eed57d6e3b9e75b93df252ec45d1c5dc95
+RUN git fetch --depth=1 --no-tags origin e12b49eed57d6e3b9e75b93df252ec45d1c5dc95 && git checkout e12b49eed57d6e3b9e75b93df252ec45d1c5dc95
 
 RUN gclient sync -D
 

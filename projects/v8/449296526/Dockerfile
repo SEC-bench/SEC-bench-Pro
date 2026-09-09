@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issues.chromium.org/issues/449296526: V8 Sandbox Bypass: heap-buffer-overflow in CalculateLineEndsImpl via console.profile()
-RUN git fetch origin b0157a634e584163cbe6004db3161dc16dea20f9 && git checkout b0157a634e584163cbe6004db3161dc16dea20f9
+RUN git fetch --depth=1 --no-tags origin b0157a634e584163cbe6004db3161dc16dea20f9 && git checkout b0157a634e584163cbe6004db3161dc16dea20f9
 
 RUN gclient sync -D
 

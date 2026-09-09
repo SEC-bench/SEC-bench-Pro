@@ -32,7 +32,7 @@ RUN rm -rf $SRC/.cipd
 WORKDIR $SRC/v8
 
 # https://issuetracker.google.com/issues/398999390: OOB read in JsonStringifier::SerializeString
-RUN git fetch origin be6d95e1118064c533c56e0547627374bd2bd434 && git checkout be6d95e1118064c533c56e0547627374bd2bd434
+RUN git fetch --depth=1 --no-tags origin be6d95e1118064c533c56e0547627374bd2bd434 && git checkout be6d95e1118064c533c56e0547627374bd2bd434
 
 RUN gclient sync -D
 
