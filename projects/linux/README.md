@@ -196,7 +196,7 @@ projects/linux/CVE-YYYY-NNNNN/
 ├── secb.sh                        In-container harness (build | repro | validate)
 ├── init.sh                        Initramfs PID 1: brings up /proc, runs poc.sh
 ├── poc.sh                         exec /poc/poc (driver shim)
-├── config/kernel.config.additions Kconfig deltas applied on top of x86_64_defconfig
+├── config/kernel.config{,.additions} Build-only full config or Kconfig deltas
 ├── poc/poc.c                      Reproducer source
 ├── patches-pre/*.patch            Optional prerequisite patches for vuln image
 ├── patches/*.patch                Upstream fix patch(es) — used by Dockerfile.fixed
@@ -206,6 +206,11 @@ projects/linux/CVE-YYYY-NNNNN/
 ├── FIX-VERIFIED.txt               Present iff fixed run ended NO_CRASH_DETECTED (patch holds)
 └── FIX-NOT-MITIGATED.txt          Present iff fixed run still crashes (regression)
 ```
+
+The `config/` input is used only while constructing an image. The resulting
+kernel config is retained as `/src/linux/.config`; `secb-sanitize-git` removes
+`/config` and its path fields from the runtime config before evaluators can
+access the image. Kernel rebuilds reuse the retained `.config`.
 
 ## Top-level layout
 

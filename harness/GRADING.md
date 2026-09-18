@@ -166,8 +166,8 @@ verdict.
 Linux PoCs are executed against the per-CVE **vuln**, **fixed**, and
 **latest** images. Linux does not use one shared latest image because each CVE
 needs the same
-KASAN/QEMU harness config, initramfs entrypoint, and Kconfig additions as its
-validated leaf, so the default latest repository is
+KASAN/QEMU harness config, initramfs entrypoint, and resolved kernel `.config`
+as its validated leaf, so the default latest repository is
 `hwiwonlee/linux.x86_64.latest:<instance_id>`. For Linux,
 `/usr/local/bin/secb validate` returns exit code 0 for a confirmed kernel crash
 verdict, 1 for `NO_CRASH_DETECTED`, and 2 for harness/build errors.
@@ -199,7 +199,7 @@ The JavaScript engine projects can use a single runnable latest image because a
 PoC is just a script and the same engine binary can execute every instance. A
 Linux PoC runs inside a per-CVE kernel harness. The harness includes the
 `secb` scripts, `secb_config.json`, QEMU boot settings, initramfs layout,
-Kconfig additions, PoC compile mode, and timeout assumptions that were
+resolved kernel `.config`, PoC compile mode, and timeout assumptions that were
 validated for that CVE. Dropping all PoCs into one generic latest-kernel image
 would make missing configs or missing boot/runtime setup indistinguishable from
 "the latest kernel is clean", which is exactly the false-negative edge case the
@@ -209,11 +209,12 @@ Linux therefore follows the same public Dockerfile/image pattern as V8 and
 SpiderMonkey: `base/linux/Dockerfile` builds `hwiwonlee/linux.base:latest`,
 and `base/linux/Dockerfile.latest` builds `hwiwonlee/linux.x86_64.latest:<instance_id>`.
 `Dockerfile.latest` checks out the selected upstream Linux ref before copying
-per-CVE harness files, so Docker's layer cache shares the latest-kernel
+per-CVE build inputs, so Docker's layer cache shares the latest-kernel
 checkout/tooling layers across leaves without introducing a separate
 auxiliary image. Each final latest tag still contains that CVE's
-`secb` harness/config, Kconfig additions, initramfs entrypoint, and prebuilt
-latest-kernel `bzImage`.
+`secb` harness/config, resolved kernel `.config`, initramfs entrypoint, and
+prebuilt latest-kernel `bzImage`; the build-only `/config` directory is removed
+before the image is exposed to an evaluator.
 
 This keeps grading semantics strict while matching the V8/SM image naming.
 The latest leaf build rewrites `kernel.build_commit` in

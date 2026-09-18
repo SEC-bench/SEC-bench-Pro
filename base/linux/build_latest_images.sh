@@ -2,7 +2,8 @@
 # Build upstream-latest Linux validation images from validated Linux leaves.
 #
 # Each selected CVE directory must contain the same files as the validated
-# vuln/fixed leaves: secb_config.json, build.sh, secb.sh, init.sh, and config/.
+# vuln/fixed leaves: secb_config.json, build.sh, secb.sh, init.sh, and the
+# build-only config/ input (removed from the completed image).
 # The script builds per-CVE latest leaves tagged as ${IMAGE_REPO}:${CVE}, e.g.
 # hwiwonlee/linux.x86_64.latest:CVE-2022-0185. Docker cache shares the
 # latest-kernel checkout/tooling layers across leaves.

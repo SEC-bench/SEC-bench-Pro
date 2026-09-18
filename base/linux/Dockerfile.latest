@@ -9,9 +9,10 @@
 #     /path/to/linux/CVE-2022-0185
 #
 # The context format intentionally matches the validated Linux leaves:
-# secb_config.json, build.sh, secb.sh, init.sh, and config/ are copied exactly
-# like Dockerfile/Dockerfile.fixed. Layers before the per-CVE COPY steps are
-# shared through Docker's build cache across every latest leaf.
+# secb_config.json, build.sh, secb.sh, init.sh, and config/ are copied as
+# build-time inputs. secb-sanitize-git removes config/ after the resolved
+# /src/linux/.config has been generated. Layers before the per-CVE COPY steps
+# are shared through Docker's build cache across every latest leaf.
 
 FROM hwiwonlee/linux.base:latest
 
