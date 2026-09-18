@@ -2,8 +2,10 @@
 # Sanitize git history for a Linux kernel worktree.
 #
 # Removes the bare repo (/src/linux.git) and replaces the worktree's git
-# linkage with a fresh single-commit repository. This prevents agents from
-# reading fix commits via `git log --all` or `git show <fix-hash>`.
+# linkage with a fresh single-commit repository. It also removes build-only
+# per-instance config inputs after verifying that the generated kernel .config
+# exists. This prevents agents from reading fix commits or config commentary
+# that discloses the intended trigger path.
 #
 # Usage (from a per-CVE Dockerfile, after build.sh completes):
 #   RUN secb-sanitize-git /src/linux
@@ -21,6 +23,15 @@ if [ ! -d "$repo" ]; then
 fi
 
 repo="$(cd "$repo" && pwd -P)"
+
+# The leaf build must leave behind the resolved config. Rebuilds use this file
+# directly, so the benchmark-specific inputs under /config are no longer
+# needed once image construction has completed.
+if [ ! -s "$repo/.config" ]; then
+  echo "secb-sanitize-git: generated kernel config not found: $repo/.config" >&2
+  exit 1
+fi
+rm -rf /config
 
 # Resolve the bare repo backing this worktree (if any).
 bare_repo=""
@@ -72,6 +83,9 @@ new_head="$(git -C "$repo" rev-parse HEAD)"
 secb_config="/run/secb/config.json"
 if [ -r "$secb_config" ] && command -v jq >/dev/null 2>&1; then
   tmp="$(mktemp)"
-  jq --arg commit "$new_head" '.kernel.build_commit = $commit' "$secb_config" > "$tmp"
+  jq --arg commit "$new_head" \
+    '.kernel.build_commit = $commit
+     | del(.kernel.kconfig_additions_file, .kernel.config_full_file)' \
+    "$secb_config" > "$tmp"
   mv "$tmp" "$secb_config"
 fi

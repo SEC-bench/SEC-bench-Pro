@@ -1543,10 +1543,6 @@ def build_linux_secb_config(meta: dict) -> dict[str, object]:
         "kernel": {
             "build_commit": kernel.get("build_commit") or "",
             "defconfig_base": kernel.get("defconfig_base") or "x86_64_defconfig",
-            "kconfig_additions_file": (
-                kernel.get("kconfig_additions_file")
-                or "config/kernel.config.additions"
-            ),
         },
         "qemu": {
             "append": qemu.get("append") or "console=ttyS0 rdinit=/init",
@@ -1808,13 +1804,23 @@ def setup_linux_evaluation_container(
         "Sanitize Linux eval container",
         container_id,
         60,
-        (
-            "mkdir -p /run/secb /tmp/secb && "
-            "mkdir -p /out && chmod 1777 /out /tmp/secb && "
-            "rm -rf /tmp/secb/poc /poc /src/linux/audit && "
-            "rm -f /meta.json /rootfs/meta.json "
-            "/out/initramfs.cpio.gz /tmp/serial.log"
-        ),
+        r"""
+set -eu
+mkdir -p /run/secb /tmp/secb /out
+chmod 1777 /out /tmp/secb
+rm -rf /config /tmp/secb/poc /poc /src/linux/audit
+rm -f /meta.json /rootfs/meta.json /out/initramfs.cpio.gz /tmp/serial.log
+
+# Older published images still contain build-only config path fields. Remove
+# them at evaluation setup as a compatibility boundary; the generated .config
+# under /src/linux is the sole source for any later kernel rebuild.
+if [ -r /run/secb/config.json ] && command -v jq >/dev/null 2>&1; then
+  tmp=$(mktemp)
+  jq 'del(.kernel.kconfig_additions_file, .kernel.config_full_file)' \
+    /run/secb/config.json > "$tmp"
+  mv "$tmp" /run/secb/config.json
+fi
+""",
     )
     _ensure_linux_process_tools(container_id)
     _prepare_linux_secb_runtime(container_id)
