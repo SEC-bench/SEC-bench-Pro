@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 IMAGE_REPO="${IMAGE_REPO:-hwiwonlee/linux.x86_64.latest}"
+BASE_IMAGE="hwiwonlee/linux.base:latest"
 IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 LINUX_REF="${LINUX_REF:-d2c9a99135da931377240942d44f3dea104cedb8}"
 LINUX_REF_CACHE_BUST="${LINUX_REF_CACHE_BUST:-}"
@@ -37,6 +38,8 @@ Options:
   -j, --parallel N     Number of docker builds to run concurrently (default: 1).
   --linux-ref REF      Linux ref/commit to build.
                        Default: d2c9a99135da931377240942d44f3dea104cedb8.
+                       A per-instance meta.json latest_validation.linux_ref
+                       takes precedence when present.
   --linux-ref-cache-bust VALUE
                        Cache-bust value for moving refs. Defaults to current
                        UTC timestamp for origin/* refs.
@@ -147,6 +150,23 @@ BENCHMARK_DIR="$(cd "$BENCHMARK_DIR" && pwd)"
 DOCKERFILE="$SCRIPT_DIR/Dockerfile.latest"
 [[ -f "$DOCKERFILE" ]] || die "missing Dockerfile.latest: $DOCKERFILE"
 
+verify_base_sanitizer() {
+  local expected actual_line actual
+  expected="$(sha256sum "$SCRIPT_DIR/sanitize-git" | awk '{print $1}')"
+  if ! actual_line="$(
+    docker run --rm --network none --read-only \
+      --entrypoint sha256sum "$BASE_IMAGE" \
+      /usr/local/bin/secb-sanitize-git 2>/dev/null
+  )"; then
+    die "missing or unusable base image: $BASE_IMAGE (rebuild it with projects/linux/build_images.py --mode base)"
+  fi
+  actual="${actual_line%% *}"
+  [[ "$actual" == "$expected" ]] || die \
+    "stale base sanitizer in $BASE_IMAGE (rebuild it with projects/linux/build_images.py --mode base)"
+}
+
+verify_base_sanitizer
+
 INSTANCES=()
 if [[ $# -gt 0 ]]; then
   while IFS= read -r id; do
@@ -165,10 +185,6 @@ fi
 BUILD_LOG_DIR="$SCRIPT_DIR/latest_build_logs/$(date -u '+%Y%m%dT%H%M%SZ')"
 mkdir -p "$BUILD_LOG_DIR"
 
-if [[ -z "$LINUX_REF_CACHE_BUST" && "$LINUX_REF" == origin/* ]]; then
-  LINUX_REF_CACHE_BUST="$(date -u '+%Y%m%dT%H%M%SZ')"
-fi
-
 validate_instance() {
   local id="$1"
   local dir="$BENCHMARK_DIR/$id"
@@ -178,6 +194,35 @@ validate_instance() {
   [[ -f "$dir/secb.sh" ]] || die "$id: missing secb.sh"
   [[ -f "$dir/init.sh" ]] || die "$id: missing init.sh"
   [[ -d "$dir/config" ]] || die "$id: missing config/"
+  [[ -f "$dir/meta.json" ]] || die "$id: missing meta.json"
+  jq -e . "$dir/meta.json" >/dev/null || die "$id: malformed meta.json"
+}
+
+resolve_linux_ref() {
+  local id="$1"
+  local meta="$BENCHMARK_DIR/$id/meta.json"
+  local instance_ref
+  if ! instance_ref="$(jq -er '
+    if .latest_validation == null then ""
+    elif (.latest_validation | type) != "object" then
+      error("latest_validation must be an object")
+    elif (.latest_validation | has("linux_ref") | not) then ""
+    elif (.latest_validation.linux_ref | type) != "string" then
+      error("latest_validation.linux_ref must be a string")
+    else
+      (.latest_validation.linux_ref | gsub("^\\s+|\\s+$"; "")) as $ref
+      | if ($ref | length) > 0 then $ref
+        else error("latest_validation.linux_ref must not be empty")
+        end
+    end
+  ' "$meta")"; then
+    die "$id: invalid latest_validation metadata"
+  fi
+  if [[ -n "$instance_ref" ]]; then
+    printf '%s\n' "$instance_ref"
+  else
+    printf '%s\n' "$LINUX_REF"
+  fi
 }
 
 build_one() {
@@ -185,16 +230,22 @@ build_one() {
   local dir="$BENCHMARK_DIR/$id"
   local tag="$IMAGE_REPO:$id"
   local log_file="$BUILD_LOG_DIR/$id.log"
+  local linux_ref
+  local cache_bust="$LINUX_REF_CACHE_BUST"
+  linux_ref="$(resolve_linux_ref "$id")"
+  if [[ -z "$cache_bust" && "$linux_ref" == origin/* ]]; then
+    cache_bust="$(date -u '+%Y%m%dT%H%M%SZ')"
+  fi
   local -a cmd=(
     docker build
     --platform "$IMAGE_PLATFORM"
     -f "$DOCKERFILE"
     -t "$tag"
-    --build-arg "LINUX_REF=$LINUX_REF"
+    --build-arg "LINUX_REF=$linux_ref"
   )
 
   [[ "$NO_CACHE" == "1" ]] && cmd+=(--no-cache)
-  [[ -n "$LINUX_REF_CACHE_BUST" ]] && cmd+=(--build-arg "LINUX_REF_CACHE_BUST=$LINUX_REF_CACHE_BUST")
+  [[ -n "$cache_bust" ]] && cmd+=(--build-arg "LINUX_REF_CACHE_BUST=$cache_bust")
   [[ -n "$KBUILD_JOBS" ]] && cmd+=(--build-arg "KBUILD_JOBS=$KBUILD_JOBS")
   cmd+=("$dir")
 
@@ -204,7 +255,7 @@ build_one() {
     return 0
   fi
 
-  log "$id build start -> $tag"
+  log "$id build start -> $tag (linux ref: $linux_ref)"
   if "${cmd[@]}" >"$log_file" 2>&1; then
     log "$id build ok -> $tag"
     if [[ "$PUSH" == "1" ]]; then
@@ -222,7 +273,7 @@ build_one() {
 export BENCHMARK_DIR DOCKERFILE IMAGE_REPO IMAGE_PLATFORM
 export LINUX_REF LINUX_REF_CACHE_BUST KBUILD_JOBS
 export NO_CACHE PUSH SKIP_EXISTING BUILD_LOG_DIR SCRIPT_DIR
-export -f log die validate_instance build_one
+export -f log die validate_instance resolve_linux_ref build_one
 
 for id in "${INSTANCES[@]}"; do
   validate_instance "$id"
@@ -233,7 +284,7 @@ log "benchmark dir: $BENCHMARK_DIR"
 log "logs: $BUILD_LOG_DIR"
 log "image repo: $IMAGE_REPO"
 log "platform: $IMAGE_PLATFORM"
-log "linux ref: $LINUX_REF"
+log "fallback linux ref: $LINUX_REF"
 [[ -n "$LINUX_REF_CACHE_BUST" ]] && log "linux ref cache-bust: $LINUX_REF_CACHE_BUST"
 log "parallel: $PARALLEL"
 [[ -n "$KBUILD_JOBS" ]] && log "kbuild jobs per build: $KBUILD_JOBS"

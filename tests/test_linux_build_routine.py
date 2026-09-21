@@ -570,6 +570,73 @@ class LinuxBuildRoutineTests(unittest.TestCase):
             {self.builder.BASE_LINEAGE_LABEL: base_id},
         )
 
+    def test_latest_build_prefers_per_instance_compatible_snapshot(self) -> None:
+        args = types.SimpleNamespace(
+            kbuild_jobs=None,
+            linux_ref="origin/main",
+            no_cache=False,
+            parallel=1,
+            platform="linux/amd64",
+            skip_existing=False,
+        )
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.object(self.builder, "LINUX_DIR", Path(temp_dir)),
+            patch.object(
+                self.builder,
+                "build_image",
+                return_value=("hwiwonlee/linux.x86_64.latest:CVE-test", True, 0.0),
+            ) as build_image,
+            patch.object(self.builder, "log"),
+        ):
+            cve_dir = Path(temp_dir) / "CVE-test"
+            cve_dir.mkdir()
+            (cve_dir / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "latest_validation": {
+                            "mode": "compatible_snapshot",
+                            "linux_ref": "instance-ref",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            failed = self.builder.build_instances_parallel(
+                "latest", ["CVE-test"], args, Path(temp_dir)
+            )
+
+        self.assertEqual(failed, [])
+        self.assertEqual(
+            build_image.call_args.kwargs["build_args"]["LINUX_REF"],
+            "instance-ref",
+        )
+        self.assertNotIn(
+            "LINUX_REF_CACHE_BUST",
+            build_image.call_args.kwargs["build_args"],
+        )
+
+    def test_latest_build_uses_global_ref_without_instance_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cve_dir = Path(temp_dir) / "CVE-test"
+            cve_dir.mkdir()
+            (cve_dir / "meta.json").write_text("{}\n", encoding="utf-8")
+            self.assertEqual(
+                self.builder.latest_linux_ref(cve_dir, "global-ref"),
+                "global-ref",
+            )
+
+    def test_latest_build_rejects_non_string_instance_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cve_dir = Path(temp_dir) / "CVE-test"
+            cve_dir.mkdir()
+            (cve_dir / "meta.json").write_text(
+                json.dumps({"latest_validation": {"linux_ref": 123}}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must be a non-empty string"):
+                self.builder.latest_linux_ref(cve_dir, "global-ref")
+
     def test_skipped_vulnerable_build_does_not_require_a_local_base(self) -> None:
         args = types.SimpleNamespace(skip_existing=True)
         with (
@@ -875,7 +942,9 @@ class LinuxBuildRoutineTests(unittest.TestCase):
 
     def test_base_probe_covers_manifest_tools_agents_and_mcp(self) -> None:
         manifest = b"a" * 40 + b" https://example.test/linux.git\n"
+        sanitizer = b"#!/bin/sh\nrm -rf /config\n"
         expected_sha = hashlib.sha256(manifest).hexdigest()
+        expected_sanitizer_sha = hashlib.sha256(sanitizer).hexdigest()
         completed = subprocess.CompletedProcess(["docker", "run"], 0, "", "")
         with (
             tempfile.TemporaryDirectory() as temp_dir,
@@ -884,8 +953,14 @@ class LinuxBuildRoutineTests(unittest.TestCase):
                 "REQUIRED_COMMITS_MANIFEST",
                 Path(temp_dir) / "required-commits.txt",
             ) as manifest_path,
+            patch.object(
+                self.builder,
+                "SANITIZER_SCRIPT",
+                Path(temp_dir) / "sanitize-git",
+            ) as sanitizer_path,
         ):
             manifest_path.write_bytes(manifest)
+            sanitizer_path.write_bytes(sanitizer)
             with (
                 patch.object(self.builder, "image_exists", return_value=True),
                 patch.object(
@@ -899,12 +974,14 @@ class LinuxBuildRoutineTests(unittest.TestCase):
         self.assertTrue(compatible)
         command = run.call_args.args[0]
         self.assertIn(expected_sha, command)
+        self.assertIn(expected_sanitizer_sha, command)
         self.assertIn("--platform", command)
         self.assertIn("--network", command)
         self.assertIn("--read-only", command)
         probe = command[command.index("-c") + 1]
         for expected in (
             "/base/required-commits.txt",
+            "/usr/local/bin/secb-sanitize-git",
             "/etc/secb-agent-versions",
             "/src/linux.git",
             "cat-file -e",

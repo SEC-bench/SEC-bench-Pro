@@ -58,6 +58,7 @@ DEFAULT_LINUX_REF = "d2c9a99135da931377240942d44f3dea104cedb8"
 BASE_IMAGE = "hwiwonlee/linux.base:latest"
 BASE_LINEAGE_LABEL = "org.secbench.base-image-id"
 REQUIRED_COMMITS_MANIFEST = BASE_DIR / "required-commits.txt"
+SANITIZER_SCRIPT = BASE_DIR / "sanitize-git"
 BASE_COMPATIBILITY_TIMEOUT_SEC = 60
 LINUX_BASE_REQUIRED_TOOLS = (
     "addr2line",
@@ -133,6 +134,30 @@ def discover_instances() -> list[str]:
         d.name for d in LINUX_DIR.iterdir()
         if d.is_dir() and d.name.startswith("CVE-")
     )
+
+
+def latest_linux_ref(cve_dir: Path, fallback: str) -> str:
+    """Return a per-instance compatible snapshot, or the global fallback."""
+    meta_path = cve_dir / "meta.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read valid metadata from {meta_path}: {exc}") from exc
+
+    latest_validation = meta.get("latest_validation")
+    if latest_validation is None:
+        return fallback
+    if not isinstance(latest_validation, dict):
+        raise ValueError(f"{meta_path}: latest_validation must be an object")
+
+    instance_ref = latest_validation.get("linux_ref")
+    if instance_ref is None:
+        return fallback
+    if not isinstance(instance_ref, str) or not instance_ref.strip():
+        raise ValueError(
+            f"{meta_path}: latest_validation.linux_ref must be a non-empty string"
+        )
+    return instance_ref.strip()
 
 
 def build_image(
@@ -376,6 +401,7 @@ def linux_base_is_compatible(platform: str) -> bool:
         manifest_sha256 = hashlib.sha256(
             REQUIRED_COMMITS_MANIFEST.read_bytes()
         ).hexdigest()
+        sanitizer_sha256 = hashlib.sha256(SANITIZER_SCRIPT.read_bytes()).hexdigest()
     except OSError:
         return False
 
@@ -386,6 +412,7 @@ def linux_base_is_compatible(platform: str) -> bool:
     probe = f"""set -eu
 test -s /base/required-commits.txt
 test \"$(sha256sum /base/required-commits.txt | awk '{{print $1}}')\" = \"$1\"
+test "$(sha256sum /usr/local/bin/secb-sanitize-git | awk '{{print $1}}')" = "$2"
 test -s /etc/secb-agent-versions
 test -d /src/linux.git
 test \"$(git --git-dir=/src/linux.git rev-parse --is-bare-repository)\" = true
@@ -423,6 +450,7 @@ python3 -c 'import fastmcp, secb_linux_vm_mcp'
                 probe,
                 "sh",
                 manifest_sha256,
+                sanitizer_sha256,
             ],
             capture_output=True,
             text=True,
@@ -498,8 +526,13 @@ def build_instances_parallel(
             dockerfile = cve_dir / "Dockerfile.fixed"
         elif mode == "latest":
             dockerfile = BASE_DIR / "Dockerfile.latest"
-            build_args["LINUX_REF"] = args.linux_ref
-            if args.linux_ref.startswith("origin/"):
+            try:
+                linux_ref = latest_linux_ref(cve_dir, args.linux_ref)
+            except ValueError as exc:
+                log_file.write_text(f"FAILED — {exc}\n", encoding="utf-8")
+                return cve, False, 0.0, log_file
+            build_args["LINUX_REF"] = linux_ref
+            if linux_ref.startswith("origin/"):
                 build_args["LINUX_REF_CACHE_BUST"] = datetime.now(timezone.utc).strftime(
                     "%Y%m%dT%H%M%SZ"
                 )

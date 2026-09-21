@@ -122,8 +122,11 @@ python projects/linux/build_images.py --mode latest -j 4
 ```
 
 The default latest snapshot is pinned to Linux commit
-`d2c9a99135da931377240942d44f3dea104cedb8`. Pass `--linux-ref` only when
-intentionally building a different snapshot.
+`d2c9a99135da931377240942d44f3dea104cedb8`. For cases whose target subsystem
+or required interface is unavailable at that commit, `meta.json` can pin a
+post-fix compatible snapshot in `latest_validation.linux_ref`. That
+per-instance ref takes precedence; `--linux-ref` is the fallback for all other
+cases.
 
 SpiderMonkey fixed images use `hwiwonlee/sm.x86_64.fixed:<issue_id>`. To build
 a local replacement for a tag, run:

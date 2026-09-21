@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LINUX_PROJECTS = ROOT / "projects" / "linux"
 DOCKERFILE = ROOT / "base" / "linux" / "Dockerfile"
+LATEST_DOCKERFILE = ROOT / "base" / "linux" / "Dockerfile.latest"
 MANIFEST = ROOT / "base" / "linux" / "required-commits.txt"
 FETCH_SCRIPT = ROOT / "base" / "linux" / "fetch-required-commits"
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
@@ -91,7 +93,7 @@ class LinuxBaseCommitTests(unittest.TestCase):
             ).stdout.strip()
             self.assertEqual(required_ref, commit)
 
-    def test_manifest_exactly_matches_task_build_commits(self) -> None:
+    def test_manifest_exactly_matches_task_and_latest_build_commits(self) -> None:
         declared: dict[str, str] = {}
         paths = sorted(LINUX_PROJECTS.glob("CVE-*/Dockerfile")) + sorted(
             LINUX_PROJECTS.glob("CVE-*/Dockerfile.fixed")
@@ -110,6 +112,26 @@ class LinuxBaseCommitTests(unittest.TestCase):
                 if value in declared:
                     self.assertEqual(declared[value], remote, str(path))
                 declared[value] = remote
+
+        latest_source = LATEST_DOCKERFILE.read_text(encoding="utf-8")
+        default_latest_refs = re.findall(
+            r"^ARG LINUX_REF=([^\s#]+)$", latest_source, re.MULTILINE
+        )
+        self.assertEqual(len(default_latest_refs), 1)
+        declared[default_latest_refs[0]] = DEFAULT_REMOTE
+
+        for meta_path in sorted(LINUX_PROJECTS.glob("CVE-*/meta.json")):
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            latest_validation = meta.get("latest_validation")
+            if latest_validation is None:
+                continue
+            self.assertIsInstance(latest_validation, dict, str(meta_path))
+            latest_ref = latest_validation.get("linux_ref")
+            if latest_ref is None:
+                continue
+            self.assertIsInstance(latest_ref, str, str(meta_path))
+            self.assertRegex(latest_ref, rf"^{FULL_SHA.pattern}$", str(meta_path))
+            declared[latest_ref] = DEFAULT_REMOTE
 
         lines = MANIFEST.read_text(encoding="ascii").splitlines()
         self.assertTrue(lines)
