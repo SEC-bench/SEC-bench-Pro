@@ -24,6 +24,27 @@ fi
 
 repo="$(cd "$repo" && pwd -P)"
 
+secb_config="${SECB_CONFIG:-/run/secb/config.json}"
+if [ -r "$secb_config" ] && command -v jq >/dev/null 2>&1; then
+  if ! verification_binary="$(
+    jq -er '
+      (.verification_binary // "/out/bzImage") as $path
+      | if ($path | type) == "string" and ($path | startswith("/"))
+           and ($path | length) > 1
+        then $path
+        else error("verification_binary must be a non-empty absolute path")
+        end
+    ' "$secb_config"
+  )"; then
+    echo "secb-sanitize-git: invalid verification_binary in $secb_config" >&2
+    exit 1
+  fi
+  if [ ! -s "$verification_binary" ]; then
+    echo "secb-sanitize-git: verification binary not found: $verification_binary" >&2
+    exit 1
+  fi
+fi
+
 # The leaf build must leave behind the resolved config. Rebuilds use this file
 # directly, so the benchmark-specific inputs under /config are no longer
 # needed once image construction has completed.
@@ -80,7 +101,6 @@ git -C "$repo" commit -q -F "$message" --allow-empty --allow-empty-message
 # Update secb_config.json build_commit to match the new synthetic HEAD so
 # build.sh doesn't try to checkout a commit that no longer exists.
 new_head="$(git -C "$repo" rev-parse HEAD)"
-secb_config="/run/secb/config.json"
 if [ -r "$secb_config" ] && command -v jq >/dev/null 2>&1; then
   tmp="$(mktemp)"
   jq --arg commit "$new_head" \

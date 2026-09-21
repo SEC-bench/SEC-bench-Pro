@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -83,9 +87,36 @@ class LinuxConfigHygieneTests(unittest.TestCase):
         )
 
         self.assertIn('if [ ! -s "$repo/.config" ]; then', source)
+        self.assertIn('if [ ! -s "$verification_binary" ]; then', source)
+        self.assertIn("verification binary not found", source)
         self.assertIn("rm -rf /config", source)
         self.assertIn("del(.kernel.kconfig_additions_file", source)
         self.assertIn(".kernel.config_full_file", source)
+
+    def test_image_sanitizer_rejects_a_missing_verification_binary(self) -> None:
+        sanitizer = ROOT / "base" / "linux" / "sanitize-git"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            repo = temp / "linux"
+            repo.mkdir()
+            (repo / ".config").write_text("CONFIG_TEST=y\n", encoding="utf-8")
+            config = temp / "config.json"
+            missing = temp / "missing-bzImage"
+            config.write_text(
+                json.dumps({"verification_binary": str(missing)}) + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [str(sanitizer), str(repo)],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "SECB_CONFIG": str(config)},
+                timeout=10,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("verification binary not found", result.stderr)
 
     def test_every_leaf_image_runs_the_sanitizer_after_config_copy(self) -> None:
         linux_dir = ROOT / "projects" / "linux"
