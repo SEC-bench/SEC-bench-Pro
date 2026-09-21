@@ -84,6 +84,26 @@ class LinuxBuildParallelismTests(unittest.TestCase):
 
         self.assertEqual(direct_base, {"CVE-2023-54125", "CVE-2024-50211"})
 
+    def test_vulnerable_parent_fixed_leaves_reuse_sanitized_runtime_config(self) -> None:
+        vulnerable_parent: set[str] = set()
+        for path in sorted(LINUX_PROJECTS.glob("CVE-*/Dockerfile.fixed")):
+            source = path.read_text(encoding="utf-8")
+            if not re.search(
+                r"^FROM hwiwonlee/linux\.x86_64:CVE-", source, re.MULTILINE
+            ):
+                continue
+            vulnerable_parent.add(path.parent.name)
+            self.assertNotIn(
+                "COPY secb_config.json /run/secb/config.json",
+                source,
+                (
+                    f"{path} must retain the sanitized parent config so its "
+                    "synthetic build_commit remains resolvable"
+                ),
+            )
+
+        self.assertEqual(len(vulnerable_parent), 135)
+
 
 if __name__ == "__main__":
     unittest.main()

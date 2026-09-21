@@ -249,7 +249,8 @@ python3 projects/linux/build_images.py --mode fixed --instances CVE-2022-0185
 python3 projects/linux/patch_check.py CVE-2022-0185 --attempts 3
 # -> NO_CRASH_DETECTED
 
-# Optional: latest-upstream image for the grader's third data point.
+# Optional: latest-validation image for the grader's third data point.
+# --linux-ref is the fallback when meta.json has no latest_validation.linux_ref.
 python3 projects/linux/build_images.py --mode latest --instances CVE-2022-0185 --linux-ref v6.12
 
 # Mass-build. -j caps concurrent leaf builds; --kbuild-jobs caps make -j inside each.
