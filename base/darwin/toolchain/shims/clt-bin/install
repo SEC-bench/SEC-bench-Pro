@@ -1,0 +1,16 @@
+#!/bin/bash
+# install(1) shim: BSD install, which is what xnu's makefiles assume.
+# libkern/libkern/Makefile calls plain `install $(DATA_INSTALL_FLAGS) $< $@`
+# with DATA_INSTALL_FLAGS = "-c -S -m 0644". GNU install reads -S as
+# "--suffix=<arg>" and swallows the -m, so the copy fails. Drop the BSD-only
+# flags and hand the rest to GNU install.
+args=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -S|-c) shift ;;                 # BSD: safe-copy / copy (GNU default)
+        -p)    shift ;;                 # BSD: preserve mtime
+        -b|-C) shift ;;                 # BSD: backup / compare-then-copy
+        *)     args+=("$1"); shift ;;
+    esac
+done
+exec /usr/bin/install "${args[@]}"

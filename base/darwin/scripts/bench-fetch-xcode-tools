@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""bench-fetch-xcode-tools - pull the few Apple binaries the bench still needs
+out of an Xcode .xip, on Linux, without ever installing Xcode.
+
+  bench-fetch-xcode-tools --xip Xcode_26.6_Apple_silicon.xip --out /root/xc
+  bench-fetch-xcode-tools --clt --out /root/xc-clt                        # public catalog, no Apple ID (no iig)
+  bench-fetch-xcode-tools --clt --clt-product 140-17812 --out DIR          # pin the catalog product (Xcode 26.6's clang)
+  bench-fetch-xcode-tools --clt --clt-for-macos 26.5 --sdk --out DIR       # the macOS SDK only: DIR/MacOSX26.5.sdk
+  bench-fetch-xcode-tools --archive some.pkg --list                    # debug: list the cpio
+
+What comes out (build_images.py mounts toolchain-libs/ where the Command Line Tools keep it):
+
+  DIR/iig                              Apple's DriverKit interface generator (Xcode only; the
+                                       build uses iig-port instead)
+  DIR/libclang.dylib                   what iig dlopens (@rpath/../lib)
+  DIR/toolchain-libs/libclang_rt.cc_kext.a   compiler-rt for arm64e kernel code (-lcc_kext);
+                                       kept universal, the kernel link wants the arm64e slice
+  DIR/manifest.sha256
+
+Format chain, all streamed (peak disk = the xip itself):
+  xip  = xar archive: 28-byte header, zlib TOC (XML), heap.  `Content` in the heap
+         is a pbzx stream (encoding application/octet-stream).
+  pbzx = chunked xz (base/darwin/scripts/pbzx-stream.py decodes it, same as for the KDK)
+  ...  = a cpio archive of Xcode.app; GNU cpio extracts just the patterns we name.
+Flat .pkg files use the same chain with `Payload` members, which is what the
+self-test against a public package exercises (`--archive x.pkg --list`).
+
+Apple has no unauthenticated Xcode CDN, so the xip is downloaded by hand
+(with an Apple ID) and passed with --xip.
+"""
+import argparse
+import hashlib
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zlib
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PBZX = os.environ.get("BENCH_PBZX", os.path.join(HERE, "pbzx-stream.py"))
+if not os.path.exists(PBZX):
+    for c in ("/opt/darwin-bench/pbzx-stream.py", "/bench/base/scripts/pbzx-stream.py"):
+        if os.path.exists(c):
+            PBZX = c
+            break
+
+# Patterns are suffixes so they match both layouts:
+#   Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/...   (xip)
+#   Library/Developer/CommandLineTools/usr/...                                  (CLT pkg)
+WANT = {
+    # cpio pattern            -> name under --out, required?
+    "*/usr/bin/iig": ("iig", False),                      # Xcode only; the CLT has no DriverKit generator
+    "*/usr/lib/libclang.dylib": ("libclang.dylib", True),
+    "*/usr/lib/clang/*/lib/darwin/libclang_rt.cc_kext.a": ("toolchain-libs/libclang_rt.cc_kext.a", True),
+}
+SUCATALOG = ("https://swscan.apple.com/content/catalogs/others/"
+             "index-27-26-15-14-13-12-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog.gz")
+
+
+def vkey(v):
+    """sort -V for dotted version strings."""
+    return [int(x) for x in re.findall(r"\d+", v)]
+
+
+def clt_for_macos(cat, macos):
+    """The catalog product whose Command Line Tools install on macOS `macos`.
+    CLT major: macOS 26 and later share the major (CLT 26.x for macOS 26),
+    before 26 it is the macOS major + 1 (CLT 16.x for macOS 15). Among the CLTs
+    of that major whose distribution's install check admits the macOS major
+    (min <= major.999, max > major), take the one with the lowest minimum, and
+    of those the highest version. Returns (min, version, product id)."""
+    major = int(macos.split(".")[0])
+    want = "%d." % (major if major >= 26 else major + 1)
+    rows = []
+    for pid, prod in cat["Products"].items():
+        if not any("/CLTools_" in pk["URL"] and pk["URL"].endswith(".pkg") for pk in prod.get("Packages", [])):
+            continue
+        durl = prod.get("Distributions", {}).get("English")
+        if not durl:
+            continue
+        try:
+            dist = urllib.request.urlopen(durl, timeout=60).read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - a retired product; skip it, as the shell version does
+            continue
+        m = re.search(r'id="(?:com\.apple\.pkg\.)?CLTools_Executables"[^>]*version="([^"]*)"', dist)
+        ver = m.group(1) if m else ""
+        mn = re.findall(r"compareVersions\(plistKeyValue, '([0-9.]*)'\) &lt; 0", dist)
+        mx = re.findall(r"compareVersions\(plistKeyValue, '([0-9.]*)'\) &gt;= 0", dist)
+        mn = mn[0] if mn else ""
+        mx = mx[0] if mx else ""
+        if not ver.startswith(want):
+            continue
+        if (not mn or vkey(mn) <= vkey("%d.999" % major)) and (not mx or not vkey(mx) <= vkey(str(major))):
+            rows.append((mn or "0", ver, pid))
+    if not rows:
+        die("no Command Line Tools %sx in the catalog install on macOS %s" % (want, macos))
+    # lowest minimum first; for equal minimums, the highest version
+    rows.sort(key=lambda r: vkey(r[1]), reverse=True)
+    rows.sort(key=lambda r: vkey(r[0]))
+    return rows[0]
+
+
+def thin_arm64(path):
+    """The Command Line Tools ship universal (x86_64 + arm64) Mach-O files;
+    keep only the arm64 slice (what lipo -thin arm64 would do). Executables and
+    dylibs only -- see the caller for why static archives keep every slice."""
+    with open(path, "rb") as fh:
+        d = fh.read()
+    if len(d) < 8 or struct.unpack(">I", d[:4])[0] != 0xcafebabe:
+        return
+    n = struct.unpack(">I", d[4:8])[0]
+    for i in range(n):
+        cputype, _sub, off, size, _al = struct.unpack(">IIIII", d[8 + 20 * i:28 + 20 * i])
+        if cputype == 0x0100000c:  # CPU_TYPE_ARM64
+            with open(path, "wb") as fh:
+                fh.write(d[off:off + size])
+            note("%s: kept the arm64 slice of a universal binary" % os.path.basename(path))
+            return
+    die("%s: universal binary without an arm64 slice" % path)
+
+
+def die(msg):
+    print("bench-fetch-xcode-tools: " + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def note(msg):
+    print("bench: " + msg, file=sys.stderr, flush=True)
+
+
+# --------------------------------------------------------------------------- xar
+def xar_toc(path):
+    """Every file member of a xar archive with a <data> block: path within the
+    archive, absolute heap offset, stored length, encoding."""
+    import xml.etree.ElementTree as ET
+    with open(path, "rb") as fh:
+        hdr = fh.read(28)
+        if len(hdr) < 28 or hdr[:4] != b"xar!":
+            die("%s is not a xar archive (xip/pkg)" % path)
+        magic, hsize, ver, toc_c, toc_u, cksum = struct.unpack(">4sHHQQI", hdr)
+        fh.seek(hsize)
+        toc = zlib.decompress(fh.read(toc_c))
+    heap = hsize + toc_c
+    files = []
+
+    def walk(el, prefix):
+        for f in el.findall("file"):
+            name = f.findtext("name") or ""
+            p = (prefix + "/" + name) if prefix else name
+            d = f.find("data")
+            if d is not None:
+                enc = d.find("encoding")
+                files.append({"path": p, "offset": heap + int(d.findtext("offset")),
+                              "length": int(d.findtext("length")), "size": int(d.findtext("size") or 0),
+                              "encoding": enc.get("style") if enc is not None else "application/octet-stream"})
+            walk(f, p)
+
+    walk(ET.fromstring(toc).find("toc"), "")
+    return files
+
+
+def heap_reader(path, entry, out):
+    """Write one xar member's raw bytes to `out` (a file object), decoding gzip
+    members. Streams in 8 MiB pieces."""
+    with open(path, "rb") as fh:
+        fh.seek(entry["offset"])
+        left = entry["length"]
+        if entry["encoding"] == "application/x-gzip":
+            d = zlib.decompressobj(zlib.MAX_WBITS)
+            while left > 0:
+                buf = fh.read(min(8 << 20, left))
+                left -= len(buf)
+                out.write(d.decompress(buf))
+            out.write(d.flush())
+        else:
+            while left > 0:
+                buf = fh.read(min(8 << 20, left))
+                left -= len(buf)
+                out.write(buf)
+
+
+def extract(archive, patterns, dest, list_only=False):
+    """xar member -> pbzx-stream.py -> cpio (extract patterns into dest)."""
+    members = [f for f in xar_toc(archive) if f["path"] in ("Content", "Payload") or f["path"].endswith("/Payload")]
+    if not members:
+        die("no Content/Payload member in %s" % archive)
+    os.makedirs(dest, exist_ok=True)
+    for m in members:
+        # The member itself is pbzx (Xcode xip `Content`, modern pkgs), gzip (older
+        # flat pkgs) or raw cpio; sniff the first bytes after xar-level decoding.
+        with open(archive, "rb") as fh:
+            fh.seek(m["offset"])
+            head = fh.read(4)
+            if m["encoding"] == "application/x-gzip":
+                head = zlib.decompressobj(zlib.MAX_WBITS).decompress(head + fh.read(1 << 12))[:4]
+        if head[:4] == b"pbzx":
+            dec = [sys.executable, PBZX, "/dev/stdin"]
+        elif head[:2] == b"\x1f\x8b":
+            dec = ["gzip", "-dc"]
+        else:
+            dec = ["cat"]
+        note("member %s: %d bytes (%s, %s)" % (m["path"], m["length"], m["encoding"],
+                                               {"cat": "raw cpio"}.get(dec[0], os.path.basename(dec[-1] if dec[0] != "gzip" else "gzip"))))
+        decoder = subprocess.Popen(dec, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        if list_only:
+            cpio = subprocess.Popen(["cpio", "-it", "--quiet"], stdin=decoder.stdout, cwd=dest)
+        else:
+            cpio = subprocess.Popen(["cpio", "-i", "-d", "-m", "--quiet", "--no-absolute-filenames"] + patterns,
+                                    stdin=decoder.stdout, cwd=dest)
+        decoder.stdout.close()
+        try:
+            heap_reader(archive, m, decoder.stdin)
+        except BrokenPipeError:
+            pass
+        decoder.stdin.close()
+        rc1 = decoder.wait()
+        rc2 = cpio.wait()
+        if rc1 != 0 or rc2 != 0:
+            die("extraction failed (decoder rc=%s, cpio rc=%s)" % (rc1, rc2))
+
+
+# -------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--xip", help="local Xcode .xip")
+    src.add_argument("--archive", help="any xar archive with pbzx payloads (self-test)")
+    src.add_argument("--clt", action="store_true",
+                     help="fetch the newest Command Line Tools executables package from Apple's public "
+                          "Software Update catalog (no Apple ID; has everything but iig)")
+    ap.add_argument("--clt-product", metavar="ID",
+                    help="with --clt: take this catalog product instead of the newest, e.g. 140-17812 "
+                         "(2026-06-26, clang-2100.1.1.101 = Xcode 26.6's toolchain, the one this repo was verified with)")
+    ap.add_argument("--clt-for-macos", metavar="VERSION",
+                    help="with --clt: take the product whose Command Line Tools install on this macOS "
+                         "(e.g. 26.5 -> CLT 26.6, 140-17812; 27.0 -> CLT 27.0)")
+    ap.add_argument("--sdk", action="store_true",
+                    help="with --clt: fetch the product's macOS SDK package instead of the executables and "
+                         "unpack DIR/MacOSX<ver>.sdk (for bench-cc; Apple licenses it for Apple-branded hardware)")
+    ap.add_argument("--dl-cache", default=os.environ.get("BENCH_DL_CACHE", "/root/downloads"))
+    ap.add_argument("--out", help="output directory (the /xc layout)")
+    ap.add_argument("--list", action="store_true", help="list the cpio contents instead of extracting")
+    ap.add_argument("--pattern", action="append", default=[], help="extra cpio pattern(s) to extract")
+    a = ap.parse_args()
+
+    archive = a.xip or a.archive
+    if a.clt:
+        import gzip, plistlib
+        note("reading Apple's Software Update catalog")
+        cat = plistlib.loads(gzip.decompress(urllib.request.urlopen(SUCATALOG, timeout=120).read()))
+        if a.clt_for_macos:
+            if a.clt_product:
+                die("--clt-product and --clt-for-macos are exclusive")
+            mn, ver, a.clt_product = clt_for_macos(cat, a.clt_for_macos)
+            note("macOS %s -> Command Line Tools %s (%s, installs on macOS >= %s)" % (a.clt_for_macos, ver, a.clt_product, mn))
+        pkgname = "CLTools_macOSNMOS_SDK.pkg" if a.sdk else "CLTools_Executables"
+        best = None
+        for pid, prod in cat["Products"].items():
+            if a.clt_product and pid != a.clt_product:
+                continue
+            for pk in prod.get("Packages", []):
+                if pkgname in pk["URL"]:
+                    key = (prod.get("PostDate"), pid)
+                    if best is None or key > best[0]:
+                        best = (key, pk["URL"], pk.get("Size"))
+        if not best:
+            die("no Command Line Tools executables package in the catalog" +
+                (" for product %s (it may have been retired; drop --clt-product for the newest)" % a.clt_product if a.clt_product else ""))
+        note("%s Command Line Tools: %s (%s, %s bytes)" % ("pinned" if a.clt_product else "newest", best[0][1], best[0][0], best[2]))
+        os.makedirs(a.dl_cache, exist_ok=True)
+        archive = os.path.join(a.dl_cache, os.path.basename(best[1]))
+        if not (os.path.exists(archive) and os.path.getsize(archive) == best[2]):
+            note("downloading %s" % best[1])
+            if subprocess.call(["curl", "-fL", "--retry", "3", "-C", "-", "-o", archive, best[1]]) != 0:
+                die("download failed")
+    if not os.path.exists(archive):
+        die("no such file: %s" % archive)
+
+    if a.list:
+        extract(archive, [], tempfile.mkdtemp(), list_only=True)
+        return
+
+    if not a.out:
+        die("--out DIR is required")
+    if a.sdk:
+        if not a.clt:
+            die("--sdk needs --clt")
+        tmp = tempfile.mkdtemp(prefix="clt-sdk.", dir=os.path.dirname(os.path.abspath(a.out)) or ".")
+        try:
+            extract(archive, ["*/SDKs/MacOSX*"], tmp)
+            # wherever the payload keeps them: every MacOSX<ver>.sdk directory
+            # and the MacOSX<major>.sdk symlink next to it
+            hits = sorted(os.path.join(r, n) for r, ds, fs in os.walk(tmp)
+                          for n in ds + fs if re.fullmatch(r"MacOSX[0-9.]*\.sdk", n))
+            if not hits:
+                die("no MacOSX*.sdk in %s" % archive)
+            os.makedirs(a.out, exist_ok=True)
+            for h in hits:
+                dst = os.path.join(a.out, os.path.basename(h))
+                if os.path.lexists(dst):
+                    shutil.rmtree(dst) if os.path.isdir(dst) and not os.path.islink(dst) else os.remove(dst)
+                shutil.move(h, dst)
+                note("%s%s" % (dst, " -> " + os.readlink(dst) if os.path.islink(dst) else ""))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return
+    want = dict(WANT)
+    patterns = list(want) + a.pattern
+    tmp = tempfile.mkdtemp(prefix="xcode-tools.", dir=os.path.dirname(os.path.abspath(a.out)) or ".")
+    try:
+        extract(archive, patterns, tmp)
+        os.makedirs(a.out, exist_ok=True)
+        manifest = []
+        for pat, (name, required) in want.items():
+            findpat = ("*" + pat[1:]) if pat.startswith("*") else pat
+            hits = subprocess.run(["find", tmp, "-type", "f", "-path", findpat],
+                                  capture_output=True, text=True).stdout.split()
+            if name is None:
+                continue
+            if not hits:
+                if required:
+                    die("%s not found in the archive (pattern %s)" % (name, pat))
+                note("%s: not in this archive (Command Line Tools have no iig; it needs the Xcode xip)" % name)
+                continue
+            dst = os.path.join(a.out, name)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(hits[0], dst)
+            os.chmod(dst, 0o755)
+            # Static archives keep every slice: they are link inputs for the
+            # arm64e kernel, and libclang_rt.cc_kext.a thinned to arm64 is
+            # something the kernel link cannot use.
+            if not name.endswith(".a"):
+                thin_arm64(dst)
+            manifest.append((hashlib.sha256(open(dst, "rb").read()).hexdigest(), name))
+            note("%-40s <- %s" % (name, hits[0][len(tmp):]))
+        with open(os.path.join(a.out, "manifest.sha256"), "w") as fh:
+            for h, n in manifest:
+                fh.write("%s  %s\n" % (h, n))
+        note("done: %s (%d files, manifest.sha256)" % (a.out, len(manifest)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()

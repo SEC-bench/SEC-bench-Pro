@@ -1,0 +1,66 @@
+--- build_tc.orig.py
++++ patched/build_tc.py
+@@ -23,11 +23,49 @@
+ } __attribute__((packed)) TrustCacheEntry1_t;
+ '''
+ 
+-def make_trustcache(i,o):
+-  hashes = sorted(i.read().splitlines())
++ENTRY_SIZE = 22
++HEADER_SIZE = 24
++
++
++def read_module(path):
++  '''Read a version-1 trust cache module and return its entries as hex CDHashes.
++
++  Used to fold Apple's own ramdisk trust cache into ours. That matters on
++  restore ramdisks we cannot hash ourselves: iOS <= 16.0 / macOS <= 13.2.1 ship an HFSX
++  ramdisk whose Apple binaries are decmpfs-compressed, and Linux's hfsplus
++  driver has no decmpfs support, so every one of those files reads back as
++  zero bytes and never makes it into all_hashes. Without Apple's cdhashes,
++  AMFI kills /sbin/launchd for codesigning and the kernel panics with
++  "unexpected SIGKILL of init".
++  '''
++  d = open(path, 'rb').read()
++  if len(d) < HEADER_SIZE:
++    raise ValueError(f'{path} is too short to be a trust cache')
++
++  version, = struct.unpack_from('<I', d, 0)
++  if version != 1:
++    raise ValueError(f'{path}: unsupported trust cache version {version}')
++
++  n, = struct.unpack_from('<I', d, 20)
++  if len(d) < HEADER_SIZE + n * ENTRY_SIZE:
++    raise ValueError(f'{path}: truncated ({n} entries claimed)')
++
++  return [d[HEADER_SIZE + i * ENTRY_SIZE:HEADER_SIZE + i * ENTRY_SIZE + 20].hex()
++          for i in range(n)]
++
++
++def make_trustcache(i, o, merge):
++  hashes = i.read().splitlines()
+ 
+   for h in hashes: assert str == type(h) and 40 == len(h)
+ 
++  for m in merge or []:
++    hashes += read_module(m)
++
++  # XNU binary-searches the entries, so they have to come out sorted; dedupe
++  # while we're here in case a merged module repeats something we hashed.
++  hashes = sorted(set(hashes))
++
+   tc=b''
+ 
+   # TrustCacheModule1_t
+@@ -47,8 +85,10 @@
+   p = argparse.ArgumentParser(prog='build_tc')
+   p.add_argument('hashlist', type=argparse.FileType('r'))
+   p.add_argument('out', type=argparse.FileType('wb', 0))
++  p.add_argument('-merge', action='append', metavar='TRUSTCACHE',
++                 help='also include every entry of this v1 trust cache module')
+   args = p.parse_args()
+-  make_trustcache(args.hashlist, args.out)
++  make_trustcache(args.hashlist, args.out, args.merge)
+ 
+ if __name__=="__main__":
+   main()

@@ -1,0 +1,42 @@
+--- a/hw/arm/xnuboot_sptm.c
++++ b/hw/arm/xnuboot_sptm.c
+@@ -182,9 +182,37 @@
+         tc_size_rounded +
+         DARWIN_PAGE_SIZE; // extra page we skip in front of the device tree
+ 
+-    assert(GET_L2_PT_INDEX(bkc_mi.virtlo) > bytes_before_sptm);
+-    SKIP(GET_L2_PT_INDEX(bkc_mi.virtlo) - bytes_before_sptm);
++    // A KASAN boot collection is ~30 MiB of __TEXT_EXEC bigger than the
++    // development one, and for it bytes_before_sptm overruns
++    // GET_L2_PT_INDEX(bkc_mi.virtlo) outright -- there is no gap left to slide
++    // SPTM into, and the assert below used to abort the machine before the
++    // first serial byte.
++    //
++    // Nothing requires SPTM to sit at exactly that offset. SPTM is loaded via
++    // macho_load() at whatever physical address it lands on, runs out of the
++    // bootargs linear map (virtBase + (phys - physBase)), and ignores the
++    // -virt ADT entries when placing TXM and the BootKC: it puts them 1x and
++    // 2x SPTM_EXPECTED_STRIDE after *itself*. So sliding the whole blob
++    // forward by a whole number of SPTM_EXPECTED_STRIDEs moves SPTM, TXM and
++    // the BootKC together and keeps every alignment relationship the
++    // comment above depends on -- GET_L2_PT_INDEX(SPTM-ro) stays congruent to
++    // GET_L2_PT_INDEX(bkc_mi.virtlo) modulo the stride SPTM itself uses.
++    //
++    // The development/ release collections are unaffected: their
++    // bytes_before_sptm still fits, the loop does not run, and the layout is
++    // byte-for-byte what it was.
++    hwaddr sptm_blob_off = GET_L2_PT_INDEX(bkc_mi.virtlo);
++    while (sptm_blob_off <= bytes_before_sptm) {
++        sptm_blob_off += SPTM_EXPECTED_STRIDE;
++        fprintf(stderr,
++                "note: boot kc is too big for the default SPTM offset, "
++                "sliding the blob forward to 0x%" HWADDR_PRIx "\n",
++                sptm_blob_off);
++    }
+ 
++    assert(sptm_blob_off > bytes_before_sptm);
++    SKIP(sptm_blob_off - bytes_before_sptm);
++
+     // To find struct layout in SPTM, search for function that uses the string
+     // "%s: region '%s' [%p-%p] not immediately after region '%s' [ending at %p]"
+     // This string is used in a call to panic at the bottom of a loop that

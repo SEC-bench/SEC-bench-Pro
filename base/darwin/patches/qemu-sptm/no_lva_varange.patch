@@ -1,0 +1,21 @@
+diff --git a/target/arm/tcg/cpu64.c b/target/arm/tcg/cpu64.c
+index 8a3ebf6..fa9aaee 100644
+--- a/target/arm/tcg/cpu64.c
++++ b/target/arm/tcg/cpu64.c
+@@ -1338,7 +1338,15 @@ void aarch64_max_tcg_initfn(Object *obj)
+     t = FIELD_DP64(t, ID_AA64MMFR2, CNP, 1);      /* FEAT_TTCNP */
+     t = FIELD_DP64(t, ID_AA64MMFR2, UAO, 1);      /* FEAT_UAO */
+     t = FIELD_DP64(t, ID_AA64MMFR2, IESB, 1);     /* FEAT_IESB */
+-    t = FIELD_DP64(t, ID_AA64MMFR2, VARANGE, 1);  /* FEAT_LVA */
++    /*
++     * darwin-bench: no FEAT_LVA. -M darwin runs the "max" CPU, and XNU's
++     * DEVELOPMENT/KASAN kernels assert in vm_sanitize.c that
++     * ID_AA64MMFR2_EL1.VARange == 0 ("fail noisily if someone adds support
++     * for large VA extensions") on every user VM call sanitized with
++     * VM_SANITIZE_FLAGS_CHECK_ADDR_RANGE. Apple silicon has no LVA; report
++     * the same, as an M1 does.
++     */
++    t = FIELD_DP64(t, ID_AA64MMFR2, VARANGE, 0);  /* no FEAT_LVA (was 1) */
+     t = FIELD_DP64(t, ID_AA64MMFR2, NV, 2);       /* FEAT_NV2 */
+     t = FIELD_DP64(t, ID_AA64MMFR2, ST, 1);       /* FEAT_TTST */
+     t = FIELD_DP64(t, ID_AA64MMFR2, AT, 1);       /* FEAT_LSE2 */

@@ -1,0 +1,9 @@
+diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+index 5a6cd3368..6d436b809 100644
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -319,2 +319,4 @@
+ #endif  /* ARM64_BOARD_CONFIG_VMAPPLE */
++#undef  BTI_ENFORCED
++#define BTI_ENFORCED 0
+ 

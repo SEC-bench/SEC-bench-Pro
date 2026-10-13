@@ -1,0 +1,5 @@
+#!/bin/sh
+# codesign(1) shim: the kernel target never needs a signature (the KC is signed
+# later, on the host that builds it). Accept and do nothing so HOST_CODESIGN
+# calls in MakeInc.rule's SETUP tool rules do not fail the build.
+exit 0

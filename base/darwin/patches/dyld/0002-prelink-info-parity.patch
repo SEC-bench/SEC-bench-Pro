@@ -1,0 +1,219 @@
+diff --git a/kernel-collection-builder/dyld_app_cache_util.cpp b/kernel-collection-builder/dyld_app_cache_util.cpp
+--- a/kernel-collection-builder/dyld_app_cache_util.cpp
++++ b/kernel-collection-builder/dyld_app_cache_util.cpp
+@@ -25,6 +25,10 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/mman.h>
++// ---- darwin-bench patch 0002 ----
++#include <dirent.h>
++#include <sys/stat.h>
++// ---- end darwin-bench patch 0002 ----
+ #include <list>
+ #include <map>
+ #include <vector>
+@@ -153,6 +157,10 @@
+     StripMode                               stripMode               = unknownStripMode;
+     std::vector<SectionData>                sections;
+     const char*                             prelinkInfoExtraData    = nullptr;
++    // ---- darwin-bench patch 0002 ----
++    const char*                             kextVariant             = nullptr;
++    std::vector<const char*>                codelessBundleIDs;
++    // ---- end darwin-bench patch 0002 ----
+ };
+ 
+ typedef std::variant<std::monostate, DumpOptions, ValidateOptions, ListBundlesOptions, CreateKernelCollectionOptions> OptionsVariants;
+@@ -313,8 +321,26 @@
+             const char* payloadFilePath = argv[++i];
+             SectionData sectData = { segmentName, sectionName, payloadFilePath };
+                 exitOrGetState<CreateKernelCollectionOptions>(options, arg).sections.push_back(sectData);
++            continue;
++        }
++        // ---- darwin-bench patch 0002 ----
++        if (strcmp(arg, "-kext-variant") == 0) {
++            // kmutil -V <variant> links the "<executable>_<variant>" binary when a kext
++            // ships one (IOHIDFamily_development, IOGraphicsFamily_development in this
++            // KDK) while leaving CFBundleExecutable alone, so _PrelinkExecutable{Relative
++            // Path,Size} name the variant.  The stock CLI always takes CFBundleExecutable.
++            exitOrGetState<CreateKernelCollectionOptions>(options, arg).kextVariant = argv[++i];
++            continue;
++        }
++        if (strcmp(arg, "-codeless-bundle-id") == 0) {
++            // Add a discovered bundle to the collection as a *codeless* kext: its
++            // Info.plist goes into _PrelinkInfoDictionary but its executable is not
++            // linked.  KernelManagement does this for the com.apple.kpi.* symbol-set
++            // pseudo-kexts, whose code lives in the kernel's __LINKINFO,__symbolsets.
++            exitOrGetState<CreateKernelCollectionOptions>(options, arg).codelessBundleIDs.push_back(argv[++i]);
+             continue;
+         }
++        // ---- end darwin-bench patch 0002 ----
+         if (strcmp(arg, "-prelink-info-extra") == 0) {
+             const char* payloadFilePath = argv[++i];
+             exitOrGetState<CreateKernelCollectionOptions>(options, arg).prelinkInfoExtraData = payloadFilePath;
+@@ -1116,7 +1142,18 @@
+ 
+         // Look for bundles in the extensions directory and any PlugIns directories its kext's contain
+         __block std::list<std::pair<std::string, bool>> kextDirectoriesToProcess;
+-        kextDirectoriesToProcess.push_back({ options.extensionsPath, true });
++        // ---- darwin-bench patch 0002 ----
++        // Queue each directory once.  The stock code has a single producer (the
++        // CFBundle descent below); the patch adds a second one, and processing a
++        // PlugIns directory twice would let the later pass win for any bundle id that
++        // appears in more than one place.
++        __block std::set<std::string> queuedKextDirectories;
++        auto queueKextDirectory = ^(const std::string& dir, bool lookForPlugins) {
++            if ( queuedKextDirectories.insert(dir).second )
++                kextDirectoriesToProcess.push_back({ dir, lookForPlugins });
++        };
++        // ---- end darwin-bench patch 0002 ----
++        queueKextDirectory(options.extensionsPath, true);
+         while ( !kextDirectoriesToProcess.empty() ) {
+             std::string kextDir = kextDirectoriesToProcess.front().first;
+             bool lookForPlugins = kextDirectoriesToProcess.front().second;
+@@ -1135,7 +1172,7 @@
+                         CFURLRef pluginsAbsoluteURL = CFURLCopyAbsoluteURL(pluginsRelativeURL);
+                         CFStringRef pluginString = CFURLCopyFileSystemPath(pluginsAbsoluteURL, kCFURLPOSIXPathStyle);
+                         const char* pluginPath = CFStringGetCStringPtr(pluginString, kCFStringEncodingASCII);
+-                        kextDirectoriesToProcess.push_back({ pluginPath, false });
++                        queueKextDirectory(pluginPath, false);   // darwin-bench patch 0002: was push_back
+ 
+                         CFRelease(pluginString);
+                         CFRelease(pluginsAbsoluteURL);
+@@ -1155,6 +1192,21 @@
+                 BundleData bundleData;
+                 bundleData.infoPlist = CFBundleGetInfoDictionary(bundleRef);
+ 
++                // ---- darwin-bench patch 0002 ----
++                // Record the bundle path before anything can bail out.  The stock code
++                // sets it at the bottom of this block, which a codeless kext never
++                // reaches, so codeless kexts ended up with an empty _PrelinkBundlePath
++                // where kmutil writes the real one.
++                {
++                    CFURLRef bundleURLRef = CFBundleCopyBundleURL(bundleRef);
++                    CFStringRef bundleURLString = CFURLCopyFileSystemPath(bundleURLRef, kCFURLPOSIXPathStyle);
++                    const char* bundleURLPath = CFStringGetCStringPtr(bundleURLString, kCFStringEncodingASCII);
++                    bundleData.bundlePath = bundleURLPath + strlen(options.volumeRoot);
++                    CFRelease(bundleURLString);
++                    CFRelease(bundleURLRef);
++                }
++                // ---- end darwin-bench patch 0002 ----
++
+                 CFURLRef bundleExecutableRelativeURL = CFBundleCopyExecutableURL(bundleRef);
+ 
+                 // Its ok to be missing an executable.  We'll just skip this bundle
+@@ -1222,6 +1274,15 @@
+ 
+                 bundleData.executablePath = bundleExecutablePath;
+ 
++                // ---- darwin-bench patch 0002: -kext-variant ----
++                if ( options.kextVariant != nullptr ) {
++                    std::string variantPath = bundleData.executablePath + "_" + options.kextVariant;
++                    struct stat sb;
++                    if ( ::stat(variantPath.c_str(), &sb) == 0 )
++                        bundleData.executablePath = variantPath;
++                }
++                // ---- end darwin-bench patch 0002 ----
++
+                 CFURLRef bundleURLRef = CFBundleCopyBundleURL(bundleRef);
+                 CFStringRef bundleURLString = CFURLCopyFileSystemPath(bundleURLRef, kCFURLPOSIXPathStyle);
+                 const char* bundleURLPath = CFStringGetCStringPtr(bundleURLString, kCFStringEncodingASCII);
+@@ -1240,6 +1301,36 @@
+ 
+             if (foundError)
+                 return {};
++
++            // ---- darwin-bench patch 0002: find PlugIns of non-bundle .kext directories ----
++            // The descent above happens inside forEachBundle's callback, which
++            // forEachBundle only reaches for directories CFBundle recognises *and* that
++            // have a CFBundleIdentifier.  The KDK's iPodDriver.kext has neither -- it is
++            // a bare directory holding only Contents/PlugIns -- so its plug-in
++            // com.apple.driver.iPodSBCDriver was never discovered, even though it is in
++            // the manifest and in kmutil's collection.  Sweep the directory itself for
++            // any .kext whose PlugIns we have not already queued.
++            if ( lookForPlugins ) {
++                if ( DIR* dirp = ::opendir(kextDir.c_str()) ) {
++                    std::vector<std::string> names;
++                    while ( struct dirent* entry = ::readdir(dirp) ) {
++                        std::string name = entry->d_name;
++                        if ( name.size() > 5 && name.compare(name.size() - 5, 5, ".kext") == 0 )
++                            names.push_back(name);
++                    }
++                    ::closedir(dirp);
++                    std::sort(names.begin(), names.end());
++                    for (const std::string& name : names) {
++                        for (const char* suffix : { "/Contents/PlugIns", "/PlugIns" }) {
++                            std::string pluginDir = kextDir + "/" + name + suffix;
++                            struct stat sb;
++                            if ( (::stat(pluginDir.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode) )
++                                queueKextDirectory(pluginDir, false);
++                        }
++                    }
++                }
++            }
++            // ---- end darwin-bench patch 0002 ----
+         }
+ 
+         __block std::set<std::string> existingBundles;
+@@ -1566,7 +1657,18 @@
+             CFStringRef         kextPathStringRef   = nullptr;
+             CFDataRef           kextDataRef         = nullptr;
+             if ( !isCodeless) {
+-                kextPathStringRef = CFStringCreateWithCString(kCFAllocatorDefault, bundleData.executablePath.c_str(), kCFStringEncodingASCII);
++                // ---- darwin-bench patch 0002 ----
++                // The path is only a label here (the bytes come from kextDataRef, and
++                // the builder loads them through FileSystemNull), but AppCacheBuilder
++                // derives _PrelinkExecutableRelativePath from it by stripping the
++                // bundle path -- which has already had the volume root removed.  Strip
++                // the same prefix here or every kext gets a bare basename instead of
++                // "Contents/MacOS/<exe>".
++                const char* executablePath = bundleData.executablePath.c_str();
++                if ( strncmp(executablePath, options.volumeRoot, strlen(options.volumeRoot)) == 0 )
++                    executablePath += strlen(options.volumeRoot);
++                kextPathStringRef = CFStringCreateWithCString(kCFAllocatorDefault, executablePath, kCFStringEncodingASCII);
++                // ---- end darwin-bench patch 0002 ----
+                 kextDataRef = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, (const uint8_t*)info.fileContent, info.fileContentLen, kCFAllocatorNull);
+             }
+ 
+@@ -1612,6 +1714,42 @@
+             }
+         }
+ 
++        // ---- darwin-bench patch 0002: -codeless-bundle-id ----
++        // kmutil's _PrelinkInfoDictionary carries an entry for each com.apple.kpi.*
++        // symbol set: the Info.plist of System.kext/PlugIns/<X>.kext, with no
++        // _PrelinkExecutable* keys, i.e. exactly what addKextDataFile() produces for a
++        // codeless kext.  The symbols themselves still come from the kernel's
++        // __LINKINFO,__symbolsets -- AppCacheBuilder explicitly notes that a codeless
++        // kext's placeholder "can be legitimately replaced by symbol sets" -- so this
++        // adds the metadata only.  AppCacheBuilder sorts codeless kexts by bundle id,
++        // so the order these are passed in does not matter.
++        for (const char* codelessID : options.codelessBundleIDs) {
++            auto it = foundBundles.find(codelessID);
++            if ( it == foundBundles.end() ) {
++                fprintf(stderr, "[WARNING]: Could not find codeless bundle with ID '%s'\n", codelessID);
++                continue;
++            }
++            if ( !processedBundleIDs.insert(codelessID).second )
++                continue;
++
++            const BundleData& bundleData = it->second;
++            CFMutableArrayRef kextDepsArrayRef = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
++            CFStringRef kextBundleIDStringRef = CFStringCreateWithCString(kCFAllocatorDefault, codelessID, kCFStringEncodingASCII);
++            CFStringRef kextBundlePathStringRef = CFStringCreateWithCString(kCFAllocatorDefault, bundleData.bundlePath.c_str(), kCFStringEncodingASCII);
++
++            KextFileData_v1 fileData = { 1, nullptr, nullptr,
++                                         kextDepsArrayRef, kextBundleIDStringRef, kextBundlePathStringRef,
++                                         bundleData.infoPlist, binaryStripNone };
++            if ( !addKextDataFile(kcb, &fileData) ) {
++                uint64_t errorCount = 0;
++                const char* const* errors = getErrors(kcb, &errorCount);
++                for (uint64_t i = 0; i != errorCount; ++i)
++                    diag.error("Could not load codeless kext because: '%s'", errors[i]);
++                return {};
++            }
++        }
++        // ---- end darwin-bench patch 0002 ----
++
+         // Filter dependencies to kext's with binaries
+ #if 0
+         const std::map<std::string, BundleData>* foundBundlesPtr = &foundBundles;

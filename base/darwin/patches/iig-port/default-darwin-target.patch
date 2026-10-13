@@ -1,0 +1,124 @@
+iig-port: parse for a Darwin target on a non-Apple host
+
+Against Nyktis/iig-port @ ea6d147.
+
+libclang parses for its default triple. Apple's iig only runs on a Mac, where
+that is the host's Darwin triple, so xnu's Makefiles never pass one. Built on
+Linux, the default is the Linux host's triple and xnu's mach/machine/*.h stop
+with "architecture not supported". On a non-Apple host, prepend
+--target=arm64-apple-darwin unless the caller already passed --target=;
+on a Mac nothing changes.
+
+Any Darwin triple yields the same output, so the plain arm64-apple-darwin
+is enough. iig's own argument check
+rejects -target X and -arch, so --target=X is the only spelling that reaches
+libclang.
+
+It also hands libclang -resource-dir, the directory of clang's builtin
+headers, unless the caller passed one. apt.llvm.org's libclang 24 works that
+directory out only relative to an empty driver path (clang -v shows an empty
+InstalledDir and "lib/clang/24/include"), so EXTERNAL_HEADERS/stdint.h's
+#include_next found clang's stdint.h only from some working directories, and
+the DriverKit .iig files failed with "'stdint.h' file not found". libclang's
+C API has no call for the directory, so the patch derives it from the library
+file dladdr() names and clang_getClangVersion()'s major version, trying
+<prefix>/lib/clang/N (an upstream install, libclang in <prefix>/lib) and
+/usr/lib/clang/N (Debian and apt.llvm.org, libclang in /usr/lib/<triple>).
+
+--- a/iig.cpp
++++ b/iig.cpp
+@@ -22,6 +22,11 @@
+ #include <utility>
+ #include <vector>
+ 
++#if !defined(__APPLE__)
++#include <dlfcn.h>
++#include <sys/stat.h>
++#endif
++
+ namespace {
+ 
+ const char kIIGVersion[] = "DriverKit-440";
+@@ -1375,6 +1380,51 @@ void add_direct_iig_includes(const Options &opt, ParseState *state)
+ 
+ void resolve_parameter_facts(ParseState *state);
+ 
++#if !defined(__APPLE__)
++// clang's builtin headers (the stdint.h that xnu's EXTERNAL_HEADERS/stdint.h
++// #include_next's) for the libclang this process loaded. libclang works the
++// directory out for itself only relative to an empty driver path, which
++// resolves from some working directories and not from make's. Its C API has
++// no call for the directory, so start from the library file dladdr() names
++// and the major version clang_getClangVersion() reports, and take the first
++// layout whose include/stdint.h exists: <prefix>/lib/libclang.so with
++// <prefix>/lib/clang/N (an upstream install), or a multiarch
++// /usr/lib/<triple>/libclang-N.so.N with /usr/lib/clang/N (Debian and
++// apt.llvm.org). Empty when neither exists.
++static std::string libclang_resource_dir()
++{
++	Dl_info info;
++	if (dladdr((void *)&clang_createIndex, &info) == 0 || info.dli_fname == nullptr) {
++		return "";
++	}
++	std::string lib = info.dli_fname;
++	std::string libdir = lib.substr(0, lib.rfind('/'));
++	std::string parent = libdir.substr(0, libdir.rfind('/'));
++
++	CXString cxversion = clang_getClangVersion();
++	std::string version = clang_getCString(cxversion);
++	clang_disposeString(cxversion);
++	std::string major;
++	size_t at = version.find("version ");
++	if (at != std::string::npos) {
++		for (size_t i = at + 8; i < version.size() && isdigit((unsigned char)version[i]); ++i) {
++			major += version[i];
++		}
++	}
++	if (major.empty()) {
++		return "";
++	}
++
++	for (const std::string &dir : {parent + "/lib/clang/" + major, parent + "/clang/" + major}) {
++		struct stat st;
++		if (stat((dir + "/include/stdint.h").c_str(), &st) == 0) {
++			return dir;
++		}
++	}
++	return "";
++}
++#endif
++
+ int parse_iig(const Options &opt, ParseState *state)
+ {
+ 	for (std::size_t i = 0; i < opt.clang_args.size(); ++i) {
+@@ -1395,6 +1445,30 @@ int parse_iig(const Options &opt, ParseState *state)
+ 
+ 	CXIndex index = clang_createIndex(0, 0);
+ 	std::vector<const char *> args;
++#if !defined(__APPLE__)
++	// libclang parses for its default triple. On a Mac that is the host's
++	// Darwin triple, which is what Apple's iig gets; on any other host it is
++	// that host's, where xnu's mach/machine/*.h stop with "architecture not
++	// supported". Default to Darwin unless the caller passed --target=.
++	bool have_target = false;
++	bool have_resource_dir = false;
++	for (const std::string &arg : opt.clang_args) {
++		if (arg.rfind("--target=", 0) == 0) {
++			have_target = true;
++		}
++		if (arg == "-resource-dir" || arg.rfind("-resource-dir=", 0) == 0) {
++			have_resource_dir = true;
++		}
++	}
++	if (!have_target) {
++		args.push_back("--target=arm64-apple-darwin");
++	}
++	static const std::string resource_dir = libclang_resource_dir();
++	if (!have_resource_dir && !resource_dir.empty()) {
++		args.push_back("-resource-dir");
++		args.push_back(resource_dir.c_str());
++	}
++#endif
+ 	for (const std::string &arg : opt.clang_args) {
+ 		args.push_back(arg.c_str());
+ 	}

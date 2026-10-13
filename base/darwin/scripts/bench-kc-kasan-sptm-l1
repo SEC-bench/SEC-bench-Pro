@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""
+bench-kc-kasan-sptm-l1 -- let a KASAN boot collection create its own shadow
+                          level-1 page tables on the SPTM path.
+
+    bench-kc-kasan-sptm-l1 <bootkc-in> <bootkc-out>
+
+The missing level-1 entries
+---------------------------
+On an SPTM system XNU does not own its root translation table: SPTM builds it
+and XNU extends it through `sptm_map_table()`. SPTM populates level-1 entries
+for the physical aperture and for [VM_MIN_KERNEL_ADDRESS, VM_MAX_KERNEL_ADDRESS]
+and stops there -- on macOS 27.0 / t8103 that is L1 entries 0, 2015 and
+2016..2028 of a 2048-entry table.
+
+The KASAN-TBI shadow lives immediately above that, at KASAN_SHADOW_MIN ==
+VM_MAX_KERNEL_ADDRESS + 1, i.e. L1 entries 2029..2047. `kasan_arm64_pte_map()`
+creates the level-2 and level-3 tables it needs, but for level 1 it only
+asserts the entry is already there (san/memory/kasan-arm64.c, `#if CONFIG_SPTM`
+-- off the SPTM path the same function allocates it itself, which is why a
+pre-SPTM KASAN guest boots). The release SPTM every IPSW ships
+cannot know a KASAN variant is being booted -- Kernel.framework's sptm_xnu.h
+says so in as many words -- so it never creates those entries, the assertion
+fires inside `start_cold`, and the guest dies before the serial console is up.
+
+The patch
+---------
+Redirects the assertion's cold path into a stub, written into the zero padding
+at the tail of __TEXT_EXEC, that does for level 1 exactly what the function
+already does for level 2: take a page from the KASAN shadow pool, zero it,
+`sptm_retype()` it XNU_DEFAULT -> XNU_PAGE_TABLE one level down, and
+`sptm_map_table()` it into the kernel root. Then it recomputes the level-1
+index and rejoins the normal path. The release SPTM accepts this: it is the
+same call the function already makes one level lower, against the same root
+table.
+
+Everything is PC-relative (adrp/add, bl, b), so the stub survives the slide
+SPTM applies to the collection.
+
+The patch refuses to apply unless every instruction it is keying off matches,
+so a future kernel whose codegen has moved fails the build loudly instead of
+being silently mis-patched.
+"""
+import struct
+import subprocess
+import sys
+import tempfile
+
+LC_SEGMENT_64 = 0x19
+LC_SYMTAB = 0x02
+LC_FILESET_ENTRY = 0x80000035
+
+# Instructions the stub keys off, as emitted by the macOS 27.0 KASAN kernel.
+UBFX_X8_X19_36_11 = bytes.fromhex("68ba64d3")   # ubfx x8, x19, #36, #11
+LDR_X8_X22_X8_LSL3 = bytes.fromhex("c87a68f8")  # ldr  x8, [x22, x8, lsl #3]
+
+STUB_ALIGN = 0x40
+STUB_MAX = 0x100
+
+
+def macho_cmds(data, base=0):
+    ncmds = struct.unpack_from("<I", data, base + 16)[0]
+    off = base + 32
+    for _ in range(ncmds):
+        cmd, cmdsize = struct.unpack_from("<2I", data, off)
+        yield cmd, off, cmdsize
+        off += cmdsize
+
+
+def segments(data, base=0):
+    out = {}
+    for cmd, off, _ in macho_cmds(data, base):
+        if cmd == LC_SEGMENT_64:
+            name = data[off + 8:off + 24].rstrip(b"\0").decode()
+            vmaddr, vmsize, fileoff, filesize = struct.unpack_from("<4Q", data, off + 24)
+            out[name] = (vmaddr, vmsize, fileoff, filesize)
+    return out
+
+
+def symbols(data):
+    """Every N_SECT symbol in the collection and in each fileset entry."""
+    out = {}
+
+    def harvest(base):
+        st = None
+        for cmd, off, _ in macho_cmds(data, base):
+            if cmd == LC_SYMTAB:
+                st = struct.unpack_from("<4I", data, off + 8)
+        if not st:
+            return
+        symoff, nsyms, stroff, _ = st
+        for i in range(nsyms):
+            o = symoff + i * 16
+            n_strx, n_type, _, _, n_value = struct.unpack_from("<IBBHQ", data, o)
+            if n_value and (n_type & 0x0e) == 0x0e:
+                end = data.index(b"\0", stroff + n_strx)
+                out.setdefault(data[stroff + n_strx:end].decode("utf-8", "replace"),
+                               n_value)
+
+    harvest(0)
+    for cmd, off, _ in macho_cmds(data):
+        if cmd == LC_FILESET_ENTRY:
+            _, fileoff, _ = struct.unpack_from("<2QI", data, off + 8)[0:3]
+            harvest(fileoff)
+    return out
+
+
+def vtof(segs, va):
+    for name, (vmaddr, vmsize, fileoff, filesize) in segs.items():
+        if vmaddr <= va < vmaddr + vmsize:
+            off = va - vmaddr
+            if off >= filesize:
+                raise SystemExit(f"{va:#x} is past the file content of {name}")
+            return fileoff + off
+    raise SystemExit(f"{va:#x} is in no segment")
+
+
+def find_padding(data, segs, need):
+    """Largest run of zero bytes in __TEXT_EXEC; returns an aligned VA."""
+    vmaddr, _, fileoff, filesize = segs["__TEXT_EXEC"]
+    buf = data[fileoff:fileoff + filesize]
+    best_len, best_off = 0, None
+    i, n = 0, len(buf)
+    while i < n:
+        if buf[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and not buf[j]:
+            j += 1
+        if j - i > best_len:
+            best_len, best_off = j - i, i
+        i = j
+    if best_off is None or best_len < need + STUB_ALIGN:
+        raise SystemExit(f"no {need}-byte run of padding in __TEXT_EXEC "
+                         f"(largest is {best_len})")
+    va = (vmaddr + best_off + STUB_ALIGN - 1) & ~(STUB_ALIGN - 1)
+    return va, best_len
+
+
+def adrp_add(dst, target, pc):
+    """adrp/add pair for a PC-relative address (adrp pages are always 4K)."""
+    delta = (target & ~0xFFF) - (pc & ~0xFFF)
+    return [f"adrp {dst}, #{delta}", f"add {dst}, {dst}, #{target & 0xFFF}"]
+
+
+def build_stub(stub_va, syms, l_a):
+    """The stub, as assembler text. Every instruction is 4 bytes, so the
+    address of instruction n is stub_va + 4n and the PC-relative forms can be
+    resolved in one pass."""
+    pnext = syms["_shadow_pnext"]
+    lines = []
+
+    def pc():
+        return stub_va + 4 * len(lines)
+
+    lines += adrp_add("x9", pnext, pc())
+    lines += [
+        "ldr x23, [x9]",                     # pa = shadow_pnext
+        "add x10, x23, #0x4000",
+        "str x10, [x9]",                     # shadow_pnext += one page
+        "mov x0, x23",
+    ]
+    lines.append(f"bl #{syms['_phystokv'] - pc()}")
+    lines += [
+        "movz x1, #0x4000",
+        "stp xzr, xzr, [x0], #16",           # zero the page
+        "subs x1, x1, #16",
+        "b.ne #-8",
+        "mov x0, x23",
+        "mov w1, #11",                       # XNU_DEFAULT
+        "mov w2, #20",                       # XNU_PAGE_TABLE
+        "mov w3, #2",                        # ... to live at level 2
+    ]
+    lines.append(f"bl #{syms['_sptm_retype'] - pc()}")
+    lines += [
+        "and x8, x23, #0xfffffffff000",
+        "orr x3, x8, #0x3",                  # tte = pa | TABLE | VALID
+        "mov x0, x20",                       # root_pt_paddr
+        "and x1, x19, #0xffffffffffffc000",  # shadow_base, page aligned
+        "mov w2, #1",                        # target level 1
+    ]
+    lines.append(f"bl #{syms['_sptm_map_table'] - pc()}")
+    lines.append("ubfx x8, x19, #36, #11")   # recompute the level-1 index
+    lines.append(f"b #{l_a - pc()}")
+    return lines
+
+
+def assemble(lines):
+    asm = "\n".join(lines) + "\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".s", delete=False) as f:
+        f.write(asm)
+        path = f.name
+    for mc in ("llvm-mc-23", "llvm-mc"):
+        try:
+            out = subprocess.run(
+                [mc, "--assemble", "--arch=aarch64", "--show-encoding", path],
+                capture_output=True, text=True, check=True).stdout
+            break
+        except FileNotFoundError:
+            continue
+    else:
+        raise SystemExit("no llvm-mc on PATH to assemble the stub")
+    blob = bytearray()
+    for line in out.splitlines():
+        if "encoding: [" not in line:
+            continue
+        hexes = line.split("encoding: [", 1)[1].split("]", 1)[0]
+        blob += bytes(int(b, 16) for b in hexes.replace("0x", "").split(","))
+    if len(blob) != 4 * len(lines):
+        raise SystemExit(f"assembled {len(blob)} bytes for {len(lines)} instructions")
+    return bytes(blob)
+
+
+def main():
+    if len(sys.argv) != 3:
+        raise SystemExit(__doc__)
+    src, dst = sys.argv[1], sys.argv[2]
+    data = bytearray(open(src, "rb").read())
+    segs = segments(data)
+    syms = symbols(data)
+
+    needed = ["_kasan_arm64_pte_map", "_kasan_arm64_pte_map.cold.1",
+              "_shadow_pnext", "_phystokv", "_sptm_retype", "_sptm_map_table"]
+    missing = [n for n in needed if n not in syms]
+    if missing:
+        raise SystemExit("not a KASAN collection (missing " + ", ".join(missing) + ")")
+
+    fn = syms["_kasan_arm64_pte_map"]
+    cold = syms["_kasan_arm64_pte_map.cold.1"]
+    fn_off = vtof(segs, fn)
+
+    # The two instructions the stub keys off: the level-1 index computation and
+    # the load it rejoins at.
+    if bytes(data[fn_off + 0x44:fn_off + 0x48]) != UBFX_X8_X19_36_11:
+        raise SystemExit("kasan_arm64_pte_map+0x44 is not "
+                         "`ubfx x8, x19, #36, #11`; codegen has moved")
+    if bytes(data[fn_off + 0x4C:fn_off + 0x50]) != LDR_X8_X22_X8_LSL3:
+        raise SystemExit("kasan_arm64_pte_map+0x4c is not "
+                         "`ldr x8, [x22, x8, lsl #3]`; codegen has moved")
+    l_a = fn + 0x4C
+
+    stub_va, pad = find_padding(data, segs, STUB_MAX)
+    lines = build_stub(stub_va, syms, l_a)
+    blob = assemble(lines)
+    if len(blob) > STUB_MAX:
+        raise SystemExit(f"stub is {len(blob)} bytes, over the {STUB_MAX} budget")
+
+    stub_off = vtof(segs, stub_va)
+    if any(data[stub_off:stub_off + len(blob)]):
+        raise SystemExit("the chosen stub space is not zero after all")
+    data[stub_off:stub_off + len(blob)] = blob
+
+    # Send the assertion's cold path to the stub instead of its BRK.
+    cold_off = vtof(segs, cold)
+    delta = stub_va - cold
+    if not (-(1 << 27) <= delta < (1 << 27)) or delta & 3:
+        raise SystemExit(f"cold path -> stub is {delta:#x}, out of branch range")
+    branch = 0x14000000 | ((delta >> 2) & 0x03FFFFFF)
+    data[cold_off:cold_off + 4] = struct.pack("<I", branch)
+
+    open(dst, "wb").write(bytes(data))
+    print(f"kasan_arm64_pte_map  {fn:#x}  (+0x4c rejoin at {l_a:#x})")
+    print(f"cold.1               {cold:#x}  -> b {stub_va:#x}")
+    print(f"stub                 {stub_va:#x}  {len(blob)} bytes "
+          f"in {pad:#x} of __TEXT_EXEC padding")
+    print(f"shadow_pnext {syms['_shadow_pnext']:#x}  phystokv {syms['_phystokv']:#x}  "
+          f"sptm_retype {syms['_sptm_retype']:#x}  sptm_map_table {syms['_sptm_map_table']:#x}")
+    print(f"wrote {dst}")
+
+
+if __name__ == "__main__":
+    main()

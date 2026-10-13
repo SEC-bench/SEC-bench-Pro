@@ -1,0 +1,648 @@
+Implement Apple xnu type traits in upstream clang
+
+Adds __builtin_xnu_type_signature, __builtin_xnu_type_summary,
+__builtin_xnu_types_compatible and __attribute__((xnu_usage_semantics())).
+
+Upstream base: https://github.com/llvm/llvm-project
+               branch main, commit 58c46bae21181fb4240cf964461bea738d96d50e (apt.llvm.org snapshot 24~++20260911085248)
+
+diff --git a/clang/include/clang/AST/XnuTypeSignature.h b/clang/include/clang/AST/XnuTypeSignature.h
+new file mode 100644
+index 0000000..e0a3c85
+--- /dev/null
++++ b/clang/include/clang/AST/XnuTypeSignature.h
+@@ -0,0 +1,58 @@
++//===--- XnuTypeSignature.h - XNU kalloc type signatures --------*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++///
++/// \file
++/// Implements the granule classification used by XNU's signature based
++/// kalloc type segregation, as exposed by __builtin_xnu_type_signature,
++/// __builtin_xnu_type_summary and __builtin_xnu_types_compatible.
++///
++//===----------------------------------------------------------------------===//
++
++#ifndef LLVM_CLANG_AST_XNUTYPESIGNATURE_H
++#define LLVM_CLANG_AST_XNUTYPESIGNATURE_H
++
++#include "clang/AST/Type.h"
++#include "llvm/ADT/SmallVector.h"
++#include <cstdint>
++
++namespace clang {
++class ASTContext;
++
++/// The KT_GRANULE_* encodings from XNU's osfmk/kern/kalloc.h.  A granule's
++/// encoding is the bitwise OR of the encodings of every leaf overlapping it.
++enum XnuGranuleKind : unsigned {
++  XNU_GRANULE_PADDING = 0,
++  XNU_GRANULE_POINTER = 1,
++  XNU_GRANULE_DATA = 2,
++  XNU_GRANULE_DUAL = 4,
++  XNU_GRANULE_PAC = 8,
++};
++
++/// Compute the per-granule (8 byte) encoding sequence of \p T.
++///
++/// \p Granules is resized to ceil(sizeof(T) / 8) and filled in, except that a
++/// type which contains no scalar leaf at all (an empty record, a record whose
++/// only members are empty records or zero-length arrays, ...) produces an
++/// empty sequence regardless of its size.
++///
++/// \p T must be a complete, non variably-modified type.
++void computeXnuTypeGranules(const ASTContext &Ctx, QualType T,
++                            llvm::SmallVectorImpl<uint8_t> &Granules);
++
++/// Render the granule sequence of \p T as lowercase hexadecimal digits; this
++/// is the value of __builtin_xnu_type_signature(T).
++void getXnuTypeSignature(const ASTContext &Ctx, QualType T,
++                         llvm::SmallVectorImpl<char> &Out);
++
++/// Compute __builtin_xnu_type_summary(T): the OR over all granules g of
++/// (1 << g), i.e. KT_SUMMARY_GRANULE_TO_IDX applied to every granule.
++uint64_t getXnuTypeSummary(const ASTContext &Ctx, QualType T);
++
++} // namespace clang
++
++#endif // LLVM_CLANG_AST_XNUTYPESIGNATURE_H
+diff --git a/clang/include/clang/Basic/Attr.td b/clang/include/clang/Basic/Attr.td
+index 61ef3fb..8c6730e 100644
+--- a/clang/include/clang/Basic/Attr.td
++++ b/clang/include/clang/Basic/Attr.td
+@@ -5539,3 +5539,29 @@ def Personality : InheritableAttr {
+   let Subjects = SubjectList<[Function]>;
+   let Documentation = [PersonalityDocs];
+ }
++
++def XnuUsageSemantics : InheritableAttr {
++  let Spellings = [Clang<"xnu_usage_semantics">];
++  let Args = [StringArgument<"Kind0">, StringArgument<"Kind1", 1>];
++  let Documentation = [Undocumented];
++  let AdditionalMembers = [{
++    /// The KT_GRANULE_* encoding (see clang/AST/XnuTypeSignature.h) that this
++    /// annotation forces for the annotated typedef or field.
++    unsigned getGranuleKind() const {
++      bool IsPointer = false, IsData = false;
++      for (llvm::StringRef S : {getKind0(), getKind1()}) {
++        if (S == "pointer")
++          IsPointer = true;
++        else if (S == "data")
++          IsData = true;
++      }
++      if (IsPointer && IsData)
++        return 4; // KT_GRANULE_DUAL
++      if (IsPointer)
++        return 1; // KT_GRANULE_POINTER
++      if (IsData)
++        return 2; // KT_GRANULE_DATA
++      return 0;   // KT_GRANULE_PADDING
++    }
++  }];
++}
+diff --git a/clang/include/clang/Basic/BuiltinTraits.td b/clang/include/clang/Basic/BuiltinTraits.td
+index f80234d..9a1b105 100644
+--- a/clang/include/clang/Basic/BuiltinTraits.td
++++ b/clang/include/clang/Basic/BuiltinTraits.td
+@@ -125,6 +125,18 @@ def TypeCompatible : BinaryTrait {
+   let Spelling = "__builtin_types_compatible_p";
+   let KeyFlags = [KEYNOCXX];
+ }
++def XnuTypeSignature : UnaryTrait {
++  let Spelling = "__builtin_xnu_type_signature";
++  let KeyFlags = [KEYALL];
++}
++def XnuTypeSummary : UnaryTrait {
++  let Spelling = "__builtin_xnu_type_summary";
++  let KeyFlags = [KEYALL];
++}
++def XnuTypesCompatible : BinaryTrait {
++  let Spelling = "__builtin_xnu_types_compatible";
++  let KeyFlags = [KEYALL];
++}
+ 
+ def TypeOrder : BinaryTrait {
+   let Spelling = "__builtin_type_order";
+diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+index a7b40a7..aac9b47 100644
+--- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
++++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+@@ -10033,6 +10033,19 @@ def warn_unused_comparison : Warning<
+ def note_inequality_comparison_to_or_assign : Note<
+   "use '|=' to turn this inequality comparison into an or-assignment">;
+ 
++// XNU kalloc type signature traits (__builtin_xnu_type_signature and friends).
++def err_xnu_type_trait_variable_array : Error<
++  "invalid application of __builtin_xnu_type_%select{signature|summary}0 to "
++  "variable array type %1">;
++def err_xnu_usage_semantics_subject : Error<
++  "%0 attribute can only be applied to a typedef or a field declaration">;
++def err_xnu_usage_semantics_record : Error<
++  "%0 attribute can only be applied to non-record types">;
++def err_xnu_usage_semantics_invalid_kind : Error<
++  "invalid type signature semantic kind %0">;
++def err_xnu_usage_semantics_repeated_kind : Error<
++  "semantics kind '%0' repeated more than once">;
++
+ def err_incomplete_type_used_in_type_trait_expr : Error<
+   "incomplete type %0 used in type trait expression">, NoSFINAE;
+ 
+diff --git a/clang/lib/AST/CMakeLists.txt b/clang/lib/AST/CMakeLists.txt
+index c703151..ee5f369 100644
+--- a/clang/lib/AST/CMakeLists.txt
++++ b/clang/lib/AST/CMakeLists.txt
+@@ -137,6 +137,7 @@ add_clang_library(clangAST
+   TypePrinter.cpp
+   VTableBuilder.cpp
+   VTTBuilder.cpp
++  XnuTypeSignature.cpp
+ 
+   PRECOMPILE_HEADERS
+   [["clang/AST/pch.h"]]
+diff --git a/clang/lib/AST/XnuTypeSignature.cpp b/clang/lib/AST/XnuTypeSignature.cpp
+new file mode 100644
+index 0000000..6e0ad52
+--- /dev/null
++++ b/clang/lib/AST/XnuTypeSignature.cpp
+@@ -0,0 +1,222 @@
++//===--- XnuTypeSignature.cpp - XNU kalloc type signatures ----------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#include "clang/AST/XnuTypeSignature.h"
++#include "clang/AST/ASTContext.h"
++#include "clang/AST/Attr.h"
++#include "clang/AST/Decl.h"
++#include "clang/AST/DeclCXX.h"
++#include "clang/AST/RecordLayout.h"
++#include "clang/Basic/TargetInfo.h"
++#include "llvm/Support/SaveAndRestore.h"
++
++using namespace clang;
++
++namespace {
++
++/// Sentinel meaning "no xnu_usage_semantics annotation".
++static constexpr unsigned NoKind = ~0u;
++
++static unsigned getAnnotatedKind(const Decl *D) {
++  if (const auto *A = D->getAttr<XnuUsageSemanticsAttr>())
++    return A->getGranuleKind();
++  return NoKind;
++}
++
++class XnuGranuleComputer {
++  const ASTContext &Ctx;
++  llvm::SmallVectorImpl<uint8_t> &G;
++  /// Whether any scalar leaf (including a bit-field of any width) was reached.
++  bool SawLeaf = false;
++  /// Set while walking the elements of an array.  Apple stops honouring field
++  /// level xnu_usage_semantics annotations below an array, though typedef
++  /// level annotations and __ptrauth still apply:
++  ///   struct M { uintptr_t v __kernel_data_semantics; };  -> "2"
++  ///   struct { struct M a;    }                           -> "2"
++  ///   struct { struct M a[2]; }                           -> "11"   (!)
++  /// XNU depends on this: the opaque lck_mtx_t / lck_spin_t / lck_rw_t are
++  /// exactly of that shape, and arrays of them sit inside kalloc'd types.
++  bool IgnoreFieldAttrs = false;
++
++public:
++  XnuGranuleComputer(const ASTContext &Ctx, llvm::SmallVectorImpl<uint8_t> &G)
++      : Ctx(Ctx), G(G) {}
++
++  bool sawLeaf() const { return SawLeaf; }
++
++  /// OR \p Kind into every granule overlapping [BitOff, BitOff + BitWidth).
++  void mark(uint64_t BitOff, uint64_t BitWidth, unsigned Kind) {
++    // Reaching a leaf at all is what makes a record non-empty, even when the
++    // leaf is a zero-width bit-field that covers no granule.
++    SawLeaf = true;
++    if (BitWidth == 0 || G.empty())
++      return;
++    uint64_t First = BitOff / 64;
++    if (First >= G.size())
++      return;
++    uint64_t Last = (BitOff + BitWidth - 1) / 64;
++    if (Last >= G.size())
++      Last = G.size() - 1;
++    for (uint64_t I = First; I <= Last; ++I)
++      G[I] |= static_cast<uint8_t>(Kind);
++  }
++
++  /// Classify a scalar leaf.
++  ///
++  /// Deliberate sugar quirks, both matching Apple's implementation:
++  ///  * xnu_usage_semantics is only honoured when it sits on the immediate
++  ///    typedef of the leaf type, so it survives exactly one typedef level.
++  ///  * __ptrauth is read off the *local* qualifiers, so it is lost through
++  ///    any typedef or __typeof__.
++  unsigned classify(QualType T) const {
++    if (const auto *TT = T->getAs<TypedefType>()) {
++      unsigned K = getAnnotatedKind(TT->getDecl());
++      if (K != NoKind)
++        return K;
++    }
++
++    if (T.getLocalQualifiers().getPointerAuth())
++      return XNU_GRANULE_PAC;
++
++    // _Atomic(void *) is still a pointer.
++    QualType V = T;
++    if (const auto *AT = V->getAs<AtomicType>())
++      V = AT->getValueType();
++
++    if (V->isPointerType() || V->isReferenceType() || V->isBlockPointerType() ||
++        V->isObjCObjectPointerType() || V->isNullPtrType())
++      return XNU_GRANULE_POINTER;
++
++    // Everything else, including member pointers, is data.
++    return XNU_GRANULE_DATA;
++  }
++
++  void visitType(QualType T, uint64_t BitOff) {
++    if (const ConstantArrayType *CAT = Ctx.getAsConstantArrayType(T)) {
++      uint64_t N = CAT->getSize().getZExtValue();
++      if (N == 0)
++        return;
++      QualType ET = CAT->getElementType();
++      uint64_t ESize = Ctx.getTypeSize(ET);
++      if (!ET->isRecordType() && !ET->isArrayType()) {
++        // Elements of an array are contiguous, so a scalar element type can be
++        // handled in one go; this keeps huge arrays cheap.
++        mark(BitOff, N * ESize, classify(ET));
++        return;
++      }
++      llvm::SaveAndRestore<bool> Save(IgnoreFieldAttrs, true);
++      for (uint64_t I = 0; I != N; ++I)
++        visitType(ET, BitOff + I * ESize);
++      return;
++    }
++
++    if (const RecordType *RT = T->getAs<RecordType>()) {
++      visitRecord(RT->getDecl(), BitOff, /*MostDerived=*/true);
++      return;
++    }
++
++    mark(BitOff, Ctx.getTypeSize(T), classify(T));
++  }
++
++  void visitRecord(const RecordDecl *RD, uint64_t BitOff, bool MostDerived) {
++    RD = RD->getDefinition();
++    if (!RD)
++      return;
++
++    const ASTRecordLayout &L = Ctx.getASTRecordLayout(RD);
++
++    if (const auto *CXXRD = dyn_cast<CXXRecordDecl>(RD)) {
++      // A vtable pointer introduced by this class is an ordinary pointer.
++      if (L.hasOwnVFPtr())
++        mark(BitOff, Ctx.getTargetInfo().getPointerWidth(LangAS::Default),
++             XNU_GRANULE_POINTER);
++
++      for (const CXXBaseSpecifier &B : CXXRD->bases()) {
++        if (B.isVirtual())
++          continue;
++        if (const CXXRecordDecl *BD = B.getType()->getAsCXXRecordDecl())
++          visitRecord(BD, BitOff + Ctx.toBits(L.getBaseClassOffset(BD)),
++                      /*MostDerived=*/false);
++      }
++
++      // Virtual bases only exist once, in the most derived object.
++      if (MostDerived) {
++        for (const CXXBaseSpecifier &B : CXXRD->vbases()) {
++          if (const CXXRecordDecl *BD = B.getType()->getAsCXXRecordDecl())
++            visitRecord(BD, BitOff + Ctx.toBits(L.getVBaseClassOffset(BD)),
++                        /*MostDerived=*/false);
++        }
++      }
++    }
++
++    for (const FieldDecl *FD : RD->fields()) {
++      // Flexible array members are silently ignored.
++      if (FD->getType()->isIncompleteArrayType())
++        continue;
++      if (FD->getType()->isVariablyModifiedType())
++        continue;
++
++      uint64_t Off = BitOff + L.getFieldOffset(FD->getFieldIndex());
++      unsigned K = IgnoreFieldAttrs ? NoKind : getAnnotatedKind(FD);
++
++      if (FD->isBitField()) {
++        if (K == NoKind)
++          K = classify(FD->getType());
++        mark(Off, FD->getBitWidthValue(), K);
++        continue;
++      }
++
++      if (K != NoKind) {
++        mark(Off, Ctx.getTypeSize(FD->getType()), K);
++        continue;
++      }
++
++      visitType(FD->getType(), Off);
++    }
++  }
++};
++
++} // namespace
++
++void clang::computeXnuTypeGranules(const ASTContext &Ctx, QualType T,
++                                   llvm::SmallVectorImpl<uint8_t> &Granules) {
++  Granules.clear();
++  if (T.isNull() || T->isIncompleteType() || T->isVariablyModifiedType() ||
++      T->isFunctionType())
++    return;
++
++  uint64_t Bytes = Ctx.getTypeSizeInChars(T).getQuantity();
++  Granules.assign((Bytes + 7) / 8, 0);
++
++  XnuGranuleComputer C(Ctx, Granules);
++  C.visitType(T, 0);
++
++  // A type with no scalar leaf at all has an empty signature, whatever its
++  // size: struct {}, struct { Empty e; }, struct { int a[0]; } ...
++  if (!C.sawLeaf())
++    Granules.clear();
++}
++
++void clang::getXnuTypeSignature(const ASTContext &Ctx, QualType T,
++                                llvm::SmallVectorImpl<char> &Out) {
++  llvm::SmallVector<uint8_t, 32> Granules;
++  computeXnuTypeGranules(Ctx, T, Granules);
++  Out.clear();
++  Out.reserve(Granules.size());
++  for (uint8_t G : Granules)
++    Out.push_back("0123456789abcdef"[G & 0xf]);
++}
++
++uint64_t clang::getXnuTypeSummary(const ASTContext &Ctx, QualType T) {
++  llvm::SmallVector<uint8_t, 32> Granules;
++  computeXnuTypeGranules(Ctx, T, Granules);
++  uint64_t Summary = 0;
++  for (uint8_t G : Granules)
++    Summary |= uint64_t(1) << (G & 0xf);
++  return Summary;
++}
+diff --git a/clang/lib/Parse/ParseExprCXX.cpp b/clang/lib/Parse/ParseExprCXX.cpp
+index 860c069..702a03f 100644
+--- a/clang/lib/Parse/ParseExprCXX.cpp
++++ b/clang/lib/Parse/ParseExprCXX.cpp
+@@ -3550,6 +3550,12 @@ ExprResult Parser::ParseTypeTrait() {
+ 
+     // Add this type to the list of arguments.
+     Args.push_back(Ty.get());
++
++    // The unary XNU type traits reject a second argument while parsing, the
++    // way sizeof does, rather than with an arity diagnostic.
++    TypeTrait Trait = TypeTraitFromTokKind(Kind);
++    if (Trait == UTT_XnuTypeSignature || Trait == UTT_XnuTypeSummary)
++      break;
+   } while (TryConsumeToken(tok::comma));
+ 
+   if (Parens.consumeClose())
+diff --git a/clang/lib/Sema/SemaDeclAttr.cpp b/clang/lib/Sema/SemaDeclAttr.cpp
+index eb4a8c2..d7c50b8 100644
+--- a/clang/lib/Sema/SemaDeclAttr.cpp
++++ b/clang/lib/Sema/SemaDeclAttr.cpp
+@@ -7559,6 +7559,60 @@ static void handlePersonalityAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+       << AL.getAttrName();
+ }
+ 
++static void handleXnuUsageSemanticsAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
++  // The annotation describes the granule class of a scalar leaf type, so it is
++  // only meaningful on a typedef or on a field, and never on a record type.
++  if (isa<TagDecl>(D)) {
++    S.Diag(AL.getLoc(), diag::err_xnu_usage_semantics_record) << AL;
++    return;
++  }
++
++  QualType T;
++  if (const auto *TD = dyn_cast<TypedefNameDecl>(D))
++    T = TD->getUnderlyingType();
++  else if (const auto *FD = dyn_cast<FieldDecl>(D))
++    T = FD->getType();
++  else {
++    S.Diag(AL.getLoc(), diag::err_xnu_usage_semantics_subject) << AL;
++    return;
++  }
++
++  QualType Elem = T;
++  while (const ArrayType *AT = S.Context.getAsArrayType(Elem))
++    Elem = AT->getElementType();
++  if (Elem->isRecordType()) {
++    S.Diag(AL.getLoc(), diag::err_xnu_usage_semantics_record) << AL;
++    return;
++  }
++
++  StringRef Kinds[2];
++  bool SeenPointer = false, SeenData = false;
++  for (unsigned I = 0, N = std::min(AL.getNumArgs(), 2u); I != N; ++I) {
++    StringRef Kind;
++    if (!S.checkStringLiteralArgumentAttr(AL, I, Kind))
++      return;
++
++    bool *Seen;
++    if (Kind == "pointer")
++      Seen = &SeenPointer;
++    else if (Kind == "data")
++      Seen = &SeenData;
++    else {
++      S.Diag(AL.getLoc(), diag::err_xnu_usage_semantics_invalid_kind) << Kind;
++      return;
++    }
++    if (*Seen) {
++      S.Diag(AL.getLoc(), diag::err_xnu_usage_semantics_repeated_kind) << Kind;
++      return;
++    }
++    *Seen = true;
++    Kinds[I] = Kind;
++  }
++
++  D->addAttr(::new (S.Context)
++                 XnuUsageSemanticsAttr(S.Context, AL, Kinds[0], Kinds[1]));
++}
++
+ /// ProcessDeclAttribute - Apply the specific attribute to the specified decl if
+ /// the attribute applies to decls.  If the attribute is a type attribute, just
+ /// silently ignore it if a GNU attribute.
+@@ -7765,6 +7819,9 @@ ProcessDeclAttribute(Sema &S, Decl *D, const ParsedAttr &AL,
+   case ParsedAttr::AT_Aligned:
+     handleAlignedAttr(S, D, AL);
+     break;
++  case ParsedAttr::AT_XnuUsageSemantics:
++    handleXnuUsageSemanticsAttr(S, D, AL);
++    break;
+   case ParsedAttr::AT_AlignValue:
+     handleAlignValueAttr(S, D, AL);
+     break;
+diff --git a/clang/lib/Sema/SemaTypeTraits.cpp b/clang/lib/Sema/SemaTypeTraits.cpp
+index cb30ff9..d52fc47 100644
+--- a/clang/lib/Sema/SemaTypeTraits.cpp
++++ b/clang/lib/Sema/SemaTypeTraits.cpp
+@@ -15,6 +15,7 @@
+ #include "clang/AST/Mangle.h"
+ #include "clang/AST/TemplateBase.h"
+ #include "clang/AST/Type.h"
++#include "clang/AST/XnuTypeSignature.h"
+ #include "clang/Basic/BuiltinTraits.h"
+ #include "clang/Basic/DiagnosticIDs.h"
+ #include "clang/Basic/DiagnosticParse.h"
+@@ -1525,12 +1526,141 @@ static TypeTraitReturnType GetReturnType(TypeTrait Kind) {
+   return TypeTraitReturnType::Bool;
+ }
+ 
++//===----------------------------------------------------------------------===//
++// XNU kalloc type signature traits.
++//
++// __builtin_xnu_type_signature(T)  -> const char *  (a string literal)
++// __builtin_xnu_type_summary(T)    -> unsigned long
++// __builtin_xnu_types_compatible(A, B) -> bool / int
++//
++// These fold to literals in Sema, so neither ExprConstant nor CodeGen needs to
++// know about them; the signature is an ordinary string literal, which gives
++// the pointer identity for equal signatures that XNU relies on.
++//===----------------------------------------------------------------------===//
++
++/// Diagnose an operand that cannot have a granule signature.  Returns true if
++/// a diagnostic was emitted.
++static bool CheckXnuTypeTraitOperand(Sema &S, TypeTrait Kind,
++                                     SourceLocation KWLoc,
++                                     const TypeSourceInfo *TSI) {
++  QualType T = TSI->getType();
++  // Apple points these diagnostics at the trait keyword, not at the operand.
++  SourceLocation Loc = KWLoc;
++
++  bool IsSummary = Kind == UTT_XnuTypeSummary;
++  StringRef Name = IsSummary ? "__builtin_xnu_type_summary"
++                             : "__builtin_xnu_type_signature";
++
++  if (T->isVariablyModifiedType()) {
++    S.Diag(Loc, diag::err_xnu_type_trait_variable_array) << IsSummary << T;
++    return true;
++  }
++
++  if (S.RequireCompleteType(
++          Loc, T, diag::err_sizeof_alignof_incomplete_or_sizeless_type, Name,
++          /*Sizeless=*/0))
++    return true;
++
++  if (T->isFunctionType()) {
++    S.Diag(Loc, diag::err_sizeof_alignof_function_type) << Name;
++    return true;
++  }
++
++  return false;
++}
++
++static ExprResult BuildXnuUnaryTypeTrait(Sema &S, TypeTrait Kind,
++                                         SourceLocation KWLoc,
++                                         ArrayRef<TypeSourceInfo *> Args,
++                                         SourceLocation RParenLoc) {
++  ASTContext &Ctx = S.Context;
++  QualType T = Args[0]->getType();
++  bool Dependent = T->isDependentType();
++
++  if (!Dependent && CheckXnuTypeTraitOperand(S, Kind, KWLoc, Args[0]))
++    return ExprError();
++
++  if (Kind == UTT_XnuTypeSummary) {
++    APValue Value;
++    if (!Dependent) {
++      unsigned Width = Ctx.getIntWidth(Ctx.UnsignedLongTy);
++      Value = APValue(llvm::APSInt(
++          llvm::APInt(Width, getXnuTypeSummary(Ctx, T)), /*isUnsigned=*/true));
++    }
++    return TypeTraitExpr::Create(Ctx, Ctx.UnsignedLongTy, KWLoc, Kind, Args,
++                                 RParenLoc, Value);
++  }
++
++  QualType StrPtrTy = Ctx.getPointerType(Ctx.CharTy.withConst());
++
++  if (Dependent) {
++    // Defer to instantiation, exactly like the standard type traits: the
++    // TypeTraitExpr is value dependent while its operand is, and
++    // TreeTransform::TransformTypeTraitExpr re-enters BuildTypeTrait with the
++    // substituted type, which then folds to the string literal below.  XNU
++    // needs this: IOOverrideTypedOperators() and the SMR macros apply the
++    // trait to a template parameter inside the constant initialiser of a
++    // kalloc_type view.
++    return TypeTraitExpr::Create(Ctx, StrPtrTy, KWLoc, Kind, Args, RParenLoc,
++                                 APValue());
++  }
++
++  SmallString<64> Sig;
++  getXnuTypeSignature(Ctx, T, Sig);
++
++  QualType ElemTy = Ctx.CharTy.withConst();
++  llvm::APInt Len(Ctx.getTypeSize(Ctx.getSizeType()), Sig.size() + 1);
++  QualType ArrTy = Ctx.getConstantArrayType(ElemTy, Len, /*SizeExpr=*/nullptr,
++                                            ArraySizeModifier::Normal,
++                                            /*IndexTypeQuals=*/0);
++  StringLiteral *SL = StringLiteral::Create(
++      Ctx, Sig, StringLiteralKind::Ordinary, /*Pascal=*/false, ArrTy, KWLoc);
++  return ImplicitCastExpr::Create(Ctx, StrPtrTy, CK_ArrayToPointerDecay, SL,
++                                  /*BasePath=*/nullptr, VK_PRValue,
++                                  FPOptionsOverride());
++}
++
++/// __builtin_xnu_types_compatible(A, B): true when A and B have the same
++/// granule signature.  void is only compatible with itself, and short circuits
++/// before the completeness check so that the wildcard idiom in XNU's
++/// KALLOC_TYPE_IS_COMPATIBLE_PTR works.
++static bool EvaluateXnuTypesCompatible(Sema &S, const TypeSourceInfo *Lhs,
++                                       const TypeSourceInfo *Rhs,
++                                       SourceLocation KeyLoc) {
++  QualType LhsT = Lhs->getType();
++  QualType RhsT = Rhs->getType();
++
++  if (S.Context.hasSameUnqualifiedType(LhsT, RhsT))
++    return true;
++
++  if (LhsT->isVoidType() || RhsT->isVoidType() || LhsT->isFunctionType() ||
++      RhsT->isFunctionType() || LhsT->isVariablyModifiedType() ||
++      RhsT->isVariablyModifiedType())
++    return false;
++
++  // Apple reports this at the closing parenthesis.
++  if (S.RequireCompleteType(KeyLoc, LhsT,
++                            diag::err_incomplete_type_used_in_type_trait_expr))
++    return false;
++  if (S.RequireCompleteType(KeyLoc, RhsT,
++                            diag::err_incomplete_type_used_in_type_trait_expr))
++    return false;
++
++  SmallString<64> LhsSig, RhsSig;
++  getXnuTypeSignature(S.Context, LhsT, LhsSig);
++  getXnuTypeSignature(S.Context, RhsT, RhsSig);
++  return LhsSig == RhsSig;
++}
++
+ ExprResult Sema::BuildTypeTrait(TypeTrait Kind, SourceLocation KWLoc,
+                                 ArrayRef<TypeSourceInfo *> Args,
+                                 SourceLocation RParenLoc) {
+   if (!CheckTypeTraitArity(getTypeTraitArity(Kind), KWLoc, Args.size()))
+     return ExprError();
+ 
++  if (Kind == UTT_XnuTypeSignature || Kind == UTT_XnuTypeSummary)
++    return BuildXnuUnaryTypeTrait(*this, Kind, KWLoc, Args, RParenLoc);
++
+   if (Kind <= UTT_Last && !CheckUnaryTypeTraitTypeCompleteness(
+                               *this, Kind, KWLoc, Args[0]->getType()))
+     return ExprError();
+@@ -1675,6 +1805,8 @@ static bool EvaluateBinaryTypeTrait(Sema &Self, TypeTrait BTT,
+     return cast<CXXRecordDecl>(DerivedRecord->getDecl())
+         ->isVirtuallyDerivedFrom(cast<CXXRecordDecl>(BaseRecord->getDecl()));
+   }
++  case BTT_XnuTypesCompatible:
++    return EvaluateXnuTypesCompatible(Self, Lhs, Rhs, KeyLoc);
+   case BTT_IsSame:
+     return Self.Context.hasSameType(LhsT, RhsT);
+   case BTT_TypeCompatible: {

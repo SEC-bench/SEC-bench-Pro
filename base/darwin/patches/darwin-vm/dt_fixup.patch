@@ -1,0 +1,57 @@
+--- a/dt_fixup.py
++++ b/dt_fixup.py
+@@ -218,6 +218,54 @@
+   # This fixes panic(cpu 0 caller 0xfffffff008b8e7b8): "AMFI: No PMGR?\n" @ConfigurationSettings.cpp:388
+   d['defaults'].props['vmm-present'] = "u32:1"
+ 
++  # iOS 16-era / macOS 14.x AppleImage4 reads the boot nonce hash (4CC BNCH)
++  # from /chosen/manifest-properties. Real iBoot renames an UnusedStringProperty
++  # placeholder to BNCH and fills it in; nothing does that here, so the lookup
++  # returns ENOENT and AppleImage4 panics "failed to read boot nonce hash:
++  # secure boot level = 0x0: 2" (recorded on the macOS 14.2 guest).
++  # crypto-hash-method is sha2-384, so 48 bytes.
++  #
++  # SPTM guests must NOT get this: synthesising BNCH on a tree that ships no
++  # BNCH makes TXM panic ("Unhandled synchronous exception taken from GL0"),
++  # so bench-common.sh's bench_prep_dtree sets DARWIN_VM_ADD_BNCH=1 only on
++  # the pre-SPTM path.
++  import os
++  if os.environ.get('DARWIN_VM_ADD_BNCH') == '1':
++    try:
++      mp = d['chosen']['manifest-properties']
++    except ValueError:
++      mp = None
++    if mp is not None and 'BNCH' not in mp.props:
++      mp.props['BNCH'] = b'\x00' * 48
++
++  # Two more /chosen values that real iBoot fills in from the boot volume's
++  # LocalPolicy and that the IPSW's DeviceTree only carries as placeholders.
++  # macOS 26.x tolerates both placeholders; macOS 13.0 (xnu-8792, AppleImage4
++  # 201.40.10) does not, and each one is a deterministic panic before launchd:
++  #
++  #  * apfs-preboot-uuid: the boot volume group's UUID as a string, which
++  #    AppleImage4 uuid_parse()s -- the placeholder is not a UUID, so it
++  #    panics "failed to get volume group uuid: 84". Any well-formed UUID
++  #    satisfies it (nothing here has a volume group to look up); this one is
++  #    fixed so two preps produce the same tree.
++  #  * asmb/lp-sip2: the LocalPolicy's "unsafe kernel text" bit (u32 bool,
++  #    bsd/kern/kern_csr.c csr_bootstrap), which turns CTRR enforcement off.
++  #    qemu-sptm's AMCC model reads the CTRR limit registers back as 0, so
++  #    the kernel's read-only region is empty and zalloc_ro_mut() panics on
++  #    its first const-memory source ("not from RO zone map ... or const
++  #    memory (X - X)"). 26.x derives the same "CTRR off" from
++  #    kernel-ctrr-to-be-enabled=0 above; 13.0 needs the policy bit.
++  #
++  # Both are set only when the node/property exists in the tree.
++  if 'apfs-preboot-uuid' in d['chosen'].props:
++    d['chosen'].props['apfs-preboot-uuid'] = b'5F4E0D1C-2B3A-4958-8776-655443322110\x00'
++  try:
++    asmb = d['chosen']['asmb']
++  except ValueError:
++    asmb = None
++  if asmb is not None and 'lp-sip2' not in asmb.props:
++    asmb.props['lp-sip2'] = "u32:1"
++
+   amcc=d['chosen']['lock-regs']['amcc']
+   amcc.props['aperture-count'] = "u32:1"
+   amcc.props['aperture-size'] = "u32:0x4000"

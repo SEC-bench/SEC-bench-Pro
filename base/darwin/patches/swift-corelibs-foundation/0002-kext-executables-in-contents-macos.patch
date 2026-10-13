@@ -1,0 +1,32 @@
+CFBundle: a .kext's executable is in Contents/MacOS even when the host is Linux
+
+Applies to swift-corelibs-foundation (Sources/CoreFoundation), not to dyld.
+
+_CFBundleGetPlatformExecutablesSubdirectoryName() answers "which
+Contents/<X>/ holds this bundle's executable" from the *host* OS, and returns
+"Linux" under TARGET_OS_LINUX.  That is right for a Linux bundle and wrong for
+everything this tool does: dyld_app_cache_util reads Apple's .kext bundles,
+whose executables are always in Contents/MacOS, and it does so through
+CFBundleCopyExecutableURL().
+
+Symptom without this patch: the build succeeds, quietly.  Every kext looks
+codeless, so nothing is linked in and the collection comes out with a single
+LC_FILESET_ENTRY (com.apple.kernel) instead of one per kext -- while
+__PRELINK_INFO still lists every bundle, because that half comes from the
+Info.plists.
+diff --git a/Sources/CoreFoundation/CFBundle_Resources.c b/Sources/CoreFoundation/CFBundle_Resources.c
+index f32ce6d..1325300 100644
+--- a/Sources/CoreFoundation/CFBundle_Resources.c
++++ b/Sources/CoreFoundation/CFBundle_Resources.c
+@@ -515,6 +515,11 @@ CF_EXPORT CFStringRef _CFBundleGetCurrentPlatform(void) {
+ }
+ 
+ CF_PRIVATE CFStringRef _CFBundleGetPlatformExecutablesSubdirectoryName(void) {
++    // base/darwin/toolchain/build-dyld-app-cache-util.sh (Darwin-bench): this CoreFoundation reads *macOS*
++    // bundles (.kext) on a Linux host, so the executable always lives in
++    // Contents/MacOS, never Contents/Linux.  Without this every kext looks
++    // codeless and the collection comes out with the kernel and nothing else.
++    return CFSTR("MacOS");
+ #if TARGET_OS_MAC
+     return CFSTR("MacOS");
+ #elif TARGET_OS_WIN32

@@ -1,0 +1,8 @@
+{
+  "version": 0,
+  "roots": [
+    { "type": "directory-remap",
+      "name": "/vfs/_foundation_unicode",
+      "external-contents": "/usr/include/unicode" }
+  ]
+}

@@ -1,0 +1,51 @@
+kernel-collection-builder: KCB_TEXT_EXEC_ORDER=kernel-first keeps the pre-dyld-1378 __TEXT_EXEC order
+
+dyld-1378 (macOS 26.5) started placing the kexts' __TEXT_EXEC segments before
+the kernel's inside the collection's __TEXT_EXEC (stable_partition "kexts
+first, static exe last"), so that xnu's __TEXT_BOOT_EXEC stays within branch
+range of its __TEXT_EXEC. xnu-12377.121.x (26.5) gained the matching case in
+osfmk/arm64/arm_vm_init.c (`segTEXTEXECB != segKCTEXTEXECB`). Older kernels
+only know the previous layout: they compute the kext text range as "the KC's
+__TEXT_EXEC after the kernel's __LAST", get zero for it, and panic in
+arm_vm_init() with
+
+    Assertion failed: segSizePLKDATACONST && segSizePLKTEXTEXEC
+
+before the console is up (macOS 26.3's KDK kernels, for example).
+
+dyld-1340 (26.3's dyld, and so 26.3's kmutil) had no partition and laid the
+kernel's text out first. This hunk makes that order selectable through the
+environment -- KCB_TEXT_EXEC_ORDER=kernel-first -- and leaves the default
+(kexts first) as kmutil has it. bench-kc-build sets it from --text-exec-order.
+
+diff --git a/kernel-collection-builder/AppCacheBuilder.cpp b/kernel-collection-builder/AppCacheBuilder.cpp
+index f31906f..814878e 100644
+--- a/kernel-collection-builder/AppCacheBuilder.cpp
++++ b/kernel-collection-builder/AppCacheBuilder.cpp
+@@ -478,11 +478,21 @@ void AppCacheBuilder::assignSegmentRegionsAndOffsets()
+         for ( AppCacheDylibInfo& dylib : sortedDylibs ) {
+             textSortedDylibs.push_back(&dylib);
+         }
+-        std::stable_partition(textSortedDylibs.begin(), textSortedDylibs.end(), [](const AppCacheDylibInfo* a) {
+-            // Sort static exe last, kexts first
+-            const UnsafeHeader* hdr = (const UnsafeHeader*)a->input->mappedFile.mh;
+-            return hdr->isKextBundle();
+-        });
++        // KCB_TEXT_EXEC_ORDER=kernel-first keeps the pre-dyld-1378 order (the
++        // kernel's __TEXT_EXEC first, the kexts' after its __LAST), which is the
++        // only layout xnu <= 12377.81.x (macOS 26.3) accepts: its arm_vm_init()
++        // derives the kext text range as "KC __TEXT_EXEC after the kernel's
++        // __LAST" and asserts (segSizePLKDATACONST && segSizePLKTEXTEXEC) when
++        // that range is empty. xnu 12377.121.x (26.5) added the kexts-first case.
++        const char* textExecOrder = getenv("KCB_TEXT_EXEC_ORDER");
++        bool kernelTextExecFirst = (textExecOrder != nullptr) && (strcmp(textExecOrder, "kernel-first") == 0);
++        if ( !kernelTextExecFirst ) {
++            std::stable_partition(textSortedDylibs.begin(), textSortedDylibs.end(), [](const AppCacheDylibInfo* a) {
++                // Sort static exe last, kexts first
++                const UnsafeHeader* hdr = (const UnsafeHeader*)a->input->mappedFile.mh;
++                return hdr->isKextBundle();
++            });
++        }
+ 
+         __block uint64_t offsetInRegion = 0;
+         for ( AppCacheDylibInfo* dylib : textSortedDylibs ) {

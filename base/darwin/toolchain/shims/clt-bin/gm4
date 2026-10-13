@@ -1,0 +1,3 @@
+#!/bin/sh
+# gm4 is GNU m4 under its Apple name; xnu's HOST_GM4 looks for it by that name.
+exec m4 "$@"
