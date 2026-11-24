@@ -10,7 +10,7 @@ The script:
 1.  Loads a TOML config describing model, API provider, instances, timeout, etc.
 2.  For each benchmark instance: starts a container, configures OpenCode,
     runs the agent, collects compact trajectory/session artifacts, audit files,
-    tracking databases, result files, and tears down.
+    and result files, and tears down the container.
 """
 
 from __future__ import annotations
@@ -30,21 +30,14 @@ from typing import Any
 
 import common
 from common import (
-    ACOV_PYTHON_AUDIT_ENV_SH,
-    ACOV_SHIM_DIR,
-    ACOV_SOCKET_PATH,
     BOLD,
     CYAN,
     DIM,
     NC,
     SCRIPT_DIR,
     YELLOW,
-    acov_db_container_path,
-    acov_event_log_container_path,
     build_env_args,
-    collect_acov_artifacts,
     collect_audit_artifacts,
-    collect_beads_artifacts,
     collect_result_files,
     docker_copy_from,
     docker_copy_to,
@@ -60,7 +53,6 @@ from common import (
     resolve_path,
     run_eval_loop,
     run_step,
-    setup_acov,
     setup_linux_evaluation_container,
     step_err,
     step_ok,
@@ -1477,13 +1469,10 @@ def run_instance(
     linux_secb_config_content: str | None,
     linux_instance_dir: Path | None,
     skill_directory: Path | None,
-    acov_path: Path | None,
-    acov_subsystems: str | None,
 ) -> int:
     """Run the full evaluation lifecycle for one benchmark instance."""
     model = config["model"]
     timeout_secs: int = config["timeout"]
-    tracking: str = config.get("tracking", "beads")
     project: str = config.get("project", "")
 
     api: str = config["api"]
@@ -1633,24 +1622,6 @@ def run_instance(
             if rc != 0:
                 return rc
 
-        if tracking == "beads":
-            run_step(
-                "Beads initialization (sqlite backend)",
-                container_id,
-                300,
-                (
-                    'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" && '
-                    f"cd {shlex.quote(work_dir)} && bd init --backend sqlite"
-                ),
-            )
-        elif tracking == "acov":
-            setup_acov(
-                container_id=container_id,
-                work_dir=work_dir,
-                acov_path=acov_path,
-                acov_subsystems=acov_subsystems,
-            )
-
         run_step(
             "Remove AGENTS.md",
             container_id,
@@ -1770,21 +1741,6 @@ def run_instance(
         prompt_container_path = f"/tmp/opencode-eval-prompt-{instance_id}.txt"
         docker_pipe_stdin(container_id, prompt, prompt_container_path)
 
-        if tracking == "acov":
-            path_export = (
-                ACOV_PYTHON_AUDIT_ENV_SH
-                + f'export PATH="{ACOV_SHIM_DIR}:$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
-                + 'export NVM_DIR="$HOME/.nvm" && '
-                + 'if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" 2>/dev/null || true; fi && '
-                + f'export ACOV_DB="{acov_db_container_path(work_dir)}" && '
-                + f'export ACOV_EVENT_LOG="{acov_event_log_container_path(work_dir)}" && '
-                + f'export ACOV_SOCKET="{ACOV_SOCKET_PATH}" && '
-                + f'export ACOV_PROJECT_ROOT="{work_dir}" && '
-                + f'export ACOV_SHIM_DIR="{ACOV_SHIM_DIR}" && '
-            )
-        else:
-            path_export = opencode_path_export
-
         aws_region_export = (
             'if [ -z "${AWS_REGION:-}" ]; then '
             'export AWS_REGION="${AWS_REGION_NAME:-${AWS_DEFAULT_REGION:-}}"; '
@@ -1805,7 +1761,7 @@ def run_instance(
         )
 
         opencode_cmd = (
-            f"{path_export}"
+            f"{opencode_path_export}"
             f"{aws_region_export}"
             "export TERM=xterm-256color && "
             "export COLORTERM=truecolor && "
@@ -1868,11 +1824,6 @@ def run_instance(
         collect_shell_network_sandbox_artifact(container_id, instance_outdir)
         collect_audit_artifacts(container_id, work_dir, instance_outdir)
 
-        if tracking == "beads":
-            collect_beads_artifacts(container_id, work_dir, instance_outdir)
-        elif tracking == "acov":
-            collect_acov_artifacts(container_id, instance_outdir, work_dir)
-
         collect_result_files(container_id, work_dir, instance_outdir)
 
     finally:
@@ -1921,7 +1872,6 @@ def main() -> int:
         error(str(exc))
         return 1
 
-    tracking: str = config.get("tracking", "beads")
     api = config.get("api", "openrouter")
     if api not in _OPENCODE_PROVIDER_SETTINGS:
         error(
@@ -2069,22 +2019,6 @@ def main() -> int:
     if config.get("agents_md"):
         agents_md = resolve_path(SCRIPT_DIR, config["agents_md"])
 
-    acov_path: Path | None = None
-    acov_subsystems: str | None = config.get("acov_subsystems")
-    if tracking == "acov":
-        acov_path = resolve_path(SCRIPT_DIR, config["acov_path"])
-        if not acov_path.is_dir():
-            error(f"acov project not found: {acov_path}")
-            return 1
-        ac_bin = acov_path / "target" / "release" / "ac"
-        shim_bin = acov_path / "target" / "release" / "acov-shim"
-        if not ac_bin.is_file() or not shim_bin.is_file():
-            error(
-                f"acov binaries not found at {acov_path / 'target/release/'}. "
-                "Build first: cd acov && cargo build --release"
-            )
-            return 1
-
     if not prompt_template_path.is_file():
         error(f"Prompt template not found: {prompt_template_path}")
         return 1
@@ -2103,7 +2037,6 @@ def main() -> int:
     info(f"Model: {model}")
     info(f"API: {api}")
     info(f"OpenCode model ref: {_model_ref(api, model)}")
-    info(f"Tracking: {tracking}")
     info(f"Timeout: {timeout_secs}s")
     if variant:
         info(f"Variant: {variant}")
@@ -2140,10 +2073,6 @@ def main() -> int:
         info(f"Skill directory: {skill_directory}")
     if agents_md:
         info(f"Agents MD: {agents_md}")
-    if acov_path:
-        info(f"acov path: {acov_path}")
-        if acov_subsystems:
-            info(f"acov subsystems: {acov_subsystems}")
     info(f"Instances: {' '.join(instances)}")
 
     return run_eval_loop(
@@ -2157,8 +2086,6 @@ def main() -> int:
         use_tui=not args.no_tui,
         agents_md=agents_md,
         skill_directory=skill_directory,
-        acov_path=acov_path,
-        acov_subsystems=acov_subsystems,
     )
 
 

@@ -55,7 +55,6 @@ images_dir = "../projects/sm"
 # approval_mode=never keeps the run unattended. strict_config rejects unsafe or
 # conflicting config, update_codex_cli refreshes the bundled CLI, and JSON output
 # preserves the complete session trajectory.
-tracking = "none"
 approval_mode = "never"
 strict_config = true
 update_codex_cli = true
