@@ -59,7 +59,6 @@ images_dir = "../projects/sm"
 #
 # update_claude_cli refreshes the image's bundled CLI before the run.
 # output_format=stream-json preserves the complete tool trajectory.
-tracking = "none"
 update_claude_cli = true
 output_format = "stream-json"
 

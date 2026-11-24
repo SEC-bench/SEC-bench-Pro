@@ -10,7 +10,7 @@ The script:
 1.  Loads a TOML config describing model, instances, timeout, etc.
 2.  For each benchmark instance: starts a container, configures
     Claude Code, runs the agent, collects artifacts (Claude projects,
-    audit files, tracking database), and tears down.
+    audit files, and results), and tears down the container.
 """
 
 from __future__ import annotations
@@ -27,21 +27,14 @@ from pathlib import Path
 
 import common
 from common import (
-    ACOV_PYTHON_AUDIT_ENV_SH,
-    ACOV_SHIM_DIR,
-    ACOV_SOCKET_PATH,
     BOLD,
     CYAN,
     DIM,
     NC,
     SCRIPT_DIR,
     YELLOW,
-    acov_db_container_path,
-    acov_event_log_container_path,
     build_env_args,
-    collect_acov_artifacts,
     collect_audit_artifacts,
-    collect_beads_artifacts,
     collect_result_files,
     docker_copy_from,
     docker_copy_to,
@@ -58,7 +51,6 @@ from common import (
     resolve_path,
     run_eval_loop,
     run_step,
-    setup_acov,
     setup_linux_evaluation_container,
     step_err,
     step_ok,
@@ -502,13 +494,10 @@ def run_instance(
     linux_secb_config_content: str | None,
     linux_instance_dir: Path | None,
     skill_directory: Path | None,
-    acov_path: Path | None,
-    acov_subsystems: str | None,
 ) -> int:
     """Run the full evaluation lifecycle for one benchmark instance."""
     model = config["model"]
     timeout_secs: int = config["timeout"]
-    tracking: str = config.get("tracking", "beads")
     project: str = config.get("project", "")
     provider: str = config.get("provider", "bedrock")
     provider_settings = _CLAUDE_PROVIDER_SETTINGS[provider]
@@ -664,24 +653,6 @@ def run_instance(
             if claude_json_rc != 0:
                 return claude_json_rc
 
-        if tracking == "beads":
-            run_step(
-                "Beads initialization (sqlite backend)",
-                container_id,
-                300,
-                (
-                    'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" && '
-                    f"cd {work_dir} && bd init --backend sqlite"
-                ),
-            )
-        elif tracking == "acov":
-            setup_acov(
-                container_id=container_id,
-                work_dir=work_dir,
-                acov_path=acov_path,
-                acov_subsystems=acov_subsystems,
-            )
-
         run_step(
             "Remove CLAUDE.md",
             container_id,
@@ -788,20 +759,7 @@ def run_instance(
         prompt_container_path = f"/tmp/claude-eval-prompt-{instance_id}.txt"
         docker_pipe_stdin(container_id, prompt, prompt_container_path)
 
-        if tracking == "acov":
-            path_export = (
-                ACOV_PYTHON_AUDIT_ENV_SH
-                + f'export PATH="{ACOV_SHIM_DIR}:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
-                + f'export ACOV_DB="{acov_db_container_path(work_dir)}" && '
-                + f'export ACOV_EVENT_LOG="{acov_event_log_container_path(work_dir)}" && '
-                + f'export ACOV_SOCKET="{ACOV_SOCKET_PATH}" && '
-                + f'export ACOV_PROJECT_ROOT="{work_dir}" && '
-                + f'export ACOV_SHIM_DIR="{ACOV_SHIM_DIR}" && '
-            )
-        else:
-            path_export = (
-                'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
-            )
+        path_export = 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
 
         nvm_setup = (
             'export NVM_DIR="$HOME/.nvm" && '
@@ -957,11 +915,6 @@ def run_instance(
 
         collect_audit_artifacts(container_id, work_dir, instance_outdir)
 
-        if tracking == "beads":
-            collect_beads_artifacts(container_id, work_dir, instance_outdir)
-        elif tracking == "acov":
-            collect_acov_artifacts(container_id, instance_outdir, work_dir)
-
         collect_result_files(container_id, work_dir, instance_outdir)
 
     finally:
@@ -1009,7 +962,6 @@ def main() -> int:
         error(str(exc))
         return 1
 
-    tracking: str = config.get("tracking", "beads")
     provider = config.get("provider", "bedrock")
     if provider not in _CLAUDE_PROVIDER_SETTINGS:
         error(
@@ -1202,22 +1154,6 @@ def main() -> int:
     if config.get("agents_md"):
         agents_md = resolve_path(SCRIPT_DIR, config["agents_md"])
 
-    acov_path: Path | None = None
-    acov_subsystems: str | None = config.get("acov_subsystems")
-    if tracking == "acov":
-        acov_path = resolve_path(SCRIPT_DIR, config["acov_path"])
-        if not acov_path.is_dir():
-            error(f"acov project not found: {acov_path}")
-            return 1
-        ac_bin = acov_path / "target" / "release" / "ac"
-        shim_bin = acov_path / "target" / "release" / "acov-shim"
-        if not ac_bin.is_file() or not shim_bin.is_file():
-            error(
-                f"acov binaries not found at {acov_path / 'target/release/'}. "
-                "Build first: cd acov && cargo build --release"
-            )
-            return 1
-
     if not prompt_template_path.is_file():
         error(f"Prompt template not found: {prompt_template_path}")
         return 1
@@ -1235,7 +1171,6 @@ def main() -> int:
     info(f"Output directory: {run_outdir}")
     info(f"Model: {model}")
     info(f"Provider: {provider}")
-    info(f"Tracking: {tracking}")
     info(f"Timeout: {timeout_secs}s")
     info(f"Output format: {config.get('output_format', 'stream-json')}")
     info(f"Reasoning effort: {config['reasoning_effort']}")
@@ -1270,10 +1205,6 @@ def main() -> int:
         info(f"Skill directory: {skill_directory}")
     if agents_md:
         info(f"Agents MD: {agents_md}")
-    if acov_path:
-        info(f"acov path: {acov_path}")
-        if acov_subsystems:
-            info(f"acov subsystems: {acov_subsystems}")
     if config.get("max_budget_usd") is not None:
         info(f"Max budget: ${config['max_budget_usd']}")
     if config.get("permission_mode"):
@@ -1292,8 +1223,6 @@ def main() -> int:
         agents_md=agents_md,
         agents_md_artifact_name="CLAUDE.md",
         skill_directory=skill_directory,
-        acov_path=acov_path,
-        acov_subsystems=acov_subsystems,
     )
 
 

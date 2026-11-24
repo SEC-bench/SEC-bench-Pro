@@ -177,8 +177,7 @@ RUN set -eux; \
     : "agent-cache-bust=${AGENT_CACHE_BUST}"; \
     npm install --global \
         "@openai/codex@${CODEX_VERSION}" \
-        "opencode-ai@${OPENCODE_VERSION}" \
-        "@beads/bd@0.50.2"; \
+        "opencode-ai@${OPENCODE_VERSION}"; \
     npm cache clean --force; \
     curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh; \
     bash /tmp/claude-install.sh "${CLAUDE_CODE_VERSION}"; \
@@ -201,5 +200,4 @@ RUN set -eux; \
         printf 'opencode='; timeout --kill-after=5s 30s opencode --version; \
         printf 'claude='; timeout --kill-after=5s 30s claude --version; \
         printf 'uv='; uv --version; \
-        printf 'bd='; timeout --kill-after=5s 30s bd --version; \
     } > /etc/secb-agent-versions

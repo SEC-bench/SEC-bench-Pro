@@ -10,7 +10,7 @@ The script:
 1.  Loads a TOML config describing model, instances, timeout, etc.
 2.  For each benchmark instance: starts a privileged container,
     configures Codex auth, runs the agent, collects artifacts
-    (Codex sessions, audit files, tracking database), and tears down.
+    (Codex sessions, audit files, and results), and tears down the container.
 """
 
 from __future__ import annotations
@@ -28,22 +28,14 @@ from pathlib import Path
 
 import common
 from common import (
-    ACOV_PYTHON_AUDIT_ENV_SH,
-    ACOV_SHIM_DIR,
-    ACOV_SOCKET_PATH,
     BOLD,
-    acov_db_container_path,
-    acov_event_log_container_path,
-    bash_codex_native_and_acov_path,
     CYAN,
     DIM,
     NC,
     SCRIPT_DIR,
     YELLOW,
     build_env_args,
-    collect_acov_artifacts,
     collect_audit_artifacts,
-    collect_beads_artifacts,
     collect_result_files,
     docker_copy_from,
     docker_copy_to,
@@ -59,7 +51,6 @@ from common import (
     resolve_path,
     run_eval_loop,
     run_step,
-    setup_acov,
     setup_linux_evaluation_container,
     is_timeout_exit_code,
     step_err,
@@ -689,13 +680,11 @@ def run_instance(
     linux_secb_config_content: str | None,
     linux_instance_dir: Path | None,
     skill_directory: Path | None,
-    acov_path: Path | None,
-    acov_subsystems: str | None,
 ) -> int:
     """Run the full evaluation lifecycle for one benchmark instance.
 
     1.  Start a privileged detached container.
-    2.  Configure Codex auth, tracking, protocol files, skills.
+    2.  Configure Codex auth, protocol files, and skills.
     3.  Run the Codex agent with the rendered prompt.
     4.  Collect all artifacts.
     5.  Tear down the container.
@@ -704,7 +693,6 @@ def run_instance(
     """
     model = config["model"]
     timeout_secs: int = config["timeout"]
-    tracking: str = config.get("tracking", "beads")
     project: str = config.get("project", "")
     provider: str = config.get("provider", "openai")
     provider_settings = _CODEX_PROVIDER_SETTINGS[provider]
@@ -895,26 +883,7 @@ def run_instance(
         if blacklist_rc != 0:
             return blacklist_rc
 
-        # 2. Tracking-specific initialization
-        if tracking == "beads":
-            run_step(
-                "Beads initialization (sqlite backend)",
-                container_id,
-                300,
-                (
-                    'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" && '
-                    f"cd {work_dir} && bd init --backend sqlite"
-                ),
-            )
-        elif tracking == "acov":
-            setup_acov(
-                container_id=container_id,
-                work_dir=work_dir,
-                acov_path=acov_path,
-                acov_subsystems=acov_subsystems,
-            )
-
-        # 3. Remove existing AGENTS.md, copy eval protocol
+        # 2. Remove existing AGENTS.md, copy eval protocol
         run_step(
             "Remove AGENTS.md",
             container_id,
@@ -936,7 +905,7 @@ def run_instance(
                 instance_dir=linux_instance_dir,
             )
 
-        # 4. Copy skill files to .agents/skills/
+        # 3. Copy skill files to .agents/skills/
         if skill_directory and skill_directory.is_dir():
             step_run("Copy skill files")
             docker_exec(
@@ -954,7 +923,7 @@ def run_instance(
             else:
                 step_warn(f"Copy skill files  {DIM}copy failed{NC}")
 
-        # 5. Initialize git repo (Codex requires a git repo)
+        # 4. Initialize git repo (Codex requires a git repo)
         run_step(
             "Initialize git repo",
             container_id,
@@ -976,31 +945,11 @@ def run_instance(
         prompt_container_path = f"/tmp/codex-eval-prompt-{instance_id}.txt"
         docker_pipe_stdin(container_id, prompt, prompt_container_path)
 
-        # Source nvm first so ``npm root -g`` works for Codex path resolution.
+        # Load nvm before invoking Codex.
         nvm_setup = (
             'export NVM_DIR="$HOME/.nvm" && '
             '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" 2>/dev/null; '
         )
-
-        # acov: native Codex binary + PATH (shims before bundled rg). See
-        # ``bash_codex_native_and_acov_path`` docstring.
-        if tracking == "acov":
-            path_export = (
-                ACOV_PYTHON_AUDIT_ENV_SH
-                + bash_codex_native_and_acov_path(
-                    shim_dir=ACOV_SHIM_DIR,
-                    codex_cli_fallback=codex_cli,
-                )
-                + f'export ACOV_DB="{acov_db_container_path(work_dir)}" && '
-                f'export ACOV_EVENT_LOG="{acov_event_log_container_path(work_dir)}" && '
-                f'export ACOV_SOCKET="{ACOV_SOCKET_PATH}" && '
-                f'export ACOV_PROJECT_ROOT="{work_dir}" && '
-                f'export ACOV_SHIM_DIR="{ACOV_SHIM_DIR}" && '
-            )
-            codex_invoker = '"${CODEX_EXE:-$CODEX_CLI_FALLBACK}"'
-        else:
-            path_export = 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
-            codex_invoker = shlex.quote(codex_cli)
 
         # Build the codex CLI command
         # Approval policy is a top-level Codex option in current CLI versions,
@@ -1009,14 +958,14 @@ def run_instance(
 
         codex_cmd = (
             f"{nvm_setup}"
-            f"{path_export}"
+            'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH" && '
             f"unset {' '.join(_CODEX_AUTH_ENV_VARS)} && "
             "export TERM=xterm-256color && "
             "export COLORTERM=truecolor && "
             "export FORCE_COLOR=1 && "
             "export RUST_LOG='codex_core::session=off' && "
             f"cd {work_dir} && "
-            f"{codex_invoker} "
+            f"{shlex.quote(codex_cli)} "
         )
         if strict_config:
             codex_cmd += "--strict-config "
@@ -1124,12 +1073,6 @@ def run_instance(
         # -- Audit artifacts -----------------------------------------------
         collect_audit_artifacts(container_id, work_dir, instance_outdir)
 
-        # -- Tracking database (beads or acov) -----------------------------
-        if tracking == "beads":
-            collect_beads_artifacts(container_id, work_dir, instance_outdir)
-        elif tracking == "acov":
-            collect_acov_artifacts(container_id, instance_outdir, work_dir)
-
         # -- Result files --------------------------------------------------
         collect_result_files(container_id, work_dir, instance_outdir)
 
@@ -1186,7 +1129,6 @@ def main() -> int:
         error(str(exc))
         return 1
 
-    tracking: str = config.get("tracking", "beads")
     provider = config.get("provider", "openai")
     if not isinstance(provider, str) or not provider.strip():
         error("Missing or invalid provider. Must be a non-empty string.")
@@ -1272,23 +1214,6 @@ def main() -> int:
     if config.get("agents_md"):
         agents_md = resolve_path(SCRIPT_DIR, config["agents_md"])
 
-    # acov-specific fields
-    acov_path: Path | None = None
-    acov_subsystems: str | None = config.get("acov_subsystems")
-    if tracking == "acov":
-        acov_path = resolve_path(SCRIPT_DIR, config["acov_path"])
-        if not acov_path.is_dir():
-            error(f"acov project not found: {acov_path}")
-            return 1
-        ac_bin = acov_path / "target" / "release" / "ac"
-        shim_bin = acov_path / "target" / "release" / "acov-shim"
-        if not ac_bin.is_file() or not shim_bin.is_file():
-            error(
-                f"acov binaries not found at {acov_path / 'target/release/'}. "
-                "Build first: cd acov && cargo build --release"
-            )
-            return 1
-
     # -- Validate prompt template ------------------------------------------
     if not prompt_template_path.is_file():
         error(f"Prompt template not found: {prompt_template_path}")
@@ -1309,7 +1234,6 @@ def main() -> int:
     info(f"Output directory: {run_outdir}")
     info(f"Model: {model}")
     info(f"Provider: {provider}")
-    info(f"Tracking: {tracking}")
     info(f"Timeout: {timeout_secs}s")
     info(f"Reasoning effort: {config['reasoning_effort']}")
     info(f"Approval mode: {config['approval_mode']}")
@@ -1346,10 +1270,6 @@ def main() -> int:
         info(f"Skill directory: {skill_directory}")
     if agents_md:
         info(f"Agents MD: {agents_md}")
-    if acov_path:
-        info(f"acov path: {acov_path}")
-        if acov_subsystems:
-            info(f"acov subsystems: {acov_subsystems}")
     info(f"Instances: {' '.join(instances)}")
 
     # -- Main instance loop ------------------------------------------------
@@ -1364,8 +1284,6 @@ def main() -> int:
         use_tui=not args.no_tui,
         agents_md=agents_md,
         skill_directory=skill_directory,
-        acov_path=acov_path,
-        acov_subsystems=acov_subsystems,
     )
 
 

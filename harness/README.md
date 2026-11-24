@@ -125,7 +125,7 @@ provider; authentication is always supplied through `ANTHROPIC_AUTH_TOKEN`.
 
 The evaluator renders `prompt_template` with per-instance `meta.json`, spins
 up the instance's Docker container, runs the agent with the rendered prompt,
-and harvests `audit/`, session logs, and tracking artifacts into
+and collects `audit/` and session logs in
 `<outdir>/<ts>/<instance_id>/`.
 
 Resulting per-instance directory is self-contained: anything the grader or

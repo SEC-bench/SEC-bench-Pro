@@ -74,7 +74,6 @@ images_dir = "../projects/linux"
 #
 # compact saves the trajectory, continuation bundle, reasoning, prompt/config,
 # worktree diffs, audit files, and results. Use debug for raw DB/storage/logs.
-tracking = "none"
 opencode_artifacts = "compact"
 # output_format=json lets the harness render tool calls, reasoning, and usage.
 output_format = "json"

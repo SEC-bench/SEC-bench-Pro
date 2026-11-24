@@ -83,7 +83,6 @@ images_dir = "../projects/sm"
 #              and results.
 #   debug   -> compact plus raw OpenCode DB/WAL/SHM, storage, logs, tool output,
 #              snapshots, and full project .opencode. This can be much larger.
-tracking = "none"
 opencode_artifacts = "compact"
 #
 # output_format is passed to `opencode run --format`. The latest OpenCode CLI
