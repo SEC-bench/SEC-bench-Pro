@@ -1,0 +1,154 @@
+diff --git a/kernel-collection-builder/dyld_app_cache_util.cpp b/kernel-collection-builder/dyld_app_cache_util.cpp
+index 1268c0b..9c18e3d 100644
+--- a/kernel-collection-builder/dyld_app_cache_util.cpp
++++ b/kernel-collection-builder/dyld_app_cache_util.cpp
+@@ -1174,6 +1174,20 @@ createKernelCollectionForArch(const CreateKernelCollectionOptions& options, cons
+                 CFStringRef archBundleLibrariesStringRef = CFStringCreateWithCStringNoCopy(kCFAllocatorDefault, archBundleLibraries.c_str(),
+                                                                                            kCFStringEncodingASCII, kCFAllocatorNull);
+                 CFTypeRef depsRef = CFBundleGetValueForInfoDictionaryKey(bundleRef, archBundleLibrariesStringRef);
++                if ( (depsRef == nullptr) && (strcmp(arch, "arm64e") == 0) ) {
++                    // ---- darwin-bench patch ----
++                    // Apple's kexts spell the arm64e override "OSBundleLibraries_arm64",
++                    // not "OSBundleLibraries_arm64e" -- e.g. AppleSMC.kext lists
++                    // com.apple.iokit.IOACPIFamily under the generic key (that is the
++                    // Intel graph) and com.apple.driver.AppleARMPlatform under
++                    // OSBundleLibraries_arm64.  Falling straight through to the generic
++                    // key gives the arm64e kext the x86_64 dependency graph, and the link
++                    // then fails on metaclass superclass symbols such as
++                    // __ZN16AppleARMFunction10gMetaClassE.  kmutil resolves the key with
++                    // the kext arch name, so do the same.
++                    depsRef = CFBundleGetValueForInfoDictionaryKey(bundleRef, CFSTR("OSBundleLibraries_arm64"));
++                    // ---- end darwin-bench patch ----
++                }
+                 if ( depsRef == nullptr ) {
+                     // No arch specific deps, so try the defaults
+                     depsRef = CFBundleGetValueForInfoDictionaryKey(bundleRef, CFSTR("OSBundleLibraries"));
+@@ -1392,6 +1406,64 @@ createKernelCollectionForArch(const CreateKernelCollectionOptions& options, cons
+                 return {};
+         }
+ 
++        // ---- darwin-bench patch: drop kexts with no slice for the arch being built ----
++        // A kext reached through another kext's OSBundleLibraries may have no slice for
++        // the arch we are building: the KDK ships x86_64-only kexts (IOACPIFamily and
++        // friends) that arm64e drivers still list as dependencies, and the System.kext
++        // KPI plug-ins are plain arm64e rather than arm64e.kernel.  fileSystem.loadFile()
++        // does not check the arch, so the mismatch surfaces deep inside addKextDataFile()
++        // and aborts the whole link.  kmutil drops such kexts silently -- and also drops
++        // them from the dependency lists of the kexts that named them, otherwise the
++        // binder fails with "could not find a kext with '<id>' bundle-id".  Do both.
++        std::set<std::string> skippedBundles;
++        for (const auto& bundleEntry : foundBundles) {
++            if ( bundleEntry.second.executablePath.empty() )
++                continue;   // codeless kexts are fine
++            if ( existingBundles.count(bundleEntry.first) != 0 )
++                continue;   // resolved from the kernel's __LINKINFO,__symbolsets instead
++                            // (the com.apple.kpi.* pseudo-kexts): their KDK "executables"
++                            // are plain-arm64e KPI stubs and must stay in dependency lists
++            Diagnostics    probeDiag;
++            char           probePath[MAXPATHLEN];
++            LoadedFileInfo probeInfo = MachOAnalyzer::load(probeDiag, fileSystem,
++                                                           bundleEntry.second.executablePath.c_str(),
++                                                           archs, platform, probePath);
++            if ( probeDiag.hasError() ) {
++                skippedBundles.insert(bundleEntry.first);
++                continue;
++            }
++            fileSystem.unloadFile(probeInfo);
++        }
++        // ---- end darwin-bench patch ----
++
++        // Snapshot each discovered bundle's declared dependencies before the load loop
++        // starts rewriting them; the transitive closure below reads from this.
++        std::map<std::string, std::vector<std::string>> origDeps;
++        for (const auto& bundleEntry : foundBundles) {
++            origDeps[bundleEntry.first] = bundleEntry.second.dependencies;
++            // Codeless kexts never got their OSBundleLibraries parsed: the discovery
++            // block above returns early, before the dependency parsing, when
++            // CFBundleCopyExecutableURL() is null.  They still matter as *links* in
++            // somebody else's dependency chain -- AppleHIDMouse reaches IOHIDFamily's
++            // _GetGlobalEventFlags only through the codeless IOHIDSystem.kext plug-in --
++            // so read their dependencies out of the Info.plist here.
++            if ( !bundleEntry.second.dependencies.empty() || (bundleEntry.second.infoPlist == nullptr) )
++                continue;
++            CFTypeRef depsRef = nullptr;
++            if ( strcmp(arch, "arm64e") == 0 )
++                depsRef = CFDictionaryGetValue(bundleEntry.second.infoPlist, CFSTR("OSBundleLibraries_arm64"));
++            if ( depsRef == nullptr )
++                depsRef = CFDictionaryGetValue(bundleEntry.second.infoPlist, CFSTR("OSBundleLibraries"));
++            if ( (depsRef == nullptr) || (CFGetTypeID(depsRef) != CFDictionaryGetTypeID()) )
++                continue;
++            CFDictionaryApplyFunction((CFDictionaryRef)depsRef, [](const void* key, const void* value, void* context) {
++                (void)value;
++                const char* name = CFStringGetCStringPtr((CFStringRef)key, kCFStringEncodingASCII);
++                if ( name != nullptr )
++                    ((std::vector<std::string>*)context)->push_back(name);
++            }, &origDeps[bundleEntry.first]);
++        }
++
+         std::set<std::string> processedBundleIDs;
+         std::list<const char*> bundleIDsToLoad;
+         bundleIDsToLoad.insert(bundleIDsToLoad.end(), options.bundleIDs.begin(), options.bundleIDs.end());
+@@ -1418,6 +1490,14 @@ createKernelCollectionForArch(const CreateKernelCollectionOptions& options, cons
+ 
+             BundleData& bundleData = it->second;
+ 
++            // ---- darwin-bench patch ----
++            if ( skippedBundles.count(bundleID) != 0 ) {
++                fprintf(stderr, "[WARNING]: Skipping bundle '%s': no slice for this arch\n",
++                        bundleID.c_str());
++                continue;
++            }
++            // ---- end darwin-bench patch ----
++
+             LoadedFileInfo info;
+ 
+             // Codeless kexts don't have an executable path, but we still want to put their
+@@ -1437,6 +1517,48 @@ createKernelCollectionForArch(const CreateKernelCollectionOptions& options, cons
+                     return {};
+             }
+ 
++            // ---- darwin-bench patch: drop dependencies we skipped above ----
++            std::erase_if(bundleData.dependencies, [&](const std::string& dep) {
++                return skippedBundles.count(dep) != 0;
++            });
++            // Expand to the transitive closure of OSBundleLibraries.  AppCacheBuilder
++            // resolves a bind by scanning only the dependency array it was handed, but
++            // kexts routinely bind symbols owned by a dependency-of-a-dependency: e.g.
++            // AppleDCPDPTXProxy needs __ZN16AppleARMIODevice9metaClassE, exported by
++            // com.apple.driver.AppleARMPlatform, which it reaches only through
++            // com.apple.driver.AppleDCP.  kmutil's KC contains exactly the same
++            // OSBundleLibraries dictionaries, so KernelManagement must be flattening the
++            // graph before calling addKextDataFile.  Direct dependencies stay first, so
++            // resolution order is unchanged for anything that already resolved.
++            {
++                std::set<std::string> seen(bundleData.dependencies.begin(), bundleData.dependencies.end());
++                for ( size_t i = 0; i != bundleData.dependencies.size(); ++i ) {
++                    auto depIt = origDeps.find(bundleData.dependencies[i]);
++                    if ( depIt == origDeps.end() )
++                        continue;
++                    for (const std::string& transitive : depIt->second) {
++                        if ( skippedBundles.count(transitive) != 0 )
++                            continue;
++                        if ( seen.insert(transitive).second )
++                            bundleData.dependencies.push_back(transitive);
++                    }
++                }
++            }
++
++            // Every kext may bind against the kernel's symbol sets whether or not its
++            // Info.plist declares them: IOAVBFamily binds _get_bsdtask_info from
++            // com.apple.kpi.unsupported while listing only kpi.{bsd,iokit,libkern,mach,
++            // private}, and AppCacheBuilder resolves strictly within the declared
++            // dependency array.  KernelManagement evidently supplies them implicitly, so
++            // append every symbol set that is not already listed.  Appending (rather than
++            // prepending) keeps real kexts ahead of the symbol sets in resolution order.
++            for (const std::string& symbolSetID : existingBundles) {
++                if ( std::find(bundleData.dependencies.begin(), bundleData.dependencies.end(),
++                               symbolSetID) == bundleData.dependencies.end() )
++                    bundleData.dependencies.push_back(symbolSetID);
++            }
++            // ---- end darwin-bench patch ----
++
+             std::vector<const char*> deps;
+             for (const std::string& dependency : bundleData.dependencies)
+                 deps.push_back(dependency.c_str());

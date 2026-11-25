@@ -1,0 +1,179 @@
+#!/bin/bash
+# bench-cc - compile a C file into an arm64 Mach-O that runs in a bench guest.
+#
+#   bench-cc [options] SOURCE... [-- EXTRA_CFLAGS...]
+#
+#   -o PATH            output binary (default: ./<first source basename>)
+#   --platform macos
+#   --min VERSION      minimum OS version (LC_BUILD_VERSION minos)
+#   --sysroot PATH     the SDK (default: $BENCH_SDK, which `crash_check.sh` sets)
+#   --arch ARCH        arm64 (default) or arm64e
+#   --meta-json PATH   read platform/min from a meta.json (default: /bench/meta.json)
+#   --no-sign          skip the ad-hoc `ldid -Cadhoc -S`
+#   --keep             keep the scratch directory and print it
+#   --info             print `ipsw macho info` for the result
+#   -v                 echo every command
+#
+# Toolchain
+# ---------
+# clang with -isysroot pointed at a real Apple SDK, linked by ld64.lld
+# (-fuse-ld=lld), which reads the SDK's libSystem.tbd. The SDK is never in
+# the image: Apple licenses it for Apple-branded hardware, so it is fetched on
+# the host (`bench-fetch-xcode-tools --clt --clt-for-macos <ver> --sdk`) and
+# mounted by `crash_check.sh`, which names it in $BENCH_SDK. The output records
+# LC_LOAD_DYLIB /usr/lib/libSystem.B.dylib, and the guest resolves every symbol
+# out of its own dyld shared cache.
+#
+# The result is ad-hoc signed with `ldid -Cadhoc -S`, which is necessary but
+# NOT sufficient to run it: AMFI only executes a Mach-O whose cdhash is in the
+# boot trust cache, and that cache is a boot-time module. So the binary has to
+# go into the ramdisk before boot -- `bench stage <binary>` does that (it
+# copies, signs, records the cdhash and rebuilds ramdisk.tc). Compiling into a
+# running guest and exec'ing it there gets the process SIGKILLed.
+#
+# Platform defaults come from meta.json: guest.os macOS -> `macos` at
+# guest.version.
+set -euo pipefail
+
+prog="$(basename "$0")"
+note() { echo "${prog}: $*" >&2; }
+die()  { echo "${prog}: error: $*" >&2; exit 1; }
+
+# --------------------------------------------------------------------------
+# arguments
+# --------------------------------------------------------------------------
+out=""
+platform=""
+minver=""
+sysroot="${BENCH_SDK:-}"
+arch="arm64"
+meta_json="${BENCH_TASK_META:-/bench/meta.json}"
+sign=1
+keep=0
+info=0
+verbose=0
+srcs=()
+extra=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o)          out="${2:?}"; shift 2 ;;
+        --platform)  platform="${2:?}"; shift 2 ;;
+        --min)       minver="${2:?}"; shift 2 ;;
+        --sysroot)   sysroot="${2:?}"; shift 2 ;;
+        --arch)      arch="${2:?}"; shift 2 ;;
+        --meta-json) meta_json="${2:?}"; shift 2 ;;
+        --no-sign)   sign=0; shift ;;
+        --keep)      keep=1; shift ;;
+        --info)      info=1; shift ;;
+        -v)          verbose=1; shift ;;
+        -h|--help)   sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --)          shift; extra+=("$@"); break ;;
+        -*)          extra+=("$1"); shift ;;
+        *)           srcs+=("$1"); shift ;;
+    esac
+done
+[[ ${#srcs[@]} -gt 0 ]] || die "usage: ${prog} [options] SOURCE... [-- EXTRA_CFLAGS...]"
+
+run() { [[ "${verbose}" == 1 ]] && { printf '+'; printf ' %q' "$@"; echo; } >&2; "$@"; }
+
+# --------------------------------------------------------------------------
+# platform / min version
+# --------------------------------------------------------------------------
+if [[ -z "${platform}" || -z "${minver}" ]]; then
+    [[ -f "${meta_json}" ]] || die "no --platform/--min and no ${meta_json} to read them from"
+    command -v jq >/dev/null || die "jq is not on PATH"
+    local_os="$(jq -r '.guest.os' "${meta_json}")"
+    local_ver="$(jq -r '.guest.version' "${meta_json}")"
+    case "${local_os}" in
+        macOS)
+            [[ -n "${platform}" ]] || platform="macos"
+            [[ -n "${minver}" ]]   || minver="${local_ver}"
+            ;;
+        *) die "unknown guest.os '${local_os}' in ${meta_json}" ;;
+    esac
+fi
+[[ "${platform}" == macos ]] || die "--platform is macos, not ${platform}"
+
+target="${arch}-apple-${platform}${minver}"
+
+# --------------------------------------------------------------------------
+# tools
+# --------------------------------------------------------------------------
+CC="${BENCH_CC_CLANG:-}"
+if [[ -z "${CC}" ]]; then
+    for c in "clang-${LLVM_VERSION:-24}" clang-24 clang; do
+        if command -v "${c}" >/dev/null; then CC="${c}"; break; fi
+    done
+fi
+[[ -n "${CC}" ]] || die "no clang on PATH"
+
+[[ -n "${sysroot}" && -d "${sysroot}/usr/include" ]] \
+    || die "no SDK${sysroot:+ at ${sysroot}}: fetch one with 'bench-fetch-xcode-tools --clt --clt-for-macos <ver> --sdk --out \$DARWIN_BENCH_DOWNLOADS/sdk' on the host (crash_check.sh mounts it), or pass --sysroot"
+
+[[ -n "${out}" ]] || out="./$(basename "${srcs[0]}" .c)"
+mkdir -p "$(dirname "${out}")"
+
+work="$(mktemp -d /tmp/bench-cc-XXXXXX)"
+cleanup() { [[ "${keep}" == 1 ]] && { note "scratch kept in ${work}"; return; }; rm -rf "${work}"; }
+trap cleanup EXIT
+
+# --------------------------------------------------------------------------
+# compile + link
+# --------------------------------------------------------------------------
+# Language for a source: clang's own default from the extension, except that a
+# .c/.m that does not parse as C/Objective-C but does as its C++ variant is
+# compiled as C++ (a `.c` file written with C++-only syntax -- brace
+# initialisation, say -- then just works, with a note). Real C stays C: it
+# passes the first probe and the second is never run. The SDK's headers are
+# `extern "C"`-guarded, so libSystem calls keep C linkage under C++.
+bench_cc_lang() {
+    local src="$1" base
+    case "${src##*.}" in
+        cc|cp|cpp|cxx|c++|C) echo "c++"; return ;;
+        mm|M)                echo "objective-c++"; return ;;
+        m)                   base="objective-c" ;;
+        *)                   base="c" ;;
+    esac
+    if "${CC}" -target "${target}" -isysroot "${sysroot}" \
+            -x "${base}" -fsyntax-only "${src}" >/dev/null 2>&1; then
+        echo "${base}"
+    elif "${CC}" -target "${target}" -isysroot "${sysroot}" \
+            -x "${base}++" -fsyntax-only "${src}" >/dev/null 2>&1; then
+        note "${src}: not valid ${base}, compiling as ${base}++"
+        echo "${base}++"
+    else
+        echo "${base}"   # let the real compile below report the C error
+    fi
+}
+
+objs=()
+for s in "${srcs[@]}"; do
+    [[ -f "${s}" ]] || die "no such file: ${s}"
+    o="${work}/$(basename "${s}").o"
+    lang="$(bench_cc_lang "${s}")"
+    run "${CC}" -target "${target}" -isysroot "${sysroot}" \
+        -x "${lang}" -O2 -Wall -Wextra -fno-stack-protector \
+        ${extra[@]+"${extra[@]}"} -c "${s}" -o "${o}"
+    objs+=("${o}")
+done
+
+run "${CC}" -target "${target}" -isysroot "${sysroot}" -fuse-ld=lld \
+    -o "${out}" "${objs[@]}"
+
+if [[ "${sign}" == 1 ]]; then
+    command -v ldid >/dev/null || die "ldid is not on PATH"
+    run ldid -Cadhoc -S "${out}"
+fi
+chmod 0755 "${out}"
+
+note "${out}: ${target}$( [[ "${sign}" == 1 ]] && echo ', ad-hoc signed')"
+if command -v ldid >/dev/null; then
+    note "$(ldid -h "${out}" 2>/dev/null || true)"
+fi
+if [[ "${info}" == 1 ]]; then
+    command -v ipsw >/dev/null || die "ipsw is not on PATH"
+    ipsw macho info "${out}" | sed -n '1,40p'
+fi
+
+echo "${out}"

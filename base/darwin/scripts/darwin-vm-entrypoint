@@ -1,0 +1,137 @@
+#!/bin/bash
+# Container entrypoint for darwin-vm.
+#
+#   prep   download + patch firmware for $DEVNAME/$URL into /darwin-vm/firmware
+#   boot   prep if needed, then boot XNU to a root shell (default)
+#   shell  drop into the container's own bash
+set -euo pipefail
+
+FW_DIR=/darwin-vm/firmware
+BOOT_RETRIES="${BOOT_RETRIES:-4}"
+BOOT_TIMEOUT="${BOOT_TIMEOUT:-180}"
+CHECK_TIMEOUT="${CHECK_TIMEOUT:-240}"
+
+# sh announces itself by complaining about the tty; bash by its prompt.
+SHELL_RE='job control turned off|bash-[0-9]+\.[0-9]+[#$]'
+LAUNCHD_RE='Darwin Bootstrapper Version'
+PANIC_RE='Nested panic detected'
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# This image does not mount a ramdisk. The bench flow edits ramdisk.dmg in
+# place from userspace (scripts/apfsftp), so there is no apfs.ko and no hfsplus
+# module here. get_files.sh's own prep - which mounts the ramdisk through the
+# host kernel - therefore cannot run in this container. Prepare firmware with
+# the task flow instead: `crash_check.sh <task> <variant> firmware prep`, then
+# `... start`.
+prep() {
+    die "standalone get_files.sh prep is unavailable in the no-mount image: it mounts the ramdisk through apfs.ko, which this image does not build. Prepare firmware with the bench flow instead: crash_check.sh <task> <variant> firmware prep. 'boot'/'check' still work here against a firmware volume already prepped that way."
+}
+
+# Bringup is not deterministic: a boot can die in a kernel data abort just
+# after libignition hands off, which cascades into "Nested panic ...
+# VIOLATION_ILLEGAL_SPTM_CALL_IN_PANIC" and a spin. The emulator causes it, not
+# a bad firmware image - the same firmware boots on a retry. So watch the early
+# console and restart qemu if it panics before the shell appears.
+boot() {
+    if [[ ! -f "${FW_DIR}/bootkc" || ! -f "${FW_DIR}/ramdisk.tc" ]]; then
+        echo "no firmware in ${FW_DIR} yet - preparing it first"
+        prep
+    else
+        echo "reusing firmware already in ${FW_DIR}"
+    fi
+
+    cd /darwin-vm
+    echo
+    echo "booting XNU - exit qemu with ctrl-a x"
+    echo
+
+    # run.sh is backgrounded so we can watch its output, and bash sends a
+    # background job's stdin to /dev/null - so hand it the container's real
+    # stdin explicitly on fd 3, or the guest shell would be unusable.
+    exec 3<&0
+
+    local attempt=1 log booted waited
+    while [[ "${attempt}" -le "${BOOT_RETRIES}" ]]; do
+        log="$(mktemp)"
+        ./run.sh <&3 2>&1 | tee "${log}" &
+        local pipe_pid=$!
+
+        booted=0
+        waited=0
+        while [[ "${waited}" -lt "${BOOT_TIMEOUT}" ]]; do
+            if grep -Eq "${SHELL_RE}" "${log}" 2>/dev/null; then booted=1; break; fi
+            if grep -Eq "${PANIC_RE}" "${log}" 2>/dev/null; then break; fi
+            kill -0 "${pipe_pid}" 2>/dev/null || break
+            sleep 1
+            waited=$((waited + 1))
+        done
+
+        if [[ "${booted}" -eq 1 ]]; then
+            rm -f "${log}"
+            wait "${pipe_pid}"
+            return $?
+        fi
+
+        echo >&2
+        echo ">>> boot attempt ${attempt}/${BOOT_RETRIES} panicked during bringup - retrying" >&2
+        echo >&2
+        pkill -f qemu-system-aarch64 2>/dev/null || true
+        wait "${pipe_pid}" 2>/dev/null || true
+        rm -f "${log}"
+        attempt=$((attempt + 1))
+    done
+
+    die "guest did not reach a shell in ${BOOT_RETRIES} attempts"
+}
+
+# Non-interactive regression check for one DEVNAME/URL: prep, boot once, and
+# report how far it got. Exits 0 = guest shell, 2 = kernel reached launchd but
+# no shell, 3 = panicked or timed out.
+check() {
+    prep
+    cd /darwin-vm
+
+    local log="${FW_DIR}/check.log"
+    ./run.sh < /dev/null > "${log}" 2>&1 &
+    local qpid=$! waited=0 kernel=0 shell=0 panic=0
+
+    while [[ "${waited}" -lt "${CHECK_TIMEOUT}" ]]; do
+        grep -Eq "${LAUNCHD_RE}" "${log}" 2>/dev/null && kernel=1
+        if grep -Eq "${SHELL_RE}" "${log}" 2>/dev/null; then shell=1; break; fi
+        if grep -Eq "${PANIC_RE}" "${log}" 2>/dev/null; then panic=1; break; fi
+        kill -0 "${qpid}" 2>/dev/null || break
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    pkill -f qemu-system-aarch64 2>/dev/null || true
+    wait "${qpid}" 2>/dev/null || true
+
+    echo
+    echo "=============== CHECK RESULT ==============="
+    echo "device      : $(sed -n 1p "${FW_DIR}/info" 2>/dev/null)"
+    echo "ipsw        : $(sed -n 2p "${FW_DIR}/info" 2>/dev/null)"
+    echo "sptm/txm    : $([[ -f "${FW_DIR}/sptm" ]] && echo present || echo "absent (pre-SPTM path)")"
+    echo "launchd     : $([[ "${kernel}" -eq 1 ]] && echo REACHED || echo "not reached")"
+    echo "guest shell : $([[ "${shell}"  -eq 1 ]] && echo REACHED || echo "not reached")"
+    echo "panic       : $([[ "${panic}"  -eq 1 ]] && echo YES || echo no)"
+    echo "console log : ${log} (inside the firmware volume)"
+    if [[ "${panic}" -eq 1 ]]; then
+        echo "panic string:"
+        grep -m2 -E "^panic\(cpu" "${log}" 2>/dev/null | sed "s/^/  /" || true
+    fi
+    echo "==========================================="
+
+    [[ "${shell}"  -eq 1 ]] && return 0
+    [[ "${kernel}" -eq 1 ]] && return 2
+    return 3
+}
+
+case "${1:-boot}" in
+    boot)  boot ;;
+    prep)  prep ;;
+    check) check ;;
+    shell) exec /bin/bash ;;
+    *)     exec "$@" ;;
+esac

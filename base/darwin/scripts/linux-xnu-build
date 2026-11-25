@@ -1,0 +1,890 @@
+#!/bin/bash
+# linux-xnu-build -- compile and link XNU on Linux.
+#
+# This is the Linux equivalent of darwin-xnu-build's build.sh: it builds the
+# fake SDK root that xnu's makefiles expect and then runs xnu's own `make` with
+# the cross toolchain in /Library/Developer/CommandLineTools/usr, laid out like
+# the macOS Command Line Tools (upstream clang + the patch in
+# base/darwin/patches/llvm/, cctools ld64-956.6, mig, iig-port). make runs twice so the
+# compile half never touches an Apple-licensed archive:
+#
+#   compile pass     every translation unit is compiled and every component is
+#                    partially linked, with an EMPTY stand-in for the KDK's
+#                    lib<SOC>.os.<CONFIG>.a; `make -k` so one broken target does
+#                    not hide the rest. Output: $OBJROOT, no Apple bits.
+#   link pass        same OBJROOT, real $KDKROOT, so make only redoes the final
+#                    kernel link.
+#
+# --kc then links the boot kernel collection with bench-kc-build, as build.sh
+# --kc does with kmutil create.
+#
+# As darwin-xnu-build does, the version comes from $MACOS_VERSION: the xnu tag
+# and every helper project's tag are read from that release's
+# distribution-macOS release.json, and RC_DARWIN_KERNEL_VERSION follows it.
+#
+# iig, Apple's closed DriverKit interface generator, is replaced by iig-port
+# (base/darwin/toolchain/build-iig-port.sh), which xcrun resolves as
+# $XCTOOLCHAIN_PREFIX/bin/iig; make runs it on the tag's .iig files like any other
+# tool.
+#
+# Everything Apple-derived stays under $KDKROOT, which must be bind-mounted
+# read-only; nothing is ever copied out of it into the source or object tree
+# except by the final link.
+
+help() {
+    cat <<'EOF'
+usage: [MACOS_VERSION=26.5] [KDKROOT=...] linux-xnu-build [-h] [--clean] [--kc]
+
+  -h|--help          show this help text
+  -c|--clean         remove OBJROOT/SYMROOT/fakeroot first
+  -k|--kc            create kernel collection (via bench-kc-build)
+
+environment (all have defaults):
+  MACOS_VERSION  26.5                 picks RELEASE_JSON and RC_DARWIN_KERNEL_VERSION
+  WORK_DIR       $PWD                 as darwin-xnu-build's build.sh: the clones,
+                                      build/ and fakeroot/ go here
+  XNU_SRC        $WORK_DIR/xnu        xnu checkout, patches already applied
+  XNU_TAG        the xnu tag in $RELEASE_JSON
+                                      when XNU_SRC does not exist yet, check that
+                                      tag out there from $XNU_GIT, or else from a
+                                      network clone, and apply $XNU_BASE_PATCHES
+                                      and $XNU_PATCHES
+  XNU_PATCHES    unset                one or more ':'-separated dirs of *.patch
+                                      files to apply (each dir in lexical order,
+                                      dirs in list order) to a fresh checkout; ignored
+                                      for an existing tree
+  JOBS           nproc                make parallelism
+  BUILD_DIR      $WORK_DIR/build
+  FAKEROOT_DIR   $WORK_DIR/fakeroot   the fake SDK root this script builds
+  DSTROOT        $FAKEROOT_DIR        where the helper projects install
+  OBJROOT        $BUILD_DIR/xnu.obj
+  SYMROOT        $BUILD_DIR/xnu.sym
+  KDKROOT        /Library/Developer/KDKs/KDK_$MACOS_VERSION_*.kdk, the one
+                 installed for MACOS_VERSION
+  CLT_PREFIX     /Library/Developer/CommandLineTools/usr
+                                      clang + Mach-O tools; libcc_kext.a comes from
+                                      its lib/clang/*/lib/darwin/libclang_rt.cc_kext.a
+  XCTOOLCHAIN_PREFIX /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr
+                                      iig (build-iig-port.sh)
+  CCTOOLS_INCLUDE /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+                                      cctools' headers (build-cctools.sh)
+  KERNEL_CONFIG  DEVELOPMENT
+  ARCH_CONFIG    ARM64
+  MACHINE_CONFIG T8103
+  SDK_VERSION    26.0
+  RC_DARWIN_KERNEL_VERSION 25.5.0     Darwin's version for MACOS_VERSION
+  STUBROOT       $BUILD_DIR/stubroot  the compile pass's stand-in KDK
+  LOGDIR         $BUILD_DIR/log
+  KC_FILTER      com.apple.driver.SEPHibernation
+                                      --kc: bundle ids (grep -E) left out of the KC
+  KERNEL_EXT     mac13g               --kc: the KDK manifest, kernelcache.release.<this>
+                                      (darwin-vm's get_files.sh exports it)
+  KM_BUILD_VERSION                    --kc: KMBuildVersion to stamp, as kmutil
+                                      does; unset, the key is left out
+  RELEASE_JSON   distribution-macOS macos-<MACOS_VERSION without dots>
+                 release.json, which pins xnu and the helper tags
+  XNU_GIT        unset                a bare clone of xnu to check XNU_TAG out of
+  XNU_BASE_PATCHES ../patches/xnu next to this script
+                                      patches every fresh checkout takes first
+EOF
+    exit 0
+}
+
+CLEAN=0
+BUILDKC=0
+XNU_CLONED=0
+XNU_TAG="${XNU_TAG:-}"
+XNU_PATCHES="${XNU_PATCHES:-}"
+XNU_BASE_PATCHES="${XNU_BASE_PATCHES:-$(dirname "$(readlink -f "$0")")/../patches/xnu}"
+XNU_GIT="${XNU_GIT:-}"                           # bare clone of every xnu tag, see XNU_TAG
+JOBS="${JOBS:-$(nproc)}"
+MACOS_VERSION="${MACOS_VERSION:-26.5}"
+# darwin-xnu-build's layout: clones next to build/ and fakeroot/ in $WORK_DIR.
+WORK_DIR="${WORK_DIR:-${PWD}}"
+XNU_SRC="${XNU_SRC:-${WORK_DIR}/xnu}"
+BUILD_DIR="${BUILD_DIR:-${WORK_DIR}/build}"
+FAKEROOT_DIR="${FAKEROOT_DIR:-${WORK_DIR}/fakeroot}"
+DSTROOT="${DSTROOT:-${FAKEROOT_DIR}}"
+OBJROOT="${OBJROOT:-${BUILD_DIR}/xnu.obj}"
+SYMROOT="${SYMROOT:-${BUILD_DIR}/xnu.sym}"
+CLT_PREFIX="${CLT_PREFIX:-/Library/Developer/CommandLineTools/usr}"
+XCTOOLCHAIN_PREFIX="${XCTOOLCHAIN_PREFIX:-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr}"
+CCTOOLS_INCLUDE="${CCTOOLS_INCLUDE:-${CLT_PREFIX%/usr}/SDKs/MacOSX.sdk/usr/include}"
+KERNEL_CONFIG="${KERNEL_CONFIG:-DEVELOPMENT}"
+ARCH_CONFIG="${ARCH_CONFIG:-ARM64}"
+MACHINE_CONFIG="${MACHINE_CONFIG:-T8103}"
+SDK_VERSION="${SDK_VERSION:-26.0}"
+KERNEL_EXT="${KERNEL_EXT:-mac13g}"
+KC_FILTER="${KC_FILTER-com.apple.driver.SEPHibernation}"
+STUBROOT="${STUBROOT:-${BUILD_DIR}/stubroot}"
+LOGDIR="${LOGDIR:-${BUILD_DIR}/log}"
+
+KERNEL_TYPE="${KERNEL_CONFIG,,}.${MACHINE_CONFIG,,}"
+
+say()  { printf '\033[35m ==> \033[0m%s\n' "$*"; }
+# info/warn go to stderr: clone_project() returns a path on stdout.
+info() { printf '\033[34m[info]\033[0m %s\n' "$*" >&2; }
+warn() { printf '\033[33m[warn]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
+
+clean() {
+    say "cleaning ${OBJROOT} ${SYMROOT} ${FAKEROOT_DIR} ${STUBROOT}"
+    rm -rf "${OBJROOT}" "${SYMROOT}" "${FAKEROOT_DIR}" "${STUBROOT}"
+}
+
+# ---------------------------------------------------------------- toolchain --
+has_xnu_builtins() {  # has_xnu_builtins <clang>
+    printf '#if __has_builtin(__builtin_xnu_type_summary)\nok\n#endif\n' \
+        | "$1" -target "${DARWIN_TRIPLE}" -E - 2>/dev/null | grep -q '^ok$'
+}
+
+setup_toolchain() {
+    local t d path_dirs
+    # xnu resolves every tool through `xcrun -find`, the CLT's bin/ comes first on
+    # PATH for the install and gm4 shims, and the target compiler has to be a
+    # Darwin-cross clang. On Linux clang
+    # needs an explicit -target: `-arch arm64e` alone leaves it on the host triple.
+    export PATH="${CLT_PREFIX}/bin:${PATH}"
+    # xnu's makefiles assume the C locale. config/Makefile builds allsymbols with
+    # `nm -gj | sort -u`, and uutils sort (Ubuntu 26.04's default) drops distinct
+    # lines under en_US.UTF-8: _bzero, __doprnt and 17 more go missing and
+    # check_all_exports fails. The containers run in POSIX, so only a host shell hit it.
+    export LC_ALL=C
+    export BENCH_SDKROOT="${FAKEROOT_DIR}"
+    export BENCH_SDK_VERSION="${SDK_VERSION}"
+    export XNU_TOOLCHAIN_BIN="${CLT_PREFIX}/bin ${XCTOOLCHAIN_PREFIX}/bin"
+
+    mkdir -p "${CLT_PREFIX}/bin"
+    DARWIN_TRIPLE="${DARWIN_TRIPLE:-arm64e-apple-macos${SDK_VERSION}}"
+
+    # The CLT's clang, clang++ and cc are base/darwin/toolchain/shims/clt-bin/'s
+    # Darwin-cross wrappers, which xnu's makefiles get from `xcrun -find clang`
+    # (and mig through MIGCC := $(CC)), as on a Mac. They run $CROSS_CLANG: the
+    # first `clang` on $PATH outside the CLT that has the builtins of
+    # base/darwin/patches/llvm/ (installed to /usr/local/bin; an apt clang earlier
+    # on $PATH lacks them), with the triple and the flags probed below, all
+    # exported to them. The wrappers say where they live in their first comment
+    # line, which is what the check below looks for.
+    for t in clang clang++ cc; do
+        grep -q "in the CLT's usr/bin" "${CLT_PREFIX}/bin/${t}" 2>/dev/null \
+            || die "${CLT_PREFIX}/bin/${t} is not the wrapper from base/darwin/toolchain/shims/clt-bin/; install it there"
+    done
+    if [ -z "${CROSS_CLANG:-}" ]; then
+        IFS=: read -r -a path_dirs <<< "${PATH}"
+        for d in "${path_dirs[@]}"; do
+            [ "${d%/}" = "${CLT_PREFIX}/bin" ] && continue
+            [ -x "${d}/clang" ] && has_xnu_builtins "${d}/clang" && { CROSS_CLANG="${d}/clang"; break; }
+        done
+    fi
+    [ -n "${CROSS_CLANG:-}" ] || die "no clang with __builtin_xnu_type_summary on PATH; build clang with base/darwin/patches/llvm/ into /usr/local/bin"
+    # XNU_SKIP_BUILTIN_CHECK=1 lets a caller supply a clang that does not have the
+    # kalloc-type builtins natively, on the promise that it shims them another way
+    # (the -fbounds-safety toolchain points CROSS_CLANG at a wrapper that
+    # force-includes a header defining __builtin_xnu_type_* as macros under
+    # `#if !__has_builtin(...)`). has_xnu_builtins uses __has_builtin, which a
+    # macro cannot satisfy, so the gate is skipped rather than made to pass.
+    if [ "${XNU_SKIP_BUILTIN_CHECK:-0}" = 1 ]; then
+        info "XNU_SKIP_BUILTIN_CHECK=1: not requiring native __builtin_xnu_type_summary on ${CROSS_CLANG}"
+    else
+        has_xnu_builtins "${CROSS_CLANG}" || die "${CROSS_CLANG} lacks __builtin_xnu_type_summary"
+    fi
+
+    # Flags Apple's clang accepts and apt.llvm.org's does not. Dropping them is a
+    # real (small) behavioural difference from a Mac build, so each one is listed
+    # explicitly rather than swept up with -Wno-unknown-argument, and each is
+    # recorded here with what it would have done.
+    #
+    #   -mno-implicit-sme   Apple-only: stops the backend emitting SME
+    #                       (Scalable Matrix Extension) instructions implicitly.
+    #                       Upstream clang never emits them for this target, so
+    #                       dropping it is a no-op in practice.
+    XNU_CLANG_DROP_FLAGS="${XNU_CLANG_DROP_FLAGS:--mno-implicit-sme}"
+
+    # Upstream clang >= 22 enables Apple's arm64e pointer-authentication language
+    # features for the arm64e-apple triple by default. One feature Apple turns on
+    # for -mkernel is still opt-in upstream; add it when the compiler knows it.
+    CROSS_EXTRA_FLAGS=""
+    if "${CROSS_CLANG}" -target "${DARWIN_TRIPLE}" -fptrauth-function-pointer-type-discrimination \
+            -x c -c -o /dev/null /dev/null >/dev/null 2>&1; then
+        CROSS_EXTRA_FLAGS="-fptrauth-function-pointer-type-discrimination"
+    fi
+    # Does this clang accept Apple's four-argument __ptrauth (the options string
+    # xnu uses in OS_PTRAUTH_SIGNED_PTR_AUTH_NULL)? Upstream clang does not.
+    PTRAUTH_4ARG_OK=0
+    if printf '#include <ptrauth.h>\nstruct s { void (*__ptrauth(ptrauth_key_process_independent_data, 1, 0x1234, "authenticates-null-values") f)(void); };\n' \
+            | "${CROSS_CLANG}" -target "${DARWIN_TRIPLE}" -mkernel -x c -c -o /dev/null - >/dev/null 2>&1; then
+        PTRAUTH_4ARG_OK=1
+    fi
+    # Apple's kernel builds put C++ static destructors in __mod_term_func
+    # (__GLOBAL__D_a), and the kernel has no __cxa_atexit -- libsa/bootstrap.cpo
+    # failed the link on it. LLVM lowers llvm.global_dtors into __cxa_atexit calls
+    # for every Mach-O target (TargetPassConfig: "to avoid emitting the deprecated
+    # __mod_term_func"); the pass has a hidden switch, so use it when the backend
+    # knows it.
+    if "${CROSS_CLANG}" -target "${DARWIN_TRIPLE}" -mllvm -disable-atexit-based-global-dtor-lowering \
+            -x c -c -o /dev/null /dev/null >/dev/null 2>&1; then
+        CROSS_EXTRA_FLAGS="${CROSS_EXTRA_FLAGS} -mllvm -disable-atexit-based-global-dtor-lowering"
+    fi
+    # Apple clang predefines __ARM_ARCH_8_2__ .. __ARM_ARCH_8_5__ for -mcpu=apple-a14;
+    # upstream defines only __ARM_ARCH 8. xnu selects code paths on the versioned
+    # macros (proc_reg.h, os/atomic_private_arch.h: "Expecting CAS implementation of
+    # os_atomic_rmw_loop()" is what sched_clutch.c hits without them), so supply
+    # them whenever the compiler does not.
+    if ! "${CROSS_CLANG}" -target "${DARWIN_TRIPLE}" -mcpu=apple-a14 -dM -E - </dev/null 2>/dev/null \
+            | grep -q '__ARM_ARCH_8_5__'; then
+        CROSS_EXTRA_FLAGS="${CROSS_EXTRA_FLAGS} -D__ARM_ARCH_8_2__=1 -D__ARM_ARCH_8_3__=1 -D__ARM_ARCH_8_4__=1 -D__ARM_ARCH_8_5__=1"
+    fi
+    info "cross clang: $("${CROSS_CLANG}" --version | head -1); extra flags: ${CROSS_EXTRA_FLAGS:-none}; 4-arg __ptrauth: $([ "${PTRAUTH_4ARG_OK}" = 1 ] && echo yes || echo no)"
+
+    export CROSS_CLANG DARWIN_TRIPLE CROSS_EXTRA_FLAGS XNU_CLANG_DROP_FLAGS
+
+    # iig, Apple's closed DriverKit interface generator, has no Linux build.
+    # iig-port stands in for it as $XCTOOLCHAIN_PREFIX/bin/iig, where Xcode keeps
+    # iig on a Mac and the path `xcrun -find iig` returns
+    # (base/darwin/toolchain/build-iig-port.sh), and make runs it on the tag's
+    # .iig files.
+    if [ ! -x "${XCTOOLCHAIN_PREFIX}/bin/iig" ]; then
+        die "no ${XCTOOLCHAIN_PREFIX}/bin/iig; build it with base/darwin/toolchain/build-iig-port.sh ${XCTOOLCHAIN_PREFIX}"
+    fi
+}
+
+setup_host_cc() {
+    # HOST_CC builds xnu's SETUP tools (kextsymboltool, setsegname, decomment,
+    # installfile, replacecontents) as native Linux binaries. Several of them use
+    # Darwin-only headers and libc functions; the stubs below plus cctools'
+    # <mach-o/*.h> (staged by build-cctools.sh) cover all of it.
+    mkdir -p "${CCTOOLS_INCLUDE}"
+    cat > "${CCTOOLS_INCLUDE}/bench-host-prefix.h" <<'EOF'
+/* Darwin-isms xnu's SETUP host tools use that glibc does not declare. */
+#ifndef _BENCH_HOST_PREFIX_H_
+#define _BENCH_HOST_PREFIX_H_
+#include <bsd/unistd.h>   /* setmode(3)/getmode(3), used by SETUP/installfile */
+static inline const char *getprogname(void)
+{
+	extern char *program_invocation_short_name;
+	return program_invocation_short_name;
+}
+#endif
+EOF
+
+    # SETUP/installfile uses Darwin's fcopyfile(3).
+    cat > "${CCTOOLS_INCLUDE}/copyfile.h" <<'EOF'
+/* darwin-bench stub of <copyfile.h>: xnu's SETUP/installfile.c uses exactly
+ * one call, fcopyfile(src, dst, NULL, COPYFILE_DATA). */
+#ifndef _BENCH_COPYFILE_H_
+#define _BENCH_COPYFILE_H_
+#include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
+
+typedef void *copyfile_state_t;
+#define COPYFILE_DATA  (1 << 3)
+#define COPYFILE_ALL   COPYFILE_DATA
+
+static inline int
+fcopyfile(int from_fd, int to_fd, copyfile_state_t state, unsigned int flags)
+{
+	char buf[65536];
+	ssize_t n;
+	(void)state; (void)flags;
+	if (lseek(from_fd, 0, SEEK_SET) == (off_t)-1 && errno != ESPIPE) {
+		return -1;
+	}
+	while ((n = read(from_fd, buf, sizeof(buf))) > 0) {
+		ssize_t off = 0;
+		while (off < n) {
+			ssize_t w = write(to_fd, buf + off, (size_t)(n - off));
+			if (w < 0) {
+				if (errno == EINTR) {
+					continue;
+				}
+				return -1;
+			}
+			off += w;
+		}
+	}
+	return n < 0 ? -1 : 0;
+}
+#endif
+EOF
+
+    # The cross driver in $CLT_PREFIX/bin is the patched clang built for AArch64
+    # only (base/darwin/Dockerfile llvm-xnu stage), so it cannot compile xnu's SETUP host
+    # tools for the build machine ("unknown target triple"); those go through the
+    # distribution's clang.
+    HOST_CLANG="${HOST_CLANG:-$(ls -d /usr/lib/llvm-*/bin/clang 2>/dev/null | sort -V | tail -1)}"
+    [ -n "${HOST_CLANG}" ] && [ -x "${HOST_CLANG}" ] || HOST_CLANG="$(command -v cc || command -v gcc || echo /usr/bin/cc)"
+    info "host compiler ${HOST_CLANG}"
+    # cctools' foreign/machine/*.h key on __x86_64__ or __arm64__; clang on
+    # arm64 Linux defines only __aarch64__ (cctools' configure adds -D__arm64__ too).
+    # arm64 Linux also makes plain char unsigned, where Darwin keeps it signed, and
+    # SETUP/decomment compares a char from getc() to EOF: unsigned, it never ends.
+    HOST_ARCH_DEFS=""
+    [ "$(uname -m)" = aarch64 ] && HOST_ARCH_DEFS="-D__arm64__ -fsigned-char"
+    cat > "${CLT_PREFIX}/bin/xnu-host-cc" <<EOF
+#!/bin/sh
+# --ld-path: clang looks for "ld" next to itself first, and $CLT_PREFIX/bin now
+# holds cctools' Darwin ld64. Host tools must link with the system ELF ld.
+# On a link (no -c) append cctools' libmacho and libstuff -- the Mach-O arch
+# table and byte swappers that kextsymboltool and setsegname call -- plus
+# libuuid. libmacho goes first: its arch table calls into libstuff. All four sit
+# in the host linker's default search path (build-cctools.sh puts libmacho and
+# libstuff in /usr/lib), so no -L. xnu's SETUP Makefiles set LDFLAGS literally, so there
+# is nowhere else to put them.
+libs=""
+compile_only=0
+for a in "\$@"; do [ "\$a" = "-c" ] && compile_only=1; done
+[ "\$compile_only" = 0 ] && libs="-lmacho -lstuff -luuid -lbsd"
+exec "${HOST_CLANG}" \\
+    --ld-path=/usr/bin/ld ${HOST_ARCH_DEFS} \\
+    -include "${CCTOOLS_INCLUDE}/bench-host-prefix.h" \\
+    -idirafter "${CCTOOLS_INCLUDE}" \\
+    -idirafter "${CCTOOLS_INCLUDE}/foreign" "\$@" \${libs}
+EOF
+    chmod 0755 "${CLT_PREFIX}/bin/xnu-host-cc"
+}
+
+# ------------------------------------------------------------ xnu source ----
+choose_xnu() {
+    local kdks macos_major macos_minor darwin_major
+    # As darwin-xnu-build's build.sh does, the KDK is the one installed for
+    # $MACOS_VERSION in /Library/Developer/KDKs.
+    if [ -z "${KDKROOT:-}" ]; then
+        kdks=(/Library/Developer/KDKs/KDK_"${MACOS_VERSION}"_*.kdk)
+        if [ "${#kdks[@]}" -gt 1 ]; then
+            echo "linux-xnu-build: more than one KDK for ${MACOS_VERSION}; set KDKROOT to one of: ${kdks[*]}" >&2
+            exit 2
+        fi
+        if [ ! -d "${kdks[0]}" ]; then
+            echo "linux-xnu-build: no KDK for ${MACOS_VERSION} in /Library/Developer/KDKs; install one or set KDKROOT" >&2
+            exit 2
+        fi
+        KDKROOT="${kdks[0]}"
+    fi
+    # macOS 26 is Darwin 25; macOS 11-15 were Darwin 20-24.
+    macos_major="${MACOS_VERSION%%.*}" macos_minor="${MACOS_VERSION#*.}"
+    [ "${macos_minor}" = "${MACOS_VERSION}" ] && macos_minor=0
+    macos_minor="${macos_minor%%.*}"
+    if [ "${macos_major}" -ge 26 ]; then darwin_major=$((macos_major - 1)); else darwin_major=$((macos_major + 9)); fi
+    RC_DARWIN_KERNEL_VERSION="${RC_DARWIN_KERNEL_VERSION:-${darwin_major}.${macos_minor}.0}"
+    RELEASE_JSON="${RELEASE_JSON:-https://raw.githubusercontent.com/apple-oss-distributions/distribution-macOS/macos-${MACOS_VERSION//./}/release.json}"
+    export RELEASE_JSON
+}
+
+release_tag() {  # release_tag <project>
+    python3 - "$1" <<'PY'
+import json, sys, urllib.request, os
+proj = sys.argv[1]
+url = os.environ["RELEASE_JSON"]
+with urllib.request.urlopen(url, timeout=60) as fh:
+    data = json.load(fh)
+for p in data["projects"]:
+    if p["project"] == proj:
+        print(p["tag"])
+        break
+else:
+    sys.exit("no tag for %s in %s" % (proj, url))
+PY
+}
+
+clone_project() {  # clone_project <project> [tag]
+    local proj="$1" tag="${2:-}"
+    local dir="${WORK_DIR}/${proj}"
+    if [ ! -d "${dir}" ]; then
+        [ -n "${tag}" ] || tag="$(release_tag "${proj}")"
+        info "cloning ${proj} ${tag}"
+        git clone --quiet --depth 1 --branch "${tag}" \
+            "https://github.com/apple-oss-distributions/${proj}.git" "${dir}" >&2
+    fi
+    echo "${dir}"
+}
+
+# A fresh host has no XNU_SRC. The XNU_TAG tree is then checked out from the
+# base image's bare clone of every xnu tag, and patches() applies the patch
+# files to it; an existing tree is taken to have them applied already.
+get_xnu() {
+    if [ -d "${XNU_SRC}/.git" ] || [ -f "${XNU_SRC}/makedefs/MakeInc.def" ]; then
+        return 0
+    fi
+    [ -n "${XNU_TAG}" ] || XNU_TAG="$(release_tag xnu)"
+    say "checking out xnu ${XNU_TAG} into ${XNU_SRC}"
+    mkdir -p "$(dirname "${XNU_SRC}")"
+    if [ -n "${XNU_GIT}" ] && [ -d "${XNU_GIT}" ]; then
+        git clone --quiet --shared --branch "${XNU_TAG}" "${XNU_GIT}" "${XNU_SRC}"
+    else
+        git clone --quiet --depth 1 --branch "${XNU_TAG}" \
+            https://github.com/apple-oss-distributions/xnu.git "${XNU_SRC}"
+    fi
+    XNU_CLONED=1
+}
+
+patches() {
+    # The patch files go first and only onto a fresh checkout; the rewrites below
+    # check for themselves whether they are still needed.
+    if [ "${XNU_CLONED}" = 1 ]; then
+        # $XNU_BASE_PATCHES first (base/darwin/patches/xnu/, disable_bti_all.patch:
+        # BTI off for every SoC), then each dir in $XNU_PATCHES. XNU_PATCHES is a
+        # colon-separated list applied in order (e.g. patches-pre:patches for a
+        # fixed build: prerequisites before the upstream fix).
+        local p d dirs=""
+        if [ -d "${XNU_BASE_PATCHES}" ]; then
+            dirs="${XNU_BASE_PATCHES}"
+        else
+            warn "no base xnu patches in ${XNU_BASE_PATCHES}; the kernel will enforce BTI"
+        fi
+        [ -n "${XNU_PATCHES}" ] && dirs="${dirs} $(printf '%s' "${XNU_PATCHES}" | tr ':' ' ')"
+        for d in ${dirs}; do
+            [ -d "${d}" ] || continue
+            for p in "${d}"/*.patch; do
+                [ -e "${p}" ] || continue
+                patch -d "${XNU_SRC}" -p1 --batch --forward < "${p}" || die "patch ${p} did not apply"
+                info "applied $(basename "${p}")"
+            done
+        done
+    fi
+
+    # bsd/kern/makesyscalls.sh writes `\(sy_call_t *\)` inside an awk string.
+    # Apple's awk (and gawk) drop the unknown escape and emit `(`; Debian's
+    # default mawk keeps the backslash, so init_sysent.c comes out as
+    # `\(sy_call_t *\)(void (*)(void))nosys` and does not compile. The escape
+    # is bogus either way, so remove it at the source and throw away any
+    # already-generated file that carries it.
+    if grep -q '\\(sy_call_t \*\\)' "${XNU_SRC}/bsd/kern/makesyscalls.sh"; then
+        sed -i 's/\\(sy_call_t \*\\)/(sy_call_t *)/g' "${XNU_SRC}/bsd/kern/makesyscalls.sh"
+        info "patched bsd/kern/makesyscalls.sh: dropped the \\( escapes mawk keeps"
+    fi
+    for f in $(grep -rls '\\(sy_call_t' "${OBJROOT}" 2>/dev/null); do
+        rm -f "${f}"; info "removed mis-generated ${f}"
+    done
+
+    # osfmk/arm64/corecrypto/arm64_isa_compatibility.h picks the SHA/AES
+    # assembler macro syntax on __apple_build_version__: Apple clang newer than
+    # 5010000 gets the standard `v0.4s` forms, everything else the pre-2014
+    # `q0, q1` forms that no current assembler accepts -- upstream clang has
+    # no __apple_build_version__ and so failed sha256_compress_arm64.s. Any
+    # clang without that macro is newer than 5010000.
+    local isa_h="${XNU_SRC}/osfmk/arm64/corecrypto/arm64_isa_compatibility.h"
+    if grep -q '^#if defined(__clang__) && ((defined(__apple_build_version__) && __apple_build_version__ > 5010000))$' "${isa_h}"; then
+        sed -i 's/^#if defined(__clang__) && ((defined(__apple_build_version__) \&\& __apple_build_version__ > 5010000))$/#if defined(__clang__) \&\& (!defined(__apple_build_version__) || __apple_build_version__ > 5010000)/' "${isa_h}"
+        info "patched corecrypto/arm64_isa_compatibility.h: standard vector syntax for non-Apple clang"
+    fi
+
+    # libkern/os/base.h qualifies a handful of struct fields with Apple's
+    # four-argument __ptrauth(..., "authenticates-null-values"). Upstream clang
+    # rejects the options argument, and the 4-arg form is what stops it from
+    # compiling most of the otherwise-portable C TUs. Dropping the option
+    # changes only how NULL is stored in those fields. The shim is applied only
+    # when the cross clang needs it, and taken back out when it does not.
+    local base_h="${XNU_SRC}/libkern/os/base.h"
+    if [ "${PTRAUTH_4ARG_OK}" != 1 ]; then
+        if grep -q 'ptrauth_string_discriminator(type), "authenticates-null-values")' "${base_h}"; then
+            sed -i 's/ptrauth_string_discriminator(type), "authenticates-null-values")/ptrauth_string_discriminator(type))/' "${base_h}"
+            warn "ptrauth null shim: dropped \"authenticates-null-values\" from OS_PTRAUTH_SIGNED_PTR_AUTH_NULL in libkern/os/base.h"
+        fi
+        mkdir -p "${OBJROOT}" && touch "${OBJROOT}/.ptrauth-null-shim" 2>/dev/null || true
+    elif grep -q 'OS_PTRAUTH_SIGNED_PTR_AUTH_NULL(type) __ptrauth(ptrauth_key_process_independent_data, 1, ptrauth_string_discriminator(type))$' "${base_h}"; then
+        git -C "${XNU_SRC}" checkout -- libkern/os/base.h 2>/dev/null \
+            && info "ptrauth null shim: restored libkern/os/base.h" \
+            || warn "libkern/os/base.h carries the ptrauth null shim but could not be restored (not a git checkout?)"
+        rm -f "${OBJROOT}/.ptrauth-null-shim"
+    fi
+
+    # SETUP/kextsymboltool's seekFile() treats `offset != lseek()` as a disk-full
+    # error. config/Makefile's check_all_exports runs it with `-output
+    # /dev/null`, and on Linux lseek() on a character device returns 0, so the
+    # export check fails with "couldn't write output: Success" and make exits
+    # 2 after the kernel has already been linked. Let seeks on character
+    # devices through; the tool is rebuilt by make when its source changes.
+    local kst="${XNU_SRC}/SETUP/kextsymboltool/kextsymboltool.c"
+    if [ -f "${kst}" ] && ! grep -q 'S_ISCHR' "${kst}"; then
+        python3 - "${kst}" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = """	if (offset != lseek(fd, offset, SEEK_SET)) {
+		err = kErrorDiskFull;
+	} else {
+		err = kErrorNone;
+	}
+"""
+new = """	if (offset != lseek(fd, offset, SEEK_SET)) {
+		struct stat st;
+		/* darwin-bench: Linux lseek() returns 0 on character devices such as
+		 * the /dev/null that check_all_exports writes to; not an error. */
+		if (0 == fstat(fd, &st) && S_ISCHR(st.st_mode)) {
+			return kErrorNone;
+		}
+		err = kErrorDiskFull;
+	} else {
+		err = kErrorNone;
+	}
+"""
+assert s.count(old) == 1, "seekFile() body not found"
+s = s.replace(old, new)
+if "#include <sys/stat.h>" not in s:
+    s = s.replace("#include <sys/types.h>", "#include <sys/types.h>\n#include <sys/stat.h>", 1)
+open(p, "w").write(s)
+PY
+        info "patched SETUP/kextsymboltool/kextsymboltool.c: lseek() on /dev/null is not a write error"
+    fi
+
+    # bsd/sys/make_symbol_aliasing.sh looks for availability.pl under
+    # $SDKROOT/$DRIVERKITROOT. darwin-xnu-build's build.sh rewrites that to its
+    # fakeroot; here SDKROOT is the fakeroot and DRIVERKITROOT is empty, so the
+    # path is already right.
+
+    # CoreEntitlements V2: every V2 header plus Apple's Kernel.h, out of the KDK.
+    setup_coreentitlements
+}
+
+# Port of patches/26.0/00_setup_coreentitlements.sh from blacktop/darwin-xnu-build
+# 663906528d1cd5ea8fde7de6f16de73db9511549 (MIT License, Copyright (c) 2023-2025
+# blacktop). Differences from it: EXTERNAL_HEADERS is under $XNU_SRC rather than
+# the working directory; echo/exit are say/info/warn/die, and the closing
+# "setup complete" line is gone; a KDK with no CoreEntitlements headers is a
+# warning, not an error, as it was here before; and each header is copied only
+# when it differs, so a rerun does not touch mtimes and make does not recompile
+# everything that includes them.
+ce_install() {  # ce_install <src> <dst>
+    cmp -s "$1" "$2" || cp "$1" "$2"
+}
+
+setup_coreentitlements() {
+    # Setup CoreEntitlements V2 headers from KDK
+    # This script creates the necessary directory structure and copies KDK headers
+
+    local EXTERNAL_HEADERS="${XNU_SRC}/EXTERNAL_HEADERS"
+    # Prefer the KDKROOT provided by build.sh, falling back to known 26.x KDKs.
+    local KDKROOT_CLEAN="${KDKROOT:-}"
+    KDKROOT_CLEAN="${KDKROOT_CLEAN%/}"
+    local KDK_CE_PATH=""
+    local KDK h
+
+    # Try KDKROOT from environment first
+    if [ -n "${KDKROOT_CLEAN}" ] && [ -d "${KDKROOT_CLEAN}/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform/CoreEntitlements" ]; then
+        KDK_CE_PATH="${KDKROOT_CLEAN}/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform/CoreEntitlements"
+    fi
+
+    # Fallback: try known KDKs in reverse version order
+    if [ -z "${KDK_CE_PATH}" ]; then
+        for KDK in /Library/Developer/KDKs/KDK_26.*.kdk; do
+            if [ -d "${KDK}/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform/CoreEntitlements" ]; then
+                KDK_CE_PATH="${KDK}/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform/CoreEntitlements"
+            fi
+        done
+    fi
+
+    if [ -z "${KDK_CE_PATH}" ]; then
+        warn "no CoreEntitlements headers under ${KDKROOT}"
+        return 0
+    fi
+
+    say "CoreEntitlements V2 headers"
+
+    # Create V2 directory if it doesn't exist
+    mkdir -p "${EXTERNAL_HEADERS}/CoreEntitlements/V2"
+
+    # Copy every V2 header (API.h pulls in Closure.h, Acceleration.h and StackProtector.h).
+    info "copying V2 headers from ${KDK_CE_PATH}"
+    for h in "${KDK_CE_PATH}/V2/"*.h; do
+        ce_install "${h}" "${EXTERNAL_HEADERS}/CoreEntitlements/V2/$(basename "${h}")"
+    done
+
+    # Kernel.h (the CEKernelAPI_t function table AMFI hands to xnu) is not under PrivateHeaders; KDKs from
+    # 26.4 on ship it in System/Library/KernelSupport. Earlier revisions of this script wrote a made-up
+    # struct here, which compiled for VMAPPLE only because no code path used the table, and broke every
+    # CODE_SIGNING_MONITOR config. Use Apple's header, borrowing it from another installed 26.x KDK when
+    # the target KDK predates it (the layout is identical across 26.4 through 26.6.2).
+    local KERNEL_H_REL="System/Library/KernelSupport/CoreEntitlements/V2/Kernel.h"
+    local KERNEL_H=""
+    if [ -n "${KDKROOT_CLEAN}" ] && [ -f "${KDKROOT_CLEAN}/${KERNEL_H_REL}" ]; then
+        KERNEL_H="${KDKROOT_CLEAN}/${KERNEL_H_REL}"
+    else
+        for KDK in /Library/Developer/KDKs/KDK_26.*.kdk; do
+            if [ -f "${KDK}/${KERNEL_H_REL}" ]; then
+                KERNEL_H="${KDK}/${KERNEL_H_REL}"
+            fi
+        done
+        if [ -n "${KERNEL_H}" ]; then
+            warn "${KDKROOT_CLEAN:-the selected KDK} has no ${KERNEL_H_REL}; borrowing ${KERNEL_H}"
+        fi
+    fi
+    if [ -z "${KERNEL_H}" ]; then
+        die "no installed 26.x KDK provides ${KERNEL_H_REL}; install KDK 26.4 or newer"
+    fi
+    info "copying Kernel.h from ${KERNEL_H}"
+    ce_install "${KERNEL_H}" "${EXTERNAL_HEADERS}/CoreEntitlements/V2/Kernel.h"
+
+    # Older revisions of this script wrote a hand-made os/firehose_buffer_private.h here. The real
+    # header is installed by libdispatch into ${FAKEROOT_DIR}/usr/local/include/kernel, and a stale
+    # stub under EXTERNAL_HEADERS would shadow it, so remove any leftover copy.
+    if [ -f "${EXTERNAL_HEADERS}/os/firehose_buffer_private.h" ]; then
+        info "removing obsolete firehose_buffer_private.h stub"
+        rm -f "${EXTERNAL_HEADERS}/os/firehose_buffer_private.h"
+        rmdir "${EXTERNAL_HEADERS}/os" 2>/dev/null || true
+    fi
+}
+
+# ----------------------------------------------------------------- fakeroot --
+# $(SDKROOT) is pointed at the fakeroot, so every $(SDKROOT)/... path in
+# MakeInc.def (usr/local/include/kernel, usr/local/lib/kernel, the
+# Kernel.framework PrivateHeaders) resolves to something we built ourselves.
+build_availabilityversions() {
+    mkdir -p "${FAKEROOT_DIR}"
+
+    # AvailabilityVersions: installs availability.pl + AvailabilityVersions.plist,
+    # which xnu's bsd/sys/make_symbol_aliasing.sh needs. Plain make, no Xcode.
+    if [ ! -f "${FAKEROOT_DIR}/usr/local/libexec/availability.pl" ]; then
+        say "AvailabilityVersions"
+        local av; av="$(clone_project AvailabilityVersions)"
+        make -C "${av}" install -j"${JOBS}" \
+            OBJROOT="${OBJROOT}/AvailabilityVersions" \
+            SYMROOT="${SYMROOT}/AvailabilityVersions" \
+            DSTROOT="${DSTROOT}" >> "${LOGDIR}/availabilityversions.log" 2>&1
+    fi
+}
+
+build_libdispatch() {
+    # libdispatch: xnu includes <os/firehose_buffer_private.h> from
+    # $(SDKROOT)/usr/local/include/kernel. Upstream gets it by building
+    # libfirehose_kernel with xcodebuild; the headers alone are enough to
+    # compile, and the archive is only needed by the final link.
+    if [ ! -f "${FAKEROOT_DIR}/usr/local/include/kernel/os/firehose_buffer_private.h" ]; then
+        say "libdispatch kernel headers"
+        local ld; ld="$(clone_project libdispatch)"
+        mkdir -p "${FAKEROOT_DIR}/usr/local/include/kernel/os"
+        # Apple installs it through unifdef with the libfirehose_kernel target's
+        # COPY_HEADERS_UNIFDEF_FLAGS (xcodeconfig/libfirehose_kernel.xcconfig), which
+        # removes the `#if OS_FIREHOSE_SPI` guard around the kernel SPI. Nothing in
+        # xnu defines OS_FIREHOSE_SPI, so a raw copy hides the declarations that
+        # libkern/os/log.c and bsd/kern/subr_log.c need. unifdef exits 1 when it changed
+        # the file, hence the `|| [ $? -eq 1 ]`.
+        unifdef -DOS_FIREHOSE_SPI=1 -o "${FAKEROOT_DIR}/usr/local/include/kernel/os/firehose_buffer_private.h" \
+            "${ld}/os/firehose_buffer_private.h" || [ $? -eq 1 ] \
+            || die "unifdef failed on ${ld}/os/firehose_buffer_private.h"
+    fi
+
+    # No `make installhdrs`: darwin-xnu-build installs xnu's headers into its
+    # fakeroot for the libsyscall and libdispatch builds it runs with
+    # xcodebuild; the kernel itself reads them from $OBJROOT/EXPORT_HDRS, which
+    # the compile pass writes.
+}
+
+# -------------------------------------------------------------- stub KDK -----
+# For the compile pass we hand make an empty archive in place of the KDK's
+# lib<SOC>.os.<CONFIG>.a, so nothing Apple-licensed is reachable while the
+# objects are produced. Headers still come from the real KDK: they are needed
+# to compile; the outputs carry no Apple code.
+make_stubroot() {
+    local lib="${STUBROOT}/System/Library/KernelSupport/lib${MACHINE_CONFIG}.os.${KERNEL_CONFIG}.a"
+    mkdir -p "$(dirname "${lib}")"
+    if [ ! -f "${lib}" ]; then
+        say "empty stand-in for lib${MACHINE_CONFIG}.os.${KERNEL_CONFIG}.a"
+        # Neither libtool nor ar will make an archive with no members, so put
+        # one empty arm64e object in it. It defines nothing, so every symbol the
+        # real KernelSupport blob provides stays undefined and only the final
+        # kernel link fails -- which is the point of the compile pass.
+        local tmp; tmp="$(mktemp -d)"
+        : > "${tmp}/empty.c"
+        "${CLT_PREFIX}/bin/clang" -c -o "${tmp}/empty.o" "${tmp}/empty.c"
+        "${CLT_PREFIX}/bin/libtool" -static -o "${lib}" "${tmp}/empty.o"
+        rm -rf "${tmp}"
+    fi
+    # Everything else the makefiles read out of $(KDKROOT) is headers, so mirror
+    # the real KDK's include trees by symlink rather than copying them.
+    for p in "System/Library/Frameworks" "System/Library/KernelSupport/CoreEntitlements" \
+             "System/Library/KernelSupport/Exclaves" "System/Library/KernelSupport/Tightbeam" \
+             "System/Library/KernelSupport/kern" "System/Library/KernelSupport/xnuproxy" \
+             "System/Library/KernelSupport/xrt_hosted_types" "usr/local/lib/kernel"; do
+        if [ -e "${KDKROOT}/${p}" ] && [ ! -e "${STUBROOT}/${p}" ]; then
+            mkdir -p "$(dirname "${STUBROOT}/${p}")"
+            ln -s "${KDKROOT}/${p}" "${STUBROOT}/${p}"
+        fi
+    done
+}
+
+# ----------------------------------------------------------- kernel libs ----
+# Two archives MakeInc.def links that the KDK does not carry:
+#
+#  * libcc_kext.a: LLVM's compiler-rt for kexts. The kernel needs exactly two
+#    symbols from it (__llvm_profile_get_size_for_buffer_internal and
+#    __llvm_profile_write_buffer_internal), and no arm64e build of compiler-rt
+#    exists on the Linux side, so it is taken from an Apple clang resource dir:
+#    `bench-fetch-xcode-tools --clt --out <xc dir>` (public Command Line Tools
+#    package, no Apple ID) puts it at <xc dir>/toolchain-libs/. Handed to ld by
+#    path (LD_KERNEL_LIBS, see run_make) because clang's Darwin driver drops a
+#    bare -lcc_kext when its own resource dir has no copy.
+#  * libfirehose_kernel.a: libdispatch's kernel firehose target, one file
+#    (src/firehose/firehose_buffer.c), open source. Built here with the cross
+#    compiler from the compile flags of libkern's log.o (its -MJ fragment) plus
+#    the firehose directory of xnu's exported libkern headers, then archived
+#    with cctools libtool.
+setup_kernel_libs() {
+    local libdir="${FAKEROOT_DIR}/usr/local/lib/kernel"
+    mkdir -p "${libdir}"
+    if [ ! -f "${libdir}/libcc_kext.a" ]; then
+        # Where the Command Line Tools put it.
+        local c
+        c="$(ls -d "${CLT_PREFIX}"/lib/clang/*/lib/darwin/libclang_rt.cc_kext.a 2>/dev/null | sort -V | tail -1)"
+        if [ -n "${c}" ]; then
+            cp "${c}" "${libdir}/libcc_kext.a"; info "libcc_kext.a <- ${c}"
+        else
+            warn "no libcc_kext.a: the link will fail on __llvm_profile_*; put the CLT's libclang_rt.cc_kext.a in ${CLT_PREFIX}/lib/clang/<version>/lib/darwin/"
+        fi
+    fi
+    if [ ! -f "${libdir}/libfirehose_kernel.a" ]; then
+        local frag
+        frag="$(find "${OBJROOT}/${KERNEL_CONFIG}_${ARCH_CONFIG}_${MACHINE_CONFIG}/libkern" -name 'log.o.json' -print -quit 2>/dev/null || true)"
+        if [ -z "${frag}" ]; then
+            info "no libkern/log.o.json yet; libfirehose_kernel.a is built after the compile pass"
+            return 0
+        fi
+        say "building libfirehose_kernel.a with the cross compiler"
+        local ld tmp cc
+        ld="$(clone_project libdispatch)"
+        tmp="$(mktemp -d)"
+        cc="${CLT_PREFIX}/bin/clang"
+        python3 - "${frag}" "${cc}" "${ld}" "${FAKEROOT_DIR}" "${OBJROOT}" "${tmp}/firehose_buffer.o" > "${tmp}/compile.sh" <<'EOF'
+import json, shlex, sys
+frag, cc, ld, fakeroot, objroot, out = sys.argv[1:]
+j = json.loads(open(frag).read().strip().rstrip(','))
+args = j["arguments"][1:]
+src = j.get("file", "")
+keep, skip = [], False
+for a in args:
+    if skip: skip = False; continue
+    if a in ("-o", "-MJ", "-MF", "-MT", "-MQ"): skip = True; continue
+    if a in ("-MD", "-MMD", "-c") or a == src or a.endswith("/log.c"): continue
+    keep.append(a)
+extra = ["-I" + objroot + "/EXPORT_HDRS/libkern/firehose"]
+cmd = [cc] + extra + keep + ["-c", ld + "/src/firehose/firehose_buffer.c", "-o", out]
+print("cd " + shlex.quote(j["directory"]) + " && \\")
+print(" ".join(shlex.quote(x) for x in cmd))
+EOF
+        bash "${tmp}/compile.sh" > "${LOGDIR}/firehose.log" 2>&1 || die "libfirehose_kernel.a: compile failed, see ${LOGDIR}/firehose.log"
+        "${CLT_PREFIX}/bin/libtool" -static -o "${libdir}/libfirehose_kernel.a" "${tmp}/firehose_buffer.o" >> "${LOGDIR}/firehose.log" 2>&1 \
+            || die "libfirehose_kernel.a: libtool failed, see ${LOGDIR}/firehose.log"
+        info "libfirehose_kernel.a: $("${CLT_PREFIX}/bin/nm" -g "${libdir}/libfirehose_kernel.a" 2>/dev/null | grep -c ' T ') text symbols"
+        rm -rf "${tmp}"
+    fi
+}
+
+# ------------------------------------------------------------------- make ----
+run_make() {  # run_make <target...> <logfile>
+    local log="${!#}"
+    local targets=("${@:1:$#-1}")
+    local kdk="${MAKE_KDKROOT:-${KDKROOT}}"
+    local extra=()
+    [ -n "${MAKE_EXTRA:-}" ] && read -r -a extra <<< "${MAKE_EXTRA}"
+    # MakeInc.def links with `-lcc_kext`, but clang's Darwin driver treats that
+    # name specially and drops it from the ld command line when its own
+    # resource-dir copy of libclang_rt.cc_kext.a is absent (it always is on
+    # Linux), so ___chkstk_darwin and the __llvm_profile_* symbols come out
+    # undefined. Handing ld the archive by path sidesteps the driver.
+    local cc_kext="${FAKEROOT_DIR}/usr/local/lib/kernel/libcc_kext.a"
+    [ -f "${cc_kext}" ] && extra+=("LD_KERNEL_LIBS=${cc_kext}")
+
+    ( cd "${XNU_SRC}" && \
+      PLATFORM=MacOSX \
+      HOST_CC="${CLT_PREFIX}/bin/xnu-host-cc" \
+      MIGCOM="${CLT_PREFIX}/libexec/migcom" \
+      make "${targets[@]}" -j"${JOBS}" \
+        VERBOSE=YES CONCISE=0 LOGCOLORS=n \
+        SDKROOT="${FAKEROOT_DIR}" OBJROOT="${OBJROOT}" SYMROOT="${SYMROOT}" \
+        DSTROOT="${DSTROOT}" FAKEROOT_DIR="${FAKEROOT_DIR}" \
+        KDKROOT="${kdk}" \
+        TARGET_CONFIGS="${KERNEL_CONFIG} ${ARCH_CONFIG} ${MACHINE_CONFIG}" \
+        TIGHTBEAMC=tightbeamc-not-supported \
+        RC_DARWIN_KERNEL_VERSION="${RC_DARWIN_KERNEL_VERSION}" \
+        BUILD_WERROR=0 BUILD_LTO=0 BUILD_DSYM=0 \
+        MEMORY_SIZE="$(( $(getconf _PHYS_PAGES) * $(getconf PAGE_SIZE) ))" \
+        SYSCTL_HW_PHYSICALCPU="$(nproc)" SYSCTL_HW_LOGICALCPU="$(nproc)" \
+        "${extra[@]}" \
+    ) 2>&1 | tee "${log}"
+    return "${PIPESTATUS[0]}"
+}
+
+# ------------------------------------------------------------------- main ----
+build_xnu() {
+    # The compile pass also builds the log.o.json that libfirehose_kernel.a is
+    # compiled from, which the link needs.
+    make_stubroot
+    say "compile pass (stub KernelSupport, make -k; log: ${LOGDIR}/compile.log)"
+    MAKE_KDKROOT="${STUBROOT}" MAKE_EXTRA="-k" \
+        run_make all "${LOGDIR}/compile.log" > /dev/null || true
+    say "$(find "${OBJROOT}" -name '*.o' | wc -l) object files under ${OBJROOT}"
+    setup_kernel_libs
+    say "link pass against ${KDKROOT} (log: ${LOGDIR}/link.log)"
+    run_make all "${LOGDIR}/link.log" > /dev/null \
+        || die "link pass failed; see ${LOGDIR}/link.log"
+    ! grep -q 'exported name not in import list' "${LOGDIR}/link.log" \
+        || die "${LOGDIR}/link.log: exported name not in import list"
+}
+
+report_kernel() {
+    local k
+    k="$(find "${OBJROOT}" -name "kernel.${KERNEL_TYPE}" -print -quit 2>/dev/null || true)"
+    [ -n "${k}" ] || die "no kernel.${KERNEL_TYPE} under ${OBJROOT}; see ${LOGDIR}/link.log"
+    say "kernel: ${k}  ($(stat -c %s "${k}") bytes, $("${CLT_PREFIX}/bin/otool" -l "${k}" | grep -A2 LC_UUID | awk '/uuid/ {print $2}'))"
+}
+
+# ---- --kc: the boot kernel collection, as build.sh --kc does with kmutil -----
+build_kc() {
+    local kernel kc
+    kernel="${OBJROOT}/kernel.${KERNEL_TYPE}"
+    [ -e "${kernel}" ] || die "--kc: no ${kernel}"
+    kc="${DSTROOT}/oss-xnu.macOS.${MACOS_VERSION}.kc.${MACHINE_CONFIG,,}"
+    say "kernel collection: ${kc}"
+    KC_FILTER="${KC_FILTER}" \
+        "$(dirname "$(readlink -f "$0")")/bench-kc-build" \
+        --kernel "${kernel}" --kdk "${KDKROOT}" \
+        --kc-type "${KERNEL_EXT}" --kernel-config "${KERNEL_CONFIG}" \
+        ${KM_BUILD_VERSION:+--kmbuildversion "${KM_BUILD_VERSION}"} \
+        --out "${kc}"
+}
+
+main() {
+    # Parse arguments
+    while test $# -gt 0; do
+        case "$1" in
+        -h | --help)
+            help
+            ;;
+        -c | --clean)
+            clean
+            shift
+            ;;
+        -k | --kc)
+            BUILDKC=1
+            shift
+            ;;
+        *)
+            break
+            ;;
+        esac
+    done
+    # makedefs/MakeInc.cmd runs /usr/bin/xcrun, /usr/bin/plutil and
+    # /usr/bin/codesign by absolute path, as on a Mac.
+    local t
+    for t in xcrun plutil codesign; do
+        [ -x "/usr/bin/${t}" ] || die "no /usr/bin/${t}; install base/darwin/toolchain/shims/usr-bin/${t} there"
+    done
+    mkdir -p "${LOGDIR}"
+    setup_toolchain
+    setup_host_cc
+    choose_xnu
+    get_xnu
+    say "xnu $(git -C "${XNU_SRC}" describe --tags --always 2>/dev/null || echo '?')  ${KERNEL_CONFIG} ${ARCH_CONFIG} ${MACHINE_CONFIG}  -j${JOBS}"
+    info "toolchain $("${CROSS_CLANG}" --version | head -1)"
+    info "fakeroot  ${FAKEROOT_DIR}"
+    info "objroot   ${OBJROOT}"
+    patches
+    build_availabilityversions
+    build_libdispatch
+    build_xnu
+    report_kernel
+    if [ "${BUILDKC}" = 1 ]; then
+        build_kc
+    fi
+}
+
+main "$@"

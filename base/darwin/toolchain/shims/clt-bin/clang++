@@ -1,0 +1,4 @@
+#!/bin/bash
+# clang++ in the CLT's usr/bin: the clang next to it in C++ driver mode, which
+# is what the clang++ name selects.
+exec "$(dirname "$0")/clang" --driver-mode=g++ "$@"

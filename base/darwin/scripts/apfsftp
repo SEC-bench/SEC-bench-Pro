@@ -1,0 +1,867 @@
+#!/usr/bin/env python3
+# apfsftp - offline userspace read/write of an APFS restore ramdisk (no mount, no apfs.ko).
+# Resolves paths and adds, renames and removes files and directories in place;
+# every write keeps the structures apfsprogs' apfsck checks consistent.
+import sys
+
+def u(b,o,n): return int.from_bytes(b[o:o+n],'little')
+
+# crc32c (reflected Castagnoli 0x82F63B78), matching apfsprogs lib/checksum.c (no final xor)
+_T=[]
+for n in range(256):
+    c=n
+    for _ in range(8): c=(c>>1)^(0x82F63B78 & -(c&1))
+    _T.append(c & 0xFFFFFFFF)
+def crc32c(crc,data):
+    for x in data: crc=_T[(crc^x)&0xff]^(crc>>8)
+    return crc & 0xFFFFFFFF
+def dentry_hash(name):                    # ASCII name (no nul); returns name_len_and_hash's hash bits (<<10)
+    h=0xFFFFFFFF
+    for ch in name: h=crc32c(h, ch.encode('latin1')+b'\0\0\0')   # utf32 LE of a <256 codepoint
+    return (h & 0x3FFFFF)<<10
+
+def fletcher(b):
+    buf=b[8:]; s1=s2=0
+    for i in range(0,len(buf),4): s1+=int.from_bytes(buf[i:i+4],'little'); s2+=s1
+    c1=0xFFFFFFFF-((s1+s2)%0xFFFFFFFF); c2=0xFFFFFFFF-((s1+c1)%0xFFFFFFFF); return (c2<<32)|c1
+
+TYPE_INODE,TYPE_DSTREAM_ID,TYPE_FILE_EXTENT,TYPE_DIR_REC=3,6,8,9
+
+class Vol:
+    def __init__(s,path):
+        s.d=bytearray(open(path,'rb').read()); s.bs=u(s.d,0x24,4) or 4096
+        s.hashed=None; s.case_ins=None
+    def blk(s,n): return s.d[n*s.bs:(n+1)*s.bs]
+    def parse(s,paddr,ks=None,vs=None):
+        b=s.blk(paddr); flags=u(b,0x20,2); level=u(b,0x22,2); nkeys=u(b,0x24,4)
+        to=u(b,0x28,2); tl=u(b,0x2a,2); root=flags&1; fixed=flags&4; leaf=(level==0)
+        kb=0x38+to+tl; vend=s.bs-(40 if root else 0)
+        # fixed key/val sizes live only in the root's btree_info trailer; callers pass them to non-root nodes
+        if fixed: ks=ks if ks is not None else u(b,s.bs-32,4); vs_leaf=vs if vs is not None else u(b,s.bs-28,4)
+        else: vs_leaf=None
+        recs=[]
+        for i in range(nkeys):
+            if fixed:
+                ko=u(b,0x38+to+i*4,2); vo=u(b,0x38+to+i*4+2,2); kl=ks
+                vl=8 if not leaf else vs_leaf
+            else:
+                ko=u(b,0x38+to+i*8,2); kl=u(b,0x38+to+i*8+2,2); vo=u(b,0x38+to+i*8+4,2)
+                vl=8 if not leaf else u(b,0x38+to+i*8+6,2)
+            k=bytes(b[kb+ko:kb+ko+kl]); v=bytes(b[vend-vo:vend-vo+vl])
+            recs.append((k,v))
+        return dict(flags=flags,level=level,root=root,leaf=leaf,recs=recs,paddr=paddr)
+
+    # ---- physical omap tree: oid -> paddr ----
+    def omap_lookup(s, omap_tree_paddr, oid):
+        root=s.blk(omap_tree_paddr); ks=u(root,s.bs-32,4); vs=u(root,s.bs-28,4)  # from root trailer, reused for all nodes
+        node=s.parse(omap_tree_paddr,ks,vs)
+        while not node['leaf']:
+            child=None
+            for k,v in node['recs']:
+                if u(k,0,8)<=oid: child=u(v,0,8)     # omap key = oid(8),xid(8); pick largest oid<=target
+                else: break
+            node=s.parse(child,ks,vs)
+        best=None
+        for k,v in node['recs']:
+            if u(k,0,8)==oid:
+                if best is None or u(k,8,8)>best[0]: best=(u(k,8,8),u(v,8,8))  # largest xid; val.paddr@8
+        return best[1] if best else None
+
+    # ---- catalog key ordering ----
+    def kt(s,k):
+        cnid=u(k,0,8)&0x0fffffffffffffff; typ=u(k,0,8)>>60
+        if typ==TYPE_DIR_REC:
+            if s.hashed: nlh=u(k,8,4); nl=nlh&0x3ff; return (cnid,typ,(nlh>>10, k[12:12+nl]))
+            nl=u(k,8,2); return (cnid,typ,(k[10:10+nl],))
+        if typ==TYPE_FILE_EXTENT: return (cnid,typ,(u(k,8,8),))
+        return (cnid,typ,())
+
+    # ---- catalog descent (virtual via volume omap): return leaf node dict for target key ----
+    def cat_leaf(s, root_oid, vol_omap_tree, target_key):
+        node=s.parse(s.omap_lookup(vol_omap_tree, root_oid))
+        while not node['leaf']:
+            tk=s.kt(target_key); child=None
+            for k,v in node['recs']:
+                if s.kt(k)<=tk: child=u(v,0,8)
+                else: break
+            if child is None: child=u(node['recs'][0][1],0,8)
+            node=s.parse(s.omap_lookup(vol_omap_tree, child))
+        return node
+
+def latest_nx(vol):
+    # scan the checkpoint descriptor ring; the current container superblock is the highest o_xid (at 0x10, not 0x18=o_type)
+    d0=vol.blk(0); db=u(d0,0x70,8); dn=u(d0,0x68,4); best=None;bx=-1
+    for i in range(dn):
+        b=vol.blk(db+i)
+        if u(b,0x20,4)==0x4253584E and fletcher(b)==u(b,0,8) and u(b,0x10,8)>bx: bx=u(b,0x10,8);best=db+i
+    return vol.blk(best),best
+
+def live_spaceman(v,nx):
+    # the space manager is an ephemeral object in the checkpoint DATA ring, not at a fixed paddr
+    dbase=u(nx,0x78,8); dblocks=u(nx,0x6C,4); di=u(nx,0x90,4); dl=u(nx,0x94,4)
+    for i in range(dl):
+        blk=dbase+((di+i)%dblocks); b=v.blk(blk)
+        if u(b,0,8)==fletcher(b) and (u(b,0x18,4)&0xffff)==5: return blk
+    raise SystemExit("no live spaceman in data ring")
+
+def load(path):
+    v=Vol(path); nx,nxblk=latest_nx(v); omo=u(nx,0xA0,8); fs0=u(nx,0xB8,8)
+    com=v.blk(omo); v_cont_omap=u(com,0x30,8)
+    vsbp=v.omap_lookup(v_cont_omap, fs0); vsb=v.blk(vsbp)
+    v.hashed = bool(u(vsb,0x38,8)&8); v.case_ins=bool(u(vsb,0x38,8)&1)
+    return v, vsb, dict(root_oid=u(vsb,0x88,8), vol_omap_tree=u(v.blk(u(vsb,0x80,8)),0x30,8),
+                        extentref=u(vsb,0x90,8), next_obj=u(vsb,0xB0,8), vsbp=vsbp,
+                        sm_paddr=live_spaceman(v,nx), nxblk=nxblk, xid=u(nx,0x10,8))
+
+def cmd_inspect(path):
+    v,vsb,m=load(path)
+    print("bs",v.bs,"hashed",v.hashed,"case_ins",v.case_ins,"next_obj_id",m['next_obj'])
+    # descend to root dir children (cnid 2, DIR_REC). Build a probe key with cnid=2,type=9 and minimal extra.
+    probe=(2<<60|TYPE_DIR_REC).to_bytes(8,'little')+ (b'\x00\x00\x00\x00' if v.hashed else b'\x00\x00')
+    leaf=v.cat_leaf(m['root_oid'], m['vol_omap_tree'], probe)
+    print("root-dir leaf paddr",leaf['paddr'],"level0 nkeys",len(leaf['recs']))
+    ok=0;checked=0
+    for k,val in leaf['recs']:
+        cnid=u(k,0,8)&0x0fffffffffffffff; typ=u(k,0,8)>>60
+        if typ==TYPE_DIR_REC and v.hashed:
+            nlh=u(k,8,4); nl=nlh&0x3ff; name=k[12:12+nl].split(b'\0')[0].decode('latin1')
+            stored=nlh & 0xfffffc00; mine=dentry_hash(name)
+            checked+=1; ok+= (stored==mine)
+            if checked<=6: print("  dentry cnid%d '%s' stored_hash=%#x mine=%#x %s"%(cnid,name,stored>>10,mine>>10,"OK" if stored==mine else "MISMATCH"))
+    print("hash check: %d/%d dentries matched"%(ok,checked))
+
+# ================= single-file insert into a REAL (hashed, multi-level) ramdisk =================
+import struct, time
+def p(b,o,n,val): b[o:o+n]=int(val).to_bytes(n,'little')
+def keyhdr(cnid,typ): return struct.pack('<Q',(typ<<60)|cnid)
+TS=int(time.time()*1_000_000_000)
+
+def emit_catalog_leaf(v, paddr, records):
+    # rebuild a non-root, variable-KV (KV_NONALIGNED) catalog leaf with records (list of (k,v)), sorted.
+    b=v.blk(paddr); bs=v.bs; head=0x38
+    assert not (u(b,0x20,2)&1), "leaf unexpectedly root"
+    records=sorted(records,key=lambda kv:v.kt(kv[0]))
+    tl=max(u(b,0x2a,2), ((len(records)*8+7)//8)*8)
+    nb=bytearray(bs); nb[0:0x20]=b[0:0x20]
+    p(nb,0x20,2,u(b,0x20,2)); p(nb,0x22,2,0); p(nb,0x24,4,len(records))
+    p(nb,0x28,2,0); p(nb,0x2a,2,tl)
+    ka=head+tl; ve=bs; kc=0; vc=0
+    for i,(k,val) in enumerate(records):
+        p(nb,head+i*8+0,2,kc); p(nb,head+i*8+2,2,len(k))
+        vc+=len(val); p(nb,head+i*8+4,2,vc); p(nb,head+i*8+6,2,len(val))
+        nb[ka+kc:ka+kc+len(k)]=k; kc+=len(k)
+        nb[ve-vc:ve-vc+len(val)]=val
+    assert ka+kc <= ve-vc, "leaf overflow (needs a split): paddr %d"%paddr
+    p(nb,0x2c,2,kc); p(nb,0x2e,2,(ve-vc)-(ka+kc))
+    p(nb,0x30,2,0xffff); p(nb,0x32,2,0); p(nb,0x34,2,0xffff); p(nb,0x36,2,0)
+    v.d[paddr*bs:(paddr+1)*bs]=nb; v.csum(paddr)
+
+def csum_into(v,paddr):
+    b=v.blk(paddr); p(b,0,8,fletcher(bytes(b))); v.d[paddr*v.bs:(paddr+1)*v.bs]=b
+Vol.csum=lambda s,paddr: csum_into(s,paddr)
+
+def alloc_blocks(v,sm,cib,n):
+    # allocate n contiguous free blocks in one chunk; mark bitmap, decrement chunk+spaceman free; return first block
+    dev=0x30; cibb=v.blk(cib); nch=u(cibb,0x24,4)
+    for ci in range(nch):
+        co=0x28+ci*32; addr=u(cibb,co+8,8); bc=u(cibb,co+16,4); free=u(cibb,co+20,4); bmap=u(cibb,co+24,8)
+        if free<n: continue
+        bm=v.blk(bmap); run=0
+        for bit in range(bc):
+            if not (bm[bit>>3]>>(bit&7))&1:
+                run+=1
+                if run==n:
+                    ai=bit-n+1; bmb=bytearray(bm)
+                    for j in range(n): b2=ai+j; bmb[b2>>3]|=1<<(b2&7)
+                    v.d[bmap*v.bs:(bmap+1)*v.bs]=bmb
+                    cb=bytearray(v.blk(cib)); p(cb,co+20,4,u(cb,co+20,4)-n); v.d[cib*v.bs:(cib+1)*v.bs]=cb; v.csum(cib)
+                    sb=bytearray(v.blk(sm)); p(sb,dev+24,8,u(sb,dev+24,8)-n); v.d[sm*v.bs:(sm+1)*v.bs]=sb; v.csum(sm)
+                    return addr+ai
+            else: run=0
+    raise SystemExit("no %d contiguous free blocks"%n)
+
+def node_fits(v,recs,is_root):
+    tl=((len(recs)*8+7)//8)*8; info=40 if is_root else 0
+    return 0x38+tl+sum(len(k) for k,_ in recs)+sum(len(val) for _,val in recs)+info <= v.bs
+
+def emit_var_node(v,paddr,recs,level,oid,xid,otype,osubtype,is_root,tmpl,key_count=None,node_count=None):
+    # write a complete variable-KV node (leaf level 0 or internal). internal recs are (key, 8-byte child ptr).
+    bs=v.bs; head=0x38; info=40 if is_root else 0
+    recs=sorted(recs,key=lambda kv:v.kt(kv[0]))
+    tl=((len(recs)*8+7)//8)*8
+    nb=bytearray(bs)
+    p(nb,8,8,oid); p(nb,0x10,8,xid); p(nb,0x18,4,otype); p(nb,0x1c,4,osubtype)
+    p(nb,0x20,2,(1 if is_root else 0)|(2 if level==0 else 0)); p(nb,0x22,2,level); p(nb,0x24,4,len(recs))
+    p(nb,0x28,2,0); p(nb,0x2a,2,tl)
+    ka=head+tl; ve=bs-info; kc=0; vc=0; lk=0; lv=0
+    for i,(k,val) in enumerate(recs):
+        p(nb,head+i*8,2,kc); p(nb,head+i*8+2,2,len(k)); vc+=len(val); p(nb,head+i*8+4,2,vc); p(nb,head+i*8+6,2,len(val))
+        nb[ka+kc:ka+kc+len(k)]=k; kc+=len(k); nb[ve-vc:ve-vc+len(val)]=val; lk=max(lk,len(k)); lv=max(lv,len(val))
+    assert ka+kc<=ve-vc, "emit_var_node overflow @%d"%paddr
+    p(nb,0x2c,2,kc); p(nb,0x2e,2,(ve-vc)-(ka+kc)); p(nb,0x30,2,0xffff); p(nb,0x34,2,0xffff)
+    if is_root:
+        nb[bs-40:bs]=v.blk(tmpl)[bs-40:bs]        # copy bt_fixed/flags/node_size and tree-wide maxima from template root
+        p(nb,bs-40+16,4,max(u(nb,bs-40+16,4),lk))   # longest_key/val are TREE-wide; never shrink to this node's max
+        p(nb,bs-40+20,4,max(u(nb,bs-40+20,4),lv))
+        if key_count is not None: p(nb,bs-40+24,8,key_count)
+        if node_count is not None: p(nb,bs-40+32,8,node_count)
+    v.d[paddr*bs:(paddr+1)*bs]=nb; v.csum(paddr)
+
+def phys_insert(v,sm,cib,er_root,key,val):
+    # insert (key,val) into a PHYSICAL btree (child ptr == child paddr), splitting as needed; always re-emit ancestors
+    # up to the root so key_count and separator keys stay correct. Returns (root_paddr, new_node_count).
+    node=v.parse(er_root); path=[er_root]; kid=u(key,0,8)&0x0fffffffffffffff
+    while not node['leaf']:
+        ch=None
+        for k,vv in node['recs']:
+            if (u(k,0,8)&0x0fffffffffffffff)<=kid: ch=u(vv,0,8)
+            else: break
+        if ch is None: ch=u(node['recs'][0][1],0,8)
+        path.append(ch); node=v.parse(ch)
+    rb=v.blk(er_root); kcount=[u(rb,v.bs-40+24,8)+1]; ncount=[u(rb,v.bs-40+32,8)]; nnew=[0]; newroot=[er_root]
+    root_ot=u(rb,0x18,4); node_ot=(root_ot&0xFFFFFFF0)|3; osub=u(v.blk(path[-1]),0x1c,4); xid=u(rb,0x10,8)
+    def emit_up(idx,recs):
+        cur=path[idx]; is_root=(idx==0); level=len(path)-1-idx
+        exid=u(v.blk(cur),0x10,8)                       # preserve an existing node's own xid (in-place edit)
+        recs=sorted(recs,key=lambda kv:v.kt(kv[0]))
+        if node_fits(v,recs,is_root):
+            emit_var_node(v,cur,recs,level,cur,exid,(root_ot if is_root else node_ot),osub,is_root,er_root,
+                          key_count=kcount[0] if is_root else None, node_count=ncount[0] if is_root else None)
+            return [(recs[0][0],cur)]
+        h=len(recs)//2; left=recs[:h]; right=recs[h:]
+        newp=alloc_blocks(v,sm,cib,1); ncount[0]+=1; nnew[0]+=1
+        emit_var_node(v,newp,right,level,newp,xid,node_ot,osub,False,er_root)
+        if is_root:
+            nrp=alloc_blocks(v,sm,cib,1); ncount[0]+=1; nnew[0]+=1
+            emit_var_node(v,cur,left,level,cur,exid,node_ot,osub,False,er_root)
+            rr=[(left[0][0],struct.pack('<Q',cur)),(right[0][0],struct.pack('<Q',newp))]
+            emit_var_node(v,nrp,rr,level+1,nrp,xid,root_ot,osub,True,er_root,key_count=kcount[0],node_count=ncount[0])
+            newroot[0]=nrp; return None
+        emit_var_node(v,cur,left,level,cur,exid,node_ot,osub,False,er_root)
+        return [(left[0][0],cur),(right[0][0],newp)]
+    upd=emit_up(len(path)-1, list(node['recs'])+[(key,val)]); idx=len(path)-2
+    while upd is not None and idx>=0:
+        parp=path[idx]; oldchild=path[idx+1]
+        precs=[(k,vv) for k,vv in v.parse(parp)['recs'] if u(vv,0,8)!=oldchild]
+        for mn,cp in upd: precs.append((mn,struct.pack('<Q',cp)))
+        upd=emit_up(idx,precs); idx-=1
+    return newroot[0],nnew[0]
+
+# ---------- fixed-KV (omap) emit + insert-without-split ----------
+def emit_fixed_node(v,paddr,ents,level,oid,xid,otype,osub,is_root,tmpl,vsize,key_count=None,node_count=None):
+    # ents: list of (key16, val{vsize}); sequential layout. omap key = oid(8)+xid(8).
+    bs=v.bs; head=0x38; info=40 if is_root else 0
+    ents=sorted(ents,key=lambda kv:(u(kv[0],0,8),u(kv[0],8,8)))
+    n=len(ents)
+    tl=((bs-head)//(16+vsize+4))*4     # fixed-KV: table preallocated to the node's full capacity (apfsck requires exact)
+    nb=bytearray(bs)
+    p(nb,8,8,oid); p(nb,0x10,8,xid); p(nb,0x18,4,otype); p(nb,0x1c,4,osub)
+    p(nb,0x20,2,(1 if is_root else 0)|(2 if level==0 else 0)|4); p(nb,0x22,2,level); p(nb,0x24,4,n)
+    p(nb,0x28,2,0); p(nb,0x2a,2,tl)
+    ka=head+tl; ve=bs-info
+    for i,(k,val) in enumerate(ents):
+        p(nb,head+i*4,2,i*16); p(nb,head+i*4+2,2,(i+1)*vsize)
+        nb[ka+i*16:ka+i*16+16]=k; nb[ve-(i+1)*vsize:ve-i*vsize]=val
+    p(nb,0x2c,2,n*16); p(nb,0x2e,2,(ve-n*vsize)-(ka+n*16))
+    p(nb,0x30,2,0xffff); p(nb,0x34,2,0xffff)
+    if is_root:
+        nb[bs-40:bs]=v.blk(tmpl)[bs-40:bs]
+        if key_count is not None: p(nb,bs-40+24,8,key_count)
+        if node_count is not None: p(nb,bs-40+32,8,node_count)
+    v.d[paddr*bs:(paddr+1)*bs]=nb; v.csum(paddr)
+
+def omap_insert(v,omap_root,noid,nxid,npaddr):
+    # add oid->paddr to a physical fixed-KV omap; assumes the target leaf has room (no omap split)
+    rb=v.blk(omap_root); ks=u(rb,v.bs-32,4); vs=u(rb,v.bs-28,4)
+    node=v.parse(omap_root,ks,vs); path=[omap_root]
+    while not node['leaf']:
+        ch=None
+        for k,vv in node['recs']:
+            if u(k,0,8)<=noid: ch=u(vv,0,8)
+            else: break
+        if ch is None: ch=u(node['recs'][0][1],0,8)
+        path.append(ch); node=v.parse(ch,ks,vs)
+    leaf=path[-1]
+    key=struct.pack('<QQ',noid,nxid); val=struct.pack('<IIQ',0,v.bs,npaddr)
+    ents=list(node['recs'])+[(key,val)]
+    otype=u(v.blk(leaf),0x18,4); osub=u(v.blk(leaf),0x1c,4); lxid=u(v.blk(leaf),0x10,8)
+    assert node_fixed_fits(v,len(ents),16,False), "omap leaf full (omap split not implemented)"
+    emit_fixed_node(v,leaf,ents,0,leaf,max(lxid,nxid),otype,osub,False,omap_root,16)  # node xid must be >= its key xids
+    # fix parent separators if the new key is the leaf's new minimum
+    newmin=min(ents,key=lambda kv:(u(kv[0],0,8),u(kv[0],8,8)))[0]
+    for lvl in range(len(path)-2,-1,-1):
+        par=path[lvl]; child=path[lvl+1]; pn=v.parse(par,ks,vs); idx=None
+        for i,(k,vv) in enumerate(pn['recs']):
+            if u(vv,0,8)==child: idx=i; break
+        if idx is None: break
+        pb=bytearray(v.blk(par)); to=u(pb,0x28,2); tl=u(pb,0x2a,2); kb=0x38+to+tl
+        koff=u(pb,0x38+to+idx*4,2)
+        if pb[kb+koff:kb+koff+16]==newmin: break
+        pb[kb+koff:kb+koff+16]=newmin; v.d[par*v.bs:(par+1)*v.bs]=pb; v.csum(par)
+        if idx!=0: break
+    # bump omap root key_count; and raise every ancestor's o_xid to >= the new key xid (parent xid >= child xid)
+    rb=bytearray(v.blk(omap_root)); p(rb,v.bs-40+24,8,u(rb,v.bs-40+24,8)+1); v.d[omap_root*v.bs:(omap_root+1)*v.bs]=rb; v.csum(omap_root)
+    for anc in path[:-1]:
+        ab=bytearray(v.blk(anc))
+        if u(ab,0x10,8)<nxid: p(ab,0x10,8,nxid); v.d[anc*v.bs:(anc+1)*v.bs]=ab; v.csum(anc)
+
+def node_fixed_fits(v,n,vsize,is_root):
+    return n <= (v.bs-0x38)//(16+vsize+4)     # capacity of the fixed preallocated table
+
+def virt_modify(v,ctx,key,editfn):
+    # find the leaf holding `key`, apply editfn to that record's value bytes (same length), re-emit the leaf (no split)
+    vot=ctx['vol_omap_tree']; leaf=v.cat_leaf(ctx['root_oid'],vot,key)
+    lp=leaf['paddr']; recs=[(k,(editfn(bytearray(val)) if k==key else val)) for k,val in leaf['recs']]
+    oid=u(v.blk(lp),8,8); exid=u(v.blk(lp),0x10,8); node_otype=u(v.blk(lp),0x18,4); osub=u(v.blk(lp),0x1c,4)
+    emit_var_node(v,lp,recs,0,oid,exid,node_otype,osub,False,ctx['catroot'])
+
+def virt_insert(v,ctx,key,val):
+    # insert (key,val) into the virtual catalog, splitting nodes and adding omap entries as needed; return new-node count
+    vot=ctx['vol_omap_tree']; rootpaddr=v.omap_lookup(vot,ctx['root_oid'])
+    path=[(rootpaddr,ctx['root_oid'])]; node=v.parse(rootpaddr); tk=v.kt(key)
+    while not node['leaf']:
+        ch=None
+        for k,vv in node['recs']:
+            if v.kt(k)<=tk: ch=u(vv,0,8)
+            else: break
+        if ch is None: ch=u(node['recs'][0][1],0,8)
+        chp=v.omap_lookup(vot,ch); path.append((chp,ch)); node=v.parse(chp)
+    rb=v.blk(rootpaddr); kcount=[u(rb,v.bs-40+24,8)+1]; ncount=[u(rb,v.bs-40+32,8)]; nnew=[0]
+    root_ot=u(rb,0x18,4); node_ot=(root_ot&0xFFFFFFF0)|3; osub=u(v.blk(path[-1][0]),0x1c,4); xid=ctx['xid']
+    def newnode():
+        pd=alloc_blocks(v,ctx['sm'],ctx['cib'],1); oid=bump_next_oid(v,ctx['nxblk']); omap_insert(v,vot,oid,xid,pd)
+        ncount[0]+=1; nnew[0]+=1; return pd,oid
+    def emit_up(idx,recs):
+        curp,curoid=path[idx]; is_root=(idx==0); level=len(path)-1-idx
+        exid=u(v.blk(curp),0x10,8)                      # preserve existing node's xid so its omap entry still matches
+        recs=sorted(recs,key=lambda kv:v.kt(kv[0]))
+        if node_fits(v,recs,is_root):
+            emit_var_node(v,curp,recs,level,curoid,exid,(root_ot if is_root else node_ot),osub,is_root,rootpaddr,
+                          key_count=kcount[0] if is_root else None, node_count=ncount[0] if is_root else None)
+            return [(recs[0][0],curoid)]
+        h=len(recs)//2; left=recs[:h]; right=recs[h:]
+        newp,newoid=newnode(); emit_var_node(v,newp,right,level,newoid,xid,node_ot,osub,False,rootpaddr)
+        if is_root:
+            nrp,nroid=newnode(); emit_var_node(v,curp,left,level,curoid,exid,node_ot,osub,False,rootpaddr)
+            rr=[(left[0][0],struct.pack('<Q',curoid)),(right[0][0],struct.pack('<Q',newoid))]
+            emit_var_node(v,nrp,rr,level+1,nroid,xid,root_ot,osub,True,rootpaddr,key_count=kcount[0],node_count=ncount[0])
+            vb=bytearray(v.blk(ctx['vsbp'])); p(vb,0x88,8,nroid); v.d[ctx['vsbp']*v.bs:(ctx['vsbp']+1)*v.bs]=vb; v.csum(ctx['vsbp'])
+            ctx['root_oid']=nroid
+            return None
+        emit_var_node(v,curp,left,level,curoid,exid,node_ot,osub,False,rootpaddr)
+        return [(left[0][0],curoid),(right[0][0],newoid)]
+    upd=emit_up(len(path)-1, list(node['recs'])+[(key,val)])
+    idx=len(path)-2
+    while upd is not None and idx>=0:
+        parp,paroid=path[idx]; oldchild=path[idx+1][1]
+        precs=[(k,vv) for k,vv in v.parse(parp)['recs'] if u(vv,0,8)!=oldchild]
+        for mn,coid in upd: precs.append((mn,struct.pack('<Q',coid)))
+        upd=emit_up(idx,precs); idx-=1
+    return nnew[0]
+
+def bump_next_oid(v,nxblk):
+    b=bytearray(v.blk(nxblk)); oid=u(b,0x58,8); p(b,0x58,8,oid+1); v.d[nxblk*v.bs:(nxblk+1)*v.bs]=b; v.csum(nxblk)
+    # keep block 0's copy in sync (apfsck/kernel may read either checkpoint superblock)
+    if nxblk!=0:
+        b0=bytearray(v.blk(0))
+        if u(b0,0x10,8)==u(v.blk(nxblk),0x10,8): p(b0,0x58,8,oid+1); v.d[0:v.bs]=b0; v.csum(0)
+    return oid
+
+def build_file_records(cnid,parent,name,content,blk,bs,hashed,mode=0o100644):
+    nbz=name.encode()+b'\0'; nl=len(nbz); padn=(nl+7)&~7; size=len(content)
+    alloced=((size+bs-1)//bs)*bs or bs; CRYPTO=4
+    iv=bytearray(0x5C); p(iv,0,8,parent); p(iv,8,8,cnid)
+    for o in (0x10,0x18,0x20,0x28): p(iv,o,8,TS)
+    p(iv,0x38,4,1); p(iv,0x50,2,mode); p(iv,0x54,8,0)
+    ds=struct.pack('<QQQQQ',size,alloced,CRYPTO,size,0)
+    xblob=struct.pack('<HH',2,padn+len(ds)); xn=struct.pack('<BBH',4,0x02,nl); xd=struct.pack('<BBH',8,0x20,len(ds))
+    ival=bytes(iv)+xblob+xn+xd+nbz+b'\0'*(padn-nl)+ds
+    recs=[(keyhdr(cnid,TYPE_INODE),ival),(keyhdr(cnid,TYPE_DSTREAM_ID),struct.pack('<I',1)),
+          (keyhdr(cnid,TYPE_FILE_EXTENT)+struct.pack('<Q',0),struct.pack('<QQQ',alloced,blk,CRYPTO))]
+    if hashed:
+        dk=keyhdr(parent,TYPE_DIR_REC)+struct.pack('<I',(dentry_hash(name))|nl)+nbz
+    else:
+        dk=keyhdr(parent,TYPE_DIR_REC)+struct.pack('<H',nl)+nbz
+    recs.append((dk,struct.pack('<QQH',cnid,TS,0o100000>>12)))
+    return recs
+
+def cmd_addfile(path,parent,name,src,mode=0o100644):
+    content=open(src,'rb').read()
+    v,vsb,m=load(path); bs=v.bs
+    parent=parent_cnid(v,m,parent); cnid=m['next_obj']
+    # spaceman: allocate nblk contiguous blocks for the file data (one file-extent spans them)
+    nblk=max(1,(len(content)+bs-1)//bs)
+    sm=m['sm_paddr']; smb=v.blk(sm); ao=u(smb,0x30+32,4); cib=u(smb,ao,8)
+    alloc=alloc_blocks(v,sm,cib,nblk)
+    recs=build_file_records(cnid,parent,name,content,alloc,bs,v.hashed,mode)
+    # write the file content into the allocated run (alloc_blocks already marked the bitmap and counts)
+    v.d[alloc*bs:alloc*bs+nblk*bs]=content+b'\0'*(nblk*bs-len(content))
+    ctx=dict(sm=sm,cib=cib,vol_omap_tree=m['vol_omap_tree'],nxblk=m['nxblk'],xid=m['xid'],
+             root_oid=m['root_oid'],vsbp=m['vsbp'],catroot=v.omap_lookup(m['vol_omap_tree'],m['root_oid']))
+    print("cnid",cnid,"data_blk",alloc,"nblk",nblk,"sm",sm,"cib",cib)
+    # parent dir: nchildren += 1 (in-place value edit, no split)
+    def bump_nchildren(vv): p(vv,0x38,4,u(vv,0x38,4)+1); p(vv,0x18,8,TS); p(vv,0x20,8,TS); return bytes(vv)
+    virt_modify(v,ctx,keyhdr(parent,TYPE_INODE),bump_nchildren)
+    # insert the file's catalog records (inode, dstream-id, file-extent, dentry), splitting nodes as needed
+    cat_newnodes=0
+    for k,val in recs: cat_newnodes+=virt_insert(v,ctx,k,val)
+    # extent-ref tree (physical): insert the phys-ext record, splitting nodes as needed
+    er=m['extentref']
+    pe_key=keyhdr(alloc,2); pe_val=struct.pack('<QQI',(1<<60)|nblk,cnid,1)
+    newroot,er_newnodes=phys_insert(v, sm, cib, er, pe_key, pe_val)
+    if newroot!=er:                                   # extentref grew a level; repoint the volume super
+        vb=bytearray(v.blk(m['vsbp'])); p(vb,0x90,8,newroot); v.d[m['vsbp']*bs:(m['vsbp']+1)*bs]=vb; v.csum(m['vsbp'])
+    # volume super counters: data blocks + all new metadata node blocks (catalog + extentref)
+    extra=nblk+er_newnodes+cat_newnodes
+    vb=bytearray(v.blk(m['vsbp'])); p(vb,0xB0,8,cnid+1); p(vb,0xB8,8,u(vb,0xB8,8)+1)
+    p(vb,0xE0,8,u(vb,0xE0,8)+extra); p(vb,0x58,8,u(vb,0x58,8)+extra)
+    v.d[m['vsbp']*bs:(m['vsbp']+1)*bs]=vb; v.csum(m['vsbp'])
+    open(path,'r+b').write(v.d)
+    print("added /%s cnid %d -> block %d, %d bytes"%(name,cnid,alloc,len(content)))
+
+# ===== catalog operations (path resolve, mkdir, rename, rm) =====
+# Resolve a path to a cnid, mkdir, rename (within a parent), rm a file/empty dir.
+import sys, struct, time
+
+TS = int(time.time() * 1_000_000_000)
+
+# ---- path resolution -------------------------------------------------------
+def child_cnid(v, m, parent, name):
+    val = child_rec(v, m, parent, name)
+    return None if val is None else u(val, 0, 8)
+
+def child_rec(v, m, parent, name):
+    # the dentry value (file_id, date_added, flags) of NAME under PARENT, or None
+    if v.hashed:
+        probe = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<I', dentry_hash(name) | (len(name)+1)) + name.encode() + b'\0'
+    else:
+        probe = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<H', len(name)+1) + name.encode() + b'\0'
+    leaf = v.cat_leaf(m['root_oid'], m['vol_omap_tree'], probe)
+    for k, val in leaf['recs']:
+        if k == probe:
+            return val
+    # fall back to a name compare (hash probe must match exactly, so this is a safety net)
+    for k, val in leaf['recs']:
+        cnid = u(k, 0, 8) & 0x0fffffffffffffff; typ = u(k, 0, 8) >> 60
+        if typ != TYPE_DIR_REC or cnid != parent:
+            continue
+        if v.hashed:
+            nlh = u(k, 8, 4); nl = nlh & 0x3ff; nm = k[12:12+nl].split(b'\0')[0]
+        else:
+            nl = u(k, 8, 2); nm = k[10:10+nl].split(b'\0')[0]
+        if nm == name.encode():
+            return val
+    return None
+
+def resolve(v, m, path):
+    cnid = 2  # root dir
+    for comp in path.strip('/').split('/'):
+        if comp == '':
+            continue
+        nxt = child_cnid(v, m, cnid, comp)
+        if nxt is None:
+            raise SystemExit("resolve: no such path component %r under cnid %d" % (comp, cnid))
+        cnid = nxt
+    return cnid
+
+def parent_cnid(v, m, parent):
+    # PARENT on the command line is a cnid, or an absolute path inside the volume
+    return int(parent) if str(parent).isdigit() else resolve(v, m, parent)
+
+# ---- record builders -------------------------------------------------------
+def dir_dentry(parent, name, cnid, hashed):
+    nbz = name.encode() + b'\0'; nl = len(nbz)
+    if hashed:
+        k = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<I', dentry_hash(name) | nl) + nbz
+    else:
+        k = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<H', nl) + nbz
+    val = struct.pack('<QQH', cnid, TS, 0o040000 >> 12)  # DT_DIR
+    return k, val
+
+def build_dir_records(cnid, parent, name, hashed, mode=0o040755):
+    nbz = name.encode() + b'\0'; nl = len(nbz); padn = (nl + 7) & ~7
+    iv = bytearray(0x5C); p(iv, 0, 8, parent); p(iv, 8, 8, cnid)
+    for o in (0x10, 0x18, 0x20, 0x28): p(iv, o, 8, TS)
+    p(iv, 0x38, 4, 0)      # nchildren = 0 for an empty dir
+    p(iv, 0x50, 2, mode)   # S_IFDIR | perms
+    xblob = struct.pack('<HH', 1, padn)
+    xn = struct.pack('<BBH', 4, 0x02, nl)
+    ival = bytes(iv) + xblob + xn + nbz + b'\0' * (padn - nl)
+    return [(keyhdr(cnid, TYPE_INODE), ival)], dir_dentry(parent, name, cnid, hashed)
+
+# ---- catalog delete (leaf shrink + separator fixup, no merge) ---------------
+def virt_delete(v, ctx, key):
+    vot = ctx['vol_omap_tree']; rootpaddr = v.omap_lookup(vot, ctx['root_oid'])
+    path = [(rootpaddr, ctx['root_oid'])]; node = v.parse(rootpaddr); tk = v.kt(key)
+    while not node['leaf']:
+        ch = None
+        for k, vv in node['recs']:
+            if v.kt(k) <= tk: ch = u(vv, 0, 8)
+            else: break
+        if ch is None: ch = u(node['recs'][0][1], 0, 8)
+        chp = v.omap_lookup(vot, ch); path.append((chp, ch)); node = v.parse(chp)
+    recs = [(k, val) for k, val in node['recs'] if k != key]
+    if len(recs) == len(node['recs']):
+        raise SystemExit("virt_delete: key not found in target leaf")
+    lp, loid = path[-1]
+    exid = u(v.blk(lp), 0x10, 8); node_ot = u(v.blk(lp), 0x18, 4); osub = u(v.blk(lp), 0x1c, 4)
+    if not recs and len(path) > 1:
+        raise SystemExit("virt_delete: would empty a non-root leaf (merge not implemented)")
+    emit_var_node(v, lp, recs, 0, loid, exid, node_ot, osub, len(path) == 1, rootpaddr,
+                  key_count=(u(v.blk(rootpaddr), v.bs-40+24, 8) - 1) if len(path) == 1 else None,
+                  node_count=u(v.blk(rootpaddr), v.bs-40+32, 8) if len(path) == 1 else None)
+    if len(path) == 1:
+        return
+    # bump root key_count down by one
+    rb = bytearray(v.blk(rootpaddr)); p(rb, v.bs-40+24, 8, u(rb, v.bs-40+24, 8) - 1)
+    v.d[rootpaddr*v.bs:(rootpaddr+1)*v.bs] = rb; v.csum(rootpaddr)
+    # if the deleted record was the leaf minimum, fix separators up the path
+    newmin = sorted(recs, key=lambda kv: v.kt(kv[0]))[0][0]
+    for lvl in range(len(path)-2, -1, -1):
+        parp, paroid = path[lvl]; childoid = path[lvl+1][1]
+        pn = v.parse(parp); precs = list(pn['recs']); changed = False
+        for i, (k, vv) in enumerate(precs):
+            if u(vv, 0, 8) == childoid:
+                if precs[i][0] != newmin and i != 0:
+                    # separator only matters when the child is not first; still refresh it
+                    pass
+                precs[i] = (newmin, vv); changed = True; break
+        if not changed: break
+        exid2 = u(v.blk(parp), 0x10, 8); ot2 = u(v.blk(parp), 0x18, 4); os2 = u(v.blk(parp), 0x1c, 4)
+        is_root = (lvl == 0); level = len(path)-1-lvl
+        emit_var_node(v, parp, precs, level, paroid, exid2, ot2, os2, is_root, rootpaddr,
+                      key_count=u(v.blk(rootpaddr), v.bs-40+24, 8) if is_root else None,
+                      node_count=u(v.blk(rootpaddr), v.bs-40+32, 8) if is_root else None)
+        newmin = sorted(precs, key=lambda kv: v.kt(kv[0]))[0][0]
+
+# ---- volume counters -------------------------------------------------------
+def bump_vsb(v, m, files=0, dirs=0, blocks=0, next_obj=None):
+    vb = bytearray(v.blk(m['vsbp']))
+    if files:    p(vb, 0xB8, 8, u(vb, 0xB8, 8) + files)
+    if dirs:     p(vb, 0xC0, 8, u(vb, 0xC0, 8) + dirs)
+    if blocks:   p(vb, 0xE0, 8, u(vb, 0xE0, 8) + blocks); p(vb, 0x58, 8, u(vb, 0x58, 8) + blocks)
+    if next_obj is not None: p(vb, 0xB0, 8, next_obj)
+    v.d[m['vsbp']*v.bs:(m['vsbp']+1)*v.bs] = vb; v.csum(m['vsbp'])
+
+def mkctx(v, m):
+    return dict(sm=m['sm_paddr'], cib=cib_of(v, m), vol_omap_tree=m['vol_omap_tree'],
+               nxblk=m['nxblk'], xid=m['xid'], root_oid=m['root_oid'], vsbp=m['vsbp'],
+               catroot=v.omap_lookup(m['vol_omap_tree'], m['root_oid']))
+
+def cib_of(v, m):
+    smb = v.blk(m['sm_paddr']); ao = u(smb, 0x30+32, 4); return u(smb, ao, 8)
+
+# ---- commands --------------------------------------------------------------
+def cmd_resolve(path, target):
+    v, vsb, m = load(path); print(resolve(v, m, target))
+
+def cmd_mkdir(path, parent, name, mode=0o040755):
+    v, vsb, m = load(path); parent = parent_cnid(v, m, parent); cnid = m['next_obj']
+    if child_cnid(v, m, parent, name) is not None:
+        raise SystemExit("mkdir: %r already exists under cnid %d" % (name, parent))
+    ctx = mkctx(v, m)
+    inode_recs, (dk, dv) = build_dir_records(cnid, parent, name, v.hashed, mode)
+    nnew = 0
+    def bump_children(vv): p(vv, 0x38, 4, u(vv, 0x38, 4) + 1); p(vv, 0x18, 8, TS); p(vv, 0x20, 8, TS); return bytes(vv)
+    virt_modify(v, ctx, keyhdr(parent, TYPE_INODE), bump_children)
+    for k, val in inode_recs: nnew += virt_insert(v, ctx, k, val)
+    nnew += virt_insert(v, ctx, dk, dv)
+    bump_vsb(v, m, dirs=1, blocks=nnew, next_obj=cnid + 1)
+    open(path, 'r+b').write(v.d)
+    print("mkdir /%s cnid %d under %d" % (name, cnid, parent))
+
+def cmd_rename(path, parent, oldname, newname):
+    v, vsb, m = load(path); parent = parent_cnid(v, m, parent)
+    cnid = child_cnid(v, m, parent, oldname)
+    if cnid is None: raise SystemExit("rename: %r not found under %d" % (oldname, parent))
+    if child_cnid(v, m, parent, newname) is not None:
+        raise SystemExit("rename: %r already exists under %d" % (newname, parent))
+    ctx = mkctx(v, m)
+    # read the inode record and the dentry value to preserve them
+    ino_key = keyhdr(cnid, TYPE_INODE)
+    leaf = v.cat_leaf(m['root_oid'], m['vol_omap_tree'], ino_key)
+    ino_val = None
+    for k, val in leaf['recs']:
+        if k == ino_key: ino_val = bytearray(val); break
+    if ino_val is None: raise SystemExit("rename: inode %d not found" % cnid)
+    # old + new dentry keys (value = same file_id/flags, refreshed date)
+    if v.hashed:
+        ok = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<I', dentry_hash(oldname) | (len(oldname)+1)) + oldname.encode() + b'\0'
+        nk = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<I', dentry_hash(newname) | (len(newname)+1)) + newname.encode() + b'\0'
+    else:
+        ok = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<H', len(oldname)+1) + oldname.encode() + b'\0'
+        nk = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<H', len(newname)+1) + newname.encode() + b'\0'
+    dval = None
+    dleaf = v.cat_leaf(m['root_oid'], m['vol_omap_tree'], ok)
+    for k, val in dleaf['recs']:
+        if k == ok: dval = bytes(val); break
+    if dval is None: raise SystemExit("rename: dentry %r not found" % oldname)
+    # rebuild the inode value with the new NAME xfield (primary name)
+    ino_val = rebuild_inode_name(bytes(ino_val), newname)
+    # apply: delete old dentry, insert new dentry; replace inode value
+    virt_delete(v, ctx, ok)
+    virt_insert(v, ctx, nk, dval)
+    virt_delete(v, ctx, ino_key)
+    virt_insert(v, ctx, ino_key, ino_val)
+    open(path, 'r+b').write(v.d)
+    print("rename %r -> %r under %d (cnid %d)" % (oldname, newname, parent, cnid))
+
+def rebuild_inode_name(ino_val, newname):
+    # inode value = 0x5C fixed bytes, then xf_blob(4 bytes) + xfields. Replace the NAME (type 4) xfield.
+    fixed = ino_val[:0x5C]
+    xnum = u(ino_val, 0x5C, 2); xused = u(ino_val, 0x5C+2, 2)
+    off = 0x5C + 4; hdr_end = off + xnum * 4
+    # parse xfield descriptors
+    descs = []; d = off
+    for _ in range(xnum):
+        xt = ino_val[d]; xf = ino_val[d+1]; xs = u(ino_val, d+2, 2); descs.append([xt, xf, xs]); d += 4
+    data = ino_val[hdr_end:]
+    # split data by declared sizes (each padded to 8)
+    vals = []; pos = 0
+    for xt, xf, xs in descs:
+        padded = (xs + 7) & ~7
+        vals.append(data[pos:pos+xs]); pos += padded
+    nbz = newname.encode() + b'\0'
+    for i, (xt, xf, xs) in enumerate(descs):
+        if xt == 4:
+            descs[i][2] = len(nbz); vals[i] = nbz
+    # re-emit
+    out = bytearray(fixed)
+    body = bytearray(); newhdr = bytearray()
+    used = 0
+    for (xt, xf, xs), val in zip(descs, vals):
+        newhdr += struct.pack('<BBH', xt, xf, xs)
+        padded = (xs + 7) & ~7
+        body += val + b'\0' * (padded - len(val)); used += xs if xt != 4 else 0
+    # xf_used_data is the size of xfield values (padded) per apfsprogs note; match build_file_records which used padn+len(ds)
+    used_data = len(body)
+    out += struct.pack('<HH', xnum, used_data) + newhdr + body
+    return bytes(out)
+
+def cmd_rm(path, parent, name):
+    v, vsb, m = load(path); parent = parent_cnid(v, m, parent)
+    cnid = child_cnid(v, m, parent, name)
+    if cnid is None: raise SystemExit("rm: %r not found under %d" % (name, parent))
+    ctx = mkctx(v, m)
+    if v.hashed:
+        dk = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<I', dentry_hash(name) | (len(name)+1)) + name.encode() + b'\0'
+    else:
+        dk = keyhdr(parent, TYPE_DIR_REC) + struct.pack('<H', len(name)+1) + name.encode() + b'\0'
+    # delete the dentry, then EVERY catalog record owned by this cnid - inode,
+    # xattrs (a replaced Apple binary is decmpfs-compressed: its data lives in a
+    # com.apple.decmpfs xattr, and a large payload spills into a com.apple.
+    # ResourceFork xattr backed by its OWN data stream, whose dstream-id record
+    # is keyed by that stream id, not the file cnid). Leaving the xattr orphans
+    # "xattr record with no inode"; leaving the spilled stream orphans "data
+    # stream has no references". So collect the file's own records (they share
+    # the cnid and sort consecutively from the inode's leaf) and, for any xattr
+    # that is a data stream (flag APFS_XATTR_DATA_STREAM=1), the stream id it
+    # points at, then delete every record of those stream ids too.
+    TYPE_XATTR = 4
+    stream_ids = set()
+    virt_delete(v, ctx, dk)
+    while True:
+        leaf = v.cat_leaf(ctx['root_oid'], ctx['vol_omap_tree'], keyhdr(cnid, TYPE_INODE))
+        victims = []
+        for k, val in leaf['recs']:
+            if (u(k, 0, 8) & 0x0fffffffffffffff) != cnid:
+                continue
+            if (u(k, 0, 8) >> 60) == TYPE_XATTR and len(val) >= 12 and (u(val, 0, 2) & 1):
+                stream_ids.add(u(val, 4, 8))   # apfs_xattr_dstream.xattr_obj_id
+            victims.append(k)
+        if not victims:
+            break
+        for k in victims:
+            virt_delete(v, ctx, k)
+        # a file's records may straddle two leaves; loop until none remain
+    for sid in stream_ids:
+        while True:
+            leaf = v.cat_leaf(ctx['root_oid'], ctx['vol_omap_tree'], keyhdr(sid, TYPE_DSTREAM_ID))
+            victims = [k for k, _ in leaf['recs'] if (u(k, 0, 8) & 0x0fffffffffffffff) == sid]
+            if not victims:
+                break
+            for k in victims:
+                virt_delete(v, ctx, k)
+    def dec_children(vv): p(vv, 0x38, 4, max(0, u(vv, 0x38, 4) - 1)); p(vv, 0x18, 8, TS); return bytes(vv)
+    virt_modify(v, ctx, keyhdr(parent, TYPE_INODE), dec_children)
+    open(path, 'r+b').write(v.d)
+    print("rm %r (cnid %d) under %d" % (name, cnid, parent))
+
+# ===== sftp-style front end: paths instead of cnids =====
+# put/ls/mkdir/mv/rm take absolute or cwd-relative paths inside the volume and
+# are built on the cnid commands above; `shell` reads them interactively or,
+# like `sftp -b`, from a batch file.
+import os, posixpath, stat, shlex, inspect
+
+DT_NAMES = {4: 'd', 8: '-', 10: 'l'}
+
+def list_dir(v, m, parent):
+    # every dentry under PARENT, as (name, cnid, dtype); walks only the catalog
+    # subtrees whose key range can hold (PARENT, DIR_REC, *)
+    lo, hi = (parent, TYPE_DIR_REC, ()), (parent, TYPE_DIR_REC + 1, ())
+    out = []
+    def walk(oid):
+        node = v.parse(v.omap_lookup(m['vol_omap_tree'], oid))
+        recs = node['recs']
+        if node['leaf']:
+            for k, val in recs:
+                cnid = u(k, 0, 8) & 0x0fffffffffffffff; typ = u(k, 0, 8) >> 60
+                if typ != TYPE_DIR_REC or cnid != parent:
+                    continue
+                if v.hashed:
+                    nl = u(k, 8, 4) & 0x3ff; nm = k[12:12+nl]
+                else:
+                    nl = u(k, 8, 2); nm = k[10:10+nl]
+                out.append((nm.split(b'\0')[0].decode('utf-8', 'replace'), u(val, 0, 8), u(val, 16, 2) & 0xf))
+            return
+        for i, (k, val) in enumerate(recs):
+            start = v.kt(k)
+            end = v.kt(recs[i+1][0]) if i + 1 < len(recs) else None
+            if start < hi and (end is None or end > lo):
+                walk(u(val, 0, 8))
+    walk(m['root_oid'])
+    return sorted(out)
+
+class Shell:
+    def __init__(s, img):
+        s.img = img; s.cwd = '/'
+
+    def abs(s, path):
+        return posixpath.normpath(posixpath.join(s.cwd, path)) if path else s.cwd
+
+    def lookup(s, path):
+        # (cnid, dtype) of PATH, or None if it does not exist
+        v, vsb, m = load(s.img); path = s.abs(path)
+        if path == '/':
+            return 2, 4
+        parent = resolve(v, m, posixpath.dirname(path))
+        val = child_rec(v, m, parent, posixpath.basename(path))
+        return None if val is None else (u(val, 0, 8), u(val, 16, 2) & 0xf)
+
+    def do_pwd(s):
+        print(s.cwd)
+
+    def do_cd(s, path='/'):
+        e = s.lookup(path)
+        if e is None or e[1] != 4:
+            raise SystemExit("cd: %s: not a directory" % s.abs(path))
+        s.cwd = s.abs(path)
+
+    def do_ls(s, path=''):
+        v, vsb, m = load(s.img)
+        for name, cnid, dt in list_dir(v, m, resolve(v, m, s.abs(path))):
+            print("%s %8d %s" % (DT_NAMES.get(dt, '?'), cnid, name + ('/' if dt == 4 else '')))
+
+    def do_mkdir(s, path, mode='755'):
+        path = s.abs(path)
+        cmd_mkdir(s.img, posixpath.dirname(path), posixpath.basename(path), 0o040000 | int(mode, 8))
+
+    def do_mv(s, old, new):
+        old, new = s.abs(old), s.abs(new)
+        e = s.lookup(new)
+        if e is not None and e[1] == 4:
+            new = posixpath.join(new, posixpath.basename(old))
+        if posixpath.dirname(old) != posixpath.dirname(new):
+            raise SystemExit("mv: moving across directories is not supported (%s -> %s)" % (old, new))
+        cmd_rename(s.img, posixpath.dirname(old), posixpath.basename(old), posixpath.basename(new))
+
+    def do_rm(s, path):
+        path = s.abs(path)
+        cmd_rm(s.img, posixpath.dirname(path), posixpath.basename(path))
+
+    def do_put(s, local, remote=None, mode=None):
+        # like sftp put: REMOTE defaults to the cwd, and an existing directory
+        # gets LOCAL's basename; the mode defaults to LOCAL's permission bits
+        remote = s.abs(remote)
+        e = s.lookup(remote)
+        if remote == s.cwd or (e is not None and e[1] == 4):
+            remote = posixpath.join(remote, os.path.basename(local)); e = s.lookup(remote)
+        if e is not None:
+            if e[1] == 4:
+                raise SystemExit("put: %s is a directory" % remote)
+            s.do_rm(remote)          # addfile does not replace, so drop the old entry first
+        perm = int(mode, 8) if mode else stat.S_IMODE(os.stat(local).st_mode)
+        cmd_addfile(s.img, posixpath.dirname(remote), posixpath.basename(remote), local, 0o100000 | perm)
+
+    def do_lpwd(s):
+        print(os.getcwd())
+
+    def do_lcd(s, path=os.path.expanduser('~')):
+        os.chdir(path)
+
+    def do_lls(s, path='.'):
+        for name in sorted(os.listdir(path)):
+            print(name)
+
+    def do_help(s):
+        print("pwd | cd [PATH] | ls [PATH] | mkdir PATH [MODE] | mv OLD NEW | rm PATH |\n"
+              "put LOCAL [REMOTE] [MODE] | lpwd | lcd [PATH] | lls [PATH] | help | quit\n"
+              "PATH is absolute or relative to the cwd; prefix a command with - to ignore its error in batch mode")
+
+    def run(s, line):
+        # returns False when the line asks to quit
+        words = shlex.split(line, comments=True)
+        if not words:
+            return True
+        cmd, args = words[0], words[1:]
+        if cmd in ('quit', 'exit', 'bye'):
+            return False
+        fn = getattr(s, 'do_' + cmd, None)
+        if fn is None:
+            raise SystemExit("unknown command %r (try help)" % cmd)
+        try:
+            inspect.signature(fn).bind(*args)
+        except TypeError:
+            raise SystemExit("%s: wrong number of arguments (try help)" % cmd)
+        fn(*args)
+        return True
+
+def cmd_shell(img, batch=None):
+    sh = Shell(img)
+    interactive = batch is None and sys.stdin.isatty()
+    src = open(batch) if batch not in (None, '-') else sys.stdin
+    if interactive:
+        try:
+            import readline  # noqa: F401  (line editing and history for input())
+        except ImportError:
+            pass
+    while True:
+        try:
+            line = input("apfsftp:%s> " % sh.cwd) if interactive else src.readline()
+        except EOFError:
+            print(); return
+        if not interactive:
+            if line == '':
+                return
+            line = line.rstrip('\n')
+            if line.strip():
+                print("apfsftp> " + line, flush=True)
+        ignore = line.lstrip().startswith('-')
+        try:
+            if not sh.run(line.lstrip()[1:] if ignore else line):
+                return
+        except SystemExit as e:
+            sys.stdout.flush(); print(e, file=sys.stderr)
+            if not interactive and not ignore:
+                sys.exit(1)
+
+if __name__ == "__main__":
+    c = sys.argv[1] if len(sys.argv) > 1 else ""
+    A = sys.argv
+    if c == "shell" and len(A) == 3: cmd_shell(A[2])
+    elif c == "shell" and len(A) == 5 and A[3] == "-b": cmd_shell(A[2], A[4])
+    elif c in ("put", "ls", "mv") or (c in ("mkdir", "rm") and len(A) == 4):
+        sh = Shell(A[2]) if len(A) > 2 else sys.exit("usage: apfsftp %s IMG ..." % c)
+        sh.run(shlex.join(A[1:2] + A[3:]))
+    elif c == "inspect" and len(A) == 3: cmd_inspect(A[2])
+    elif c == "addfile" and len(A) >= 5: cmd_addfile(A[2], A[3], A[4], A[5], int(A[6], 8) if len(A) > 6 else 0o100644)
+    elif c == "resolve" and len(A) == 4: cmd_resolve(A[2], A[3])
+    elif c == "mkdir" and len(A) >= 5: cmd_mkdir(A[2], A[3], A[4], int(A[5], 8) if len(A) > 5 else 0o040755)
+    elif c == "rename" and len(A) == 6: cmd_rename(A[2], A[3], A[4], A[5])
+    elif c == "rm" and len(A) == 5: cmd_rm(A[2], A[3], A[4])
+    else:
+        sys.exit("usage: apfsftp inspect IMG | addfile IMG PARENT NAME SRC [MODE] | "
+                 "resolve IMG PATH | mkdir IMG PARENT NAME [MODE] | rename IMG PARENT OLD NEW | rm IMG PARENT NAME\n"
+                 "PARENT is a cnid or an absolute path in the volume (e.g. /System/Library)\n"
+                 "sftp-style: apfsftp put IMG LOCAL [REMOTE] [MODE] | ls IMG [PATH] | mkdir IMG PATH | "
+                 "mv IMG OLD NEW | rm IMG PATH | shell IMG [-b BATCHFILE|-]")

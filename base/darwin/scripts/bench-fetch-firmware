@@ -1,0 +1,284 @@
+#!/bin/bash
+# bench-fetch-firmware - extract the public parts of a remote IPSW.
+#
+# This is the `firmware` stage of a task Dockerfile: the half of
+# darwin-vm's get_files.sh that needs neither privilege nor a loop device nor a
+# filesystem driver, so it can run inside `docker build`.
+#
+#   bench-fetch-firmware --device Macmini9,1 --url <IPSW url> --out /bench/firmware
+#
+# Produces exactly the file set get_files.sh produces *before* patch_dtree,
+# silence_logs and patch_ramdisk run:
+#
+#   bootkc            kernelcache.release.<kc_type>, img4-unwrapped
+#   dtree             DeviceTree.<board>, img4-unwrapped, NOT dt_fixup'd
+#   ramdisk.dmg       the restore ramdisk, img4-unwrapped, NOT patched
+#   apple_ramdisk.tc  Apple's trust cache for that ramdisk (when the IPSW has one)
+#   sptm, txm         only when the SoC/release has them
+#   info              two lines: DEVNAME, URL (what darwin-vm writes)
+#   device            key=value cache of the identify_device results
+#
+# The three patching steps happen at first `bench start`, against the
+# per-task+variant firmware volume, because two of them need a mounted ramdisk
+# (--privileged) and because the relinked variants swap `bootkc` out after the
+# image is built (see projects/darwin/*/bench.sh and base/darwin/scripts/bench-common.sh).
+#
+# ipsw extracts the members into a fresh directory under $BENCH_DL_CACHE
+# (default /var/cache/darwin-bench), removed on exit.
+set -euo pipefail
+
+DEVNAME=""
+URL=""
+OUT=""
+OS_BUILD=""
+GUEST_OS=""
+BOARD_NAME="${BOARD_NAME:-}"
+KERNEL_EXT="${KERNEL_EXT:-}"
+CHIP_NAME="${CHIP_NAME:-}"
+SYS_SDK="${SYS_SDK:-}"
+DL_CACHE="${BENCH_DL_CACHE:-/var/cache/darwin-bench}"
+
+die() { echo "bench-fetch-firmware: error: $*" >&2; exit 1; }
+warn() { echo "bench-fetch-firmware: warning: $*" >&2; }
+note() { echo "bench-fetch-firmware: $*"; }
+
+usage() {
+    cat >&2 <<'EOF'
+usage: bench-fetch-firmware --device DEVNAME --url IPSW_URL --out DIR
+                            [--build BUILD] [--os macOS]
+                            [--board BOARD] [--kc-type KCTYPE]
+                            [--chip SOC] [--sdk macosx]
+
+--board/--kc-type/--chip/--sdk override what `ipsw device-info` reports; they
+exist so a task.json can pin the values and so the fetch keeps working if
+ipsw's device database changes shape.
+
+--build/--os enable the fallback: if the pinned --url is gone from Apple's CDN,
+the URL is re-resolved from DEVNAME + BUILD with `ipsw download ipsw --urls`.
+Without --build the pinned URL is the only route, exactly as before.
+EOF
+    exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --device)  DEVNAME="${2:?}"; shift 2 ;;
+        --url)     URL="${2:?}"; shift 2 ;;
+        --build)   OS_BUILD="${2:?}"; shift 2 ;;
+        --os)      GUEST_OS="${2:?}"; shift 2 ;;
+        --out)     OUT="${2:?}"; shift 2 ;;
+        --board)   BOARD_NAME="${2:?}"; shift 2 ;;
+        --kc-type) KERNEL_EXT="${2:?}"; shift 2 ;;
+        --chip)    CHIP_NAME="${2:?}"; shift 2 ;;
+        --sdk)     SYS_SDK="${2:?}"; shift 2 ;;
+        -h|--help) usage ;;
+        *)         die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "${DEVNAME}" ]] || usage
+[[ -n "${URL}" ]] || usage
+[[ -n "${OUT}" ]] || usage
+
+command -v ipsw >/dev/null || die "ipsw is not on PATH (is this the darwinbench base image?)"
+command -v jq   >/dev/null || die "jq is not on PATH"
+command -v curl >/dev/null || die "curl is not on PATH"
+
+mkdir -p "${OUT}" "${DL_CACHE}"
+# ipsw --output writes the extracted members here. A fresh directory every
+# run: ipsw skips a member that already exists there and then reports no path
+# for it, which get_file would take for a missing member.
+IPSW_DB="$(mktemp -d "${DL_CACHE}/ipsw_db.XXXXXX")"
+trap 'rm -rf "${IPSW_DB}"' EXIT
+
+# --- the URL, and what to do when the pinned one has aged out ----------------
+# task.json pins the full CDN URL because that is the hermetic thing to pin: it
+# names exact bytes and needs no third-party index at build time. But Apple does
+# eventually drop old builds off updates.cdn-apple.com, and when that happens the
+# pin is unfetchable while the release itself is still perfectly identifiable.
+#
+# `ipsw download ipsw --urls` resolves DEVNAME + BUILD back to a CDN URL through
+# ipsw.me, which gives the same build the pin names.
+#
+# Deliberately a fallback and not the primary path: making every build depend on
+# ipsw.me would trade a hermetic pin for a live lookup. The probe is one HEAD.
+probe_url() {
+    curl -fsSI --max-time 30 --retry 2 --retry-delay 2 -o /dev/null "$1" 2>/dev/null
+}
+
+resolve_url() {
+    local flags=(--device "${DEVNAME}" --build "${OS_BUILD}" --urls)
+    # --macos selects the UniversalMac restore list.
+    # Spelled as an if, not `[[ ]] && flags+=(...)`: that idiom's exit status is
+    # the failing test, which under `set -e` is only safe while something else
+    # follows it in the function.
+    if [[ "${GUEST_OS}" == "macOS" ]]; then
+        flags+=(--macos)
+    fi
+    ipsw download ipsw "${flags[@]}" 2>/dev/null | grep -m1 '^https://'
+}
+
+ensure_url() {
+    if probe_url "${URL}"; then
+        return
+    fi
+    [[ -n "${OS_BUILD}" ]] || die "the pinned IPSW URL is unreachable and no --build was given to re-resolve it:
+  ${URL}
+  Pass --build <BUILD> (task.json's guest.build) to let ipsw resolve it, or
+  update the pin in task.json."
+
+    warn "the pinned IPSW URL is unreachable; re-resolving ${DEVNAME} ${OS_BUILD} via ipsw"
+    local resolved
+    resolved="$(resolve_url || true)"
+    [[ -n "${resolved}" ]] \
+        || die "ipsw could not resolve an IPSW URL for ${DEVNAME} build ${OS_BUILD}.
+  Apple has dropped the pinned URL and ipsw.me has no replacement; supply a
+  local IPSW or a working --url."
+    probe_url "${resolved}" \
+        || die "ipsw resolved ${DEVNAME} ${OS_BUILD} to a URL that is also unreachable:
+  ${resolved}"
+    note "re-resolved to ${resolved}"
+    URL="${resolved}"
+}
+
+# --- identify_device (get_files.sh:identify_device) --------------------------
+identify_device() {
+    if [[ -n "${BOARD_NAME}" && -n "${KERNEL_EXT}" && -n "${CHIP_NAME}" && -n "${SYS_SDK}" ]]; then
+        note "device identity supplied on the command line, skipping ipsw device-info"
+        return
+    fi
+
+    local dev_info
+    dev_info="$(ipsw device-info -j -d "${DEVNAME}")" \
+        || die "ipsw device-info -d ${DEVNAME} failed"
+
+    [[ -n "${BOARD_NAME}" ]] || BOARD_NAME="$(printf '%s' "${dev_info}" | jq -r '.[] | .boards | to_entries[] | select(.key | contains("DEV") | not) | .key // empty' | tr '[:upper:]' '[:lower:]')"
+    [[ -n "${KERNEL_EXT}" ]] || KERNEL_EXT="$(printf '%s' "${dev_info}" | jq -r '.[] | .boards | to_entries[] | select(.key | contains("DEV")) | .value | .kc_type // empty')"
+    [[ -n "${CHIP_NAME}" ]]  || CHIP_NAME="$(printf '%s' "${dev_info}" | jq -r '.[] | .boards | to_entries[] | select(.key | contains("DEV")) | .value | .platform // empty')"
+    [[ -n "${SYS_SDK}" ]]    || SYS_SDK="$(printf '%s' "${dev_info}" | jq -r '.[] | .sdk // empty')"
+
+    [[ -n "${BOARD_NAME}" && -n "${KERNEL_EXT}" && -n "${CHIP_NAME}" && -n "${SYS_SDK}" ]] \
+        || die "identify_device failed for ${DEVNAME} (board=${BOARD_NAME} kc=${KERNEL_EXT} chip=${CHIP_NAME} sdk=${SYS_SDK})"
+}
+
+# --- helpers lifted from get_files.sh ---------------------------------------
+# The remote member listing, fetched at most once. `ipsw info --remote --list`
+# is a network round trip, and get_firmware decides a *boot path* from it, so a
+# transient failure must be fatal rather than read as "the IPSW has no such
+# member": a firmware/ without sptm/txm makes qemu take the pre-SPTM path and
+# hang before the first serial byte.
+#
+# Both halves run in the calling shell, never on the left of a pipe: a die()
+# in a pipeline's subshell only ends that subshell, so `ipsw_list | grep -q`
+# would read a failed fetch as "not found" and never keep the cache, and under
+# pipefail would also say "not found" whenever grep -q quit before printf had
+# written a listing larger than the pipe buffer.
+IPSW_LIST=""
+
+ipsw_list() {
+    if [[ -z "${IPSW_LIST}" ]]; then
+        IPSW_LIST="$(ipsw info --remote "${URL}" --list)" \
+            || die "ipsw info --remote --list failed for ${URL}"
+        [[ -n "${IPSW_LIST}" ]] \
+            || die "ipsw info --remote --list returned an empty listing for ${URL}"
+    fi
+}
+
+check_for_file() {
+    ipsw_list
+    grep -q -- "$1" <<< "${IPSW_LIST}"
+}
+
+download_pattern() {
+    ipsw extract --remote "${URL}" --output "${IPSW_DB}" --flat --pattern "$1" -j \
+        | jq -r '.[0] // empty'
+}
+
+unwrap_img4() {
+    ipsw img4 im4p extract "$1" -o "${OUT}/$2" 1>&2
+}
+
+get_file() {
+    local pattern="$1" outname="$2" downloaded
+    downloaded="$(download_pattern "${pattern}")"
+    [[ -n "${downloaded}" && -f "${downloaded}" ]] \
+        || die "no file matching ${pattern} in the remote IPSW"
+    unwrap_img4 "${downloaded}" "${outname}"
+}
+
+get_firmware() {
+    note "kernelcache.release.${KERNEL_EXT} -> ${OUT}/bootkc"
+    get_file "kernelcache.release.${KERNEL_EXT}" "bootkc"
+
+    # Not every SoC/release has SPTM+TXM. Pre-SPTM guests must not end up with
+    # stale sptm/txm files: qemu picks the SPTM boot path purely on their
+    # presence.
+    if check_for_file "sptm.${CHIP_NAME}.release"; then
+        note "sptm/txm present for ${CHIP_NAME}"
+        get_file "sptm.${CHIP_NAME}.release" "sptm"
+        get_file "txm.${SYS_SDK}.release" "txm"
+    else
+        note "no SPTM for ${CHIP_NAME} in this release (pre-SPTM boot path)"
+        rm -f "${OUT}/sptm" "${OUT}/txm"
+    fi
+
+    note "DeviceTree.${BOARD_NAME} -> ${OUT}/dtree"
+    get_file "DeviceTree.${BOARD_NAME}" "dtree"
+}
+
+get_ramdisk() {
+    local ramdisk_im4p
+    ramdisk_im4p="$(ipsw extract --remote "${URL}" --output "${IPSW_DB}" --flat -j --dmg rdisk | jq -r '.[0] // empty')"
+    [[ -n "${ramdisk_im4p}" && -f "${ramdisk_im4p}" ]] || die "failed to get the restore ramdisk"
+    # Ramdisks are not encrypted; an .aea would need a decryption key.
+    [[ "${ramdisk_im4p}" == *.dmg ]] || die "ramdisk (${ramdisk_im4p}) is not a dmg"
+
+    unwrap_img4 "${ramdisk_im4p}" "ramdisk.dmg"
+
+    # Apple's own trust cache for this ramdisk. build_tc.py folds it into ours
+    # at prep time; without it AMFI kills /sbin/launchd on ramdisks whose
+    # binaries we cannot hash (see base/darwin/patches/darwin-vm/build_tc.patch).
+    local trustcache_name tc_im4p
+    trustcache_name="$(basename "${ramdisk_im4p}").trustcache"
+    tc_im4p="$(download_pattern "${trustcache_name}" || true)"
+    if [[ -n "${tc_im4p}" && -f "${tc_im4p}" ]]; then
+        unwrap_img4 "${tc_im4p}" "apple_ramdisk.tc"
+        note "using Apple's ramdisk trust cache (${trustcache_name})"
+    else
+        warn "no ${trustcache_name} in the IPSW; Apple's binaries will not be in the trust cache"
+    fi
+}
+
+main() {
+    ensure_url
+    identify_device
+
+    echo "${DEVNAME}"
+    echo "board name: ${BOARD_NAME}"
+    echo "kernel ext: ${KERNEL_EXT}"
+    echo "chip name:  ${CHIP_NAME}"
+    echo "os sdk:     ${SYS_SDK}"
+    echo
+
+    # get_files.sh's two-line firmware/info, byte-compatible with what
+    # darwin-vm-entrypoint's `check` prints.
+    printf '%s\n%s\n' "${DEVNAME}" "${URL}" > "${OUT}/info"
+    # Everything prep needs later without another network round trip.
+    cat > "${OUT}/device" <<EOF
+DEVNAME=${DEVNAME}
+BOARD_NAME=${BOARD_NAME}
+KERNEL_EXT=${KERNEL_EXT}
+CHIP_NAME=${CHIP_NAME}
+SYS_SDK=${SYS_SDK}
+URL=${URL}
+EOF
+
+    get_firmware
+    get_ramdisk
+
+    echo
+    note "firmware extracted (unpatched):"
+    ls -la "${OUT}"
+}
+
+main "$@"

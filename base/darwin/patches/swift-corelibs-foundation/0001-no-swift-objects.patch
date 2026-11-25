@@ -1,0 +1,60 @@
+CoreFoundation on Linux with no Swift above it: _CFIsSwift() is always false
+
+Applies to swift-corelibs-foundation (Sources/CoreFoundation), not to dyld.
+
+swift-corelibs-foundation 6.x has no "plain C CoreFoundation" configuration:
+include/CFAvailability.h:11 and internalInclude/CoreFoundation_Prefix.h:11
+both #define DEPLOYMENT_RUNTIME_SWIFT 1 unconditionally.  Almost all of what
+that costs a C-only client is satisfied by the stub symbols in
+base/darwin/toolchain/shims/swift-corelibs-foundation/cf_swift_stubs.c -- but not this one.
+
+_CFIsSwift(type, obj) answers "did Swift Foundation make this object?" with
+`obj->isa != __CFRuntimeObjCClassTable[type]`.  That table is filled in by
+__CFInitializeSwift(), which is a Swift Foundation entry point and is a no-op
+stub here, so every entry is NULL.  CF's own heap objects come out of
+swift_allocObject() with a NULL metadata pointer and so compare equal (not
+Swift, correct), and constant strings are special-cased on the line above --
+but the *statically initialised* constants are not: kCFBooleanTrue,
+kCFBooleanFalse and the constant CFNumbers carry a real class pointer in their
+isa, so they test as Swift objects and CFGetTypeID() dispatches through
+__CFSwiftBridge.NSObject._cfTypeID, which is NULL.
+
+Symptom without this patch: SIGSEGV at address 0 inside CFPropertyList's
+validation of the __PRELINK_INFO dictionary, the first time it reaches a
+boolean --
+
+    #0  0x0000000000000000 in ?? ()
+    #1  __CFPropertyListIsValidAux ()
+    #2  __CFPropertyListIsDictPlistAux ()
+    ...
+    #7  CFPropertyListCreateData ()
+    #8  AppCacheBuilder::assignSegmentRegionsAndOffsets ()
+
+There is no Swift runtime in this process and no Swift object can reach CF, so
+the honest answer is a constant false.
+
+diff --git a/Sources/CoreFoundation/CFRuntime.c b/Sources/CoreFoundation/CFRuntime.c
+index 3336852..4153df6 100644
+--- a/Sources/CoreFoundation/CFRuntime.c
++++ b/Sources/CoreFoundation/CFRuntime.c
+@@ -1810,11 +1810,15 @@ CF_CROSS_PLATFORM_EXPORT void _CFDeinit(CFTypeRef cf) {
+ }
+ 
+ bool _CFIsSwift(CFTypeID type, CFSwiftRef obj) {
+-    if (type == _kCFRuntimeNotATypeID) {
+-        return false;
+-    }
+-    if (obj->isa == (uintptr_t)__CFConstantStringClassReferencePtr) return false;
+-    return obj->isa != __CFRuntimeObjCClassTable[type];
++    // base/darwin/toolchain/build-dyld-app-cache-util.sh (Darwin-bench): this CoreFoundation is linked into a
++    // pure C program with no Swift Foundation above it, so no object here is
++    // ever a Swift one.  The stock test is "isa differs from the Swift class
++    // registered for this type", and __CFRuntimeObjCClassTable is all NULL
++    // because __CFInitializeSwift() never registers anything -- which makes
++    // every constant object (kCFBooleanTrue, the constant CFNumbers) look
++    // Swift and dispatch through a NULL __CFSwiftBridge entry.
++    (void)type; (void)obj;
++    return false;
+ }
+ 
+ const char *_NSPrintForDebugger(void *cf) {

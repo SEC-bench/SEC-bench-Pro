@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+"""bench-kc-build -- link a boot kernel collection on Linux, in place of kmutil.
+
+    bench-kc-build --kernel <path> [--kdk <path>] --kc-type <mac13g|...>
+                   [--kernel-config DEVELOPMENT] [--arch arm64e]
+                   [--kmbuildversion <str> | --ref-kc <path>]
+                   [--text-exec-order kexts-first|kernel-first]
+                   --out <path>
+
+It drives dyld_app_cache_util, Apple's open-source collection builder from
+dyld-1378 (base/darwin/toolchain/build-dyld-app-cache-util.sh), and composes the
+__PRELINK_INFO extras kmutil adds, so the output is byte-identical to kmutil's
+for the same inputs.  dyld_app_cache_util is looked up as $KCB_TOOL, then on
+$PATH (/usr/bin, where macOS keeps kmutil).
+
+  --kernel            the Mach-O kernel to build the collection around.  For
+                      a kdk-* collection that is the KDK's own
+                      System/Library/Kernels/kernel.<cfg>.<soc>.
+  --kdk               the KDK root.  It MUST be at its real macOS path,
+                      /Library/Developer/KDKs/KDK_<version>_<build>.kdk: the
+                      path is embedded verbatim in every _PrelinkBundlePath
+                      in __PRELINK_INFO, so mounting it anywhere else still
+                      produces a correct collection but not a byte-identical
+                      one.  (Bind-mount it; never copy it into a layer.)
+                      Default: $KDKROOT, else the one
+                      /Library/Developer/KDKs/KDK_$MACOS_VERSION_*.kdk
+                      (MACOS_VERSION defaults to 26.5, as in linux-xnu-build).
+  --kc-type           picks the KDK manifest whose requiredIdentifiers give
+                      the kext include list: mac13g -> Apple silicon Mac.
+  --kernel-config     DEVELOPMENT (default) | KASAN | RELEASE.  Lowercased, it is the
+                      kext variant (`-kext-variant development`).
+  $KC_FILTER          (environment) extended regex of bundle ids to drop
+                      from the include list (grep -vE, as darwin-xnu-build's
+                      KC_FILTER); a kernel compiled from the open-source tree
+                      needs KC_FILTER=com.apple.driver.SEPHibernation.
+  --kmbuildversion    the KMBuildVersion string kmutil stamps into
+  / --ref-kc          __PRELINK_INFO, or a reference collection to read it
+                      back out of.  It is host state, not a build input:
+                      there is no kmutil on Linux to read it from.  With neither, the key is left out: xnu and
+                      dyld never read it, but the KC is then not kmutil's
+                      bytes.
+  --text-exec-order   where the kexts' __TEXT_EXEC go inside the collection's:
+                      kexts-first (default; dyld-1378 / 26.5 kmutil order, what
+                      xnu >= 12377.121 accepts) or kernel-first (the older
+                      order, the only one xnu <= 12377.81 / macOS 26.3 boots).
+                      Also settable as $KCB_TEXT_EXEC_ORDER.
+  --out               where to write the collection.
+  --task / --variant / --soc
+                      labels only; they name the collection in the log.
+
+Three things kmutil does that dyld_app_cache_util does not, all done here:
+
+1. Stage the KDK's Extensions with kmutil's Info.plists (stage()).
+
+   `dyld_app_cache_util` copies each kext's Info.plist verbatim into the KC's
+   __PRELINK_INFO `_PrelinkInfoDictionary`.  kmutil/KernelManagement does not: it
+   first rewrites the dictionary.  Reproducing those rewrites is the whole
+   difference between the two builders' __PRELINK_INFO, and the
+   cheapest place to do it is *before* the tool runs -- mirror the Extensions
+   tree with augmented Info.plists and point the builder at the mirror.
+
+   The mirror is directories + symlinks, so it costs a few MB, not a KDK copy.  It is
+   rooted so that `-volume-root <stage>` makes the builder's `_PrelinkBundlePath`
+   come out as the real KDK path:
+
+       <stage>/Library/Developer/KDKs/KDK_x.kdk/System/Library/Extensions/...
+       -volume-root <stage>   ->   _PrelinkBundlePath = /Library/Developer/KDKs/...
+
+   What kmutil adds to each kext's Info.plist:
+
+     * arch overrides are folded down: any `<key>_arm64` and then `<key>_arm64e`
+       replaces `<key>` (the suffixed keys stay).  This is what makes AppleSMC's
+       OSBundleLibraries the ARM graph rather than the Intel one, and it also
+       moves OSBundleCompatibleVersion_arm64 and IOKitPersonalities_arm64.
+     * `_InfoPlistDigest` = raw SHA-256 of the Info.plist file's bytes, before
+       any of this rewriting.
+     * `OSBundleUUID` = the LC_UUID of the arm64e slice of the kext executable
+       (the `_development` variant when one exists and -variant says so).
+     * every personality in every `IOKitPersonalities*` dictionary gains
+       `IOPersonalityPublisher` = the bundle id, and `CFBundleIdentifier` = the
+       bundle id if it did not already have one.
+     * a kext with no executable additionally gains `_CodelessKextBundlePath`
+       (the bundle's absolute path), `OSBundleTeamIdentifier` (`None` when
+       unsigned) and `kOSBundleDextUniqueIdentifier` = SHA-256 of that same
+       absolute path string.
+
+2. Filter the include list (filter_ids()).
+
+   dyld_app_cache_util hard-errors on (a) an explicitly requested bundle id whose
+   executable has no arm64e slice, and (b) the com.apple.kpi.* pseudo-kexts, whose
+   KDK "executables" are plain-arm64e KPI stubs -- the builder resolves those from
+   the kernel's __LINKINFO,__symbolsets instead.  kmutil/KernelManagement silently
+   drops both.  Print the surviving ids, and the dropped ones to stderr.
+
+3. Stamp KMBuildVersion, ManagerVersion and OSPrelinkInfoContainsUUIDs on the
+   plist (-prelink-info-extra), and list every com.apple.kpi.* symbol set as a
+   codeless bundle: their code comes from the kernel's __LINKINFO,__symbolsets,
+   but kmutil still writes an Info.plist entry for each.
+
+EULA: the output embeds Apple's kexts verbatim.  It is LOCAL ONLY and must
+never be pushed to a registry.
+"""
+
+import argparse
+import glob
+import hashlib
+import os
+import plistlib
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+
+CPU_TYPE_ARM64 = 0x0100000C
+LC_UUID = 0x1B
+FAT_MAGICS = (b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf')
+MH_MAGIC_64_LE = b'\xcf\xfa\xed\xfe'
+
+ARCH_SUFFIXES = {
+    # applied in order, so the more specific spelling wins
+    'arm64e': ('_arm64', '_arm64e'),
+    'arm64': ('_arm64',),
+    'x86_64': ('_x86_64',),
+}
+
+
+def _slices(f):
+    """Yield (cputype, cpusubtype, offset) for each 64-bit little-endian slice."""
+    f.seek(0)
+    magic = f.read(4)
+    if magic in FAT_MAGICS:
+        wide = magic == b'\xca\xfe\xba\xbf'
+        n = struct.unpack('>I', f.read(4))[0]
+        entry = 32 if wide else 20
+        raw = f.read(n * entry)
+        for i in range(n):
+            e = raw[i * entry:(i + 1) * entry]
+            if wide:
+                ct, cs, off = struct.unpack('>iiQ', e[:16])
+            else:
+                ct, cs, off = struct.unpack('>iiI', e[:12])
+            yield ct & 0xFFFFFFFF, cs & 0xFFFFFFFF, off
+    elif magic == MH_MAGIC_64_LE:
+        ct, cs = struct.unpack('<II', f.read(8))
+        yield ct, cs, 0
+
+
+def macho_uuid(path, cputype=CPU_TYPE_ARM64, cpusubtype=2):
+    """LC_UUID of the slice matching cputype/cpusubtype, or None."""
+    try:
+        with open(path, 'rb') as f:
+            for ct, cs, off in list(_slices(f)):
+                if ct != cputype or (cs & 0xFF) != cpusubtype:
+                    continue
+                f.seek(off + 16)
+                ncmds, sizeofcmds = struct.unpack('<II', f.read(8))
+                f.seek(off + 32)
+                cmds = f.read(sizeofcmds)
+                p = 0
+                for _ in range(ncmds):
+                    if p + 8 > len(cmds):
+                        break
+                    cmd, cmdsize = struct.unpack('<II', cmds[p:p + 8])
+                    if cmd == LC_UUID:
+                        return cmds[p + 8:p + 24]
+                    if cmdsize == 0:
+                        break
+                    p += cmdsize
+    except (OSError, struct.error):
+        return None
+    return None
+
+
+def bundle_layout(kext):
+    """(info_plist_path, executable_dir) for a .kext, honouring the flat layout."""
+    for info_dir, exe_dir in ((os.path.join(kext, 'Contents'), os.path.join(kext, 'Contents', 'MacOS')),
+                              (kext, kext)):
+        info = os.path.join(info_dir, 'Info.plist')
+        if os.path.isfile(info):
+            return info, exe_dir
+    return None, None
+
+
+def augment(kext_path, info_path, exe_dir, arch, variant, real_bundle_path):
+    """kmutil's version of a kext's Info.plist dictionary."""
+    with open(info_path, 'rb') as f:
+        raw = f.read()
+    try:
+        pl = plistlib.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(pl, dict):
+        return None
+    bundle_id = pl.get('CFBundleIdentifier')
+    if not isinstance(bundle_id, str):
+        return None
+
+    out = dict(pl)
+
+    # 1. fold the arch-specific overrides down onto the generic keys
+    for suffix in ARCH_SUFFIXES.get(arch, ()):
+        for key in list(pl.keys()):
+            if key.endswith(suffix) and len(key) > len(suffix):
+                out[key[:-len(suffix)]] = pl[key]
+
+    # 2. IOPersonalityPublisher / CFBundleIdentifier on every personality
+    for key, value in list(out.items()):
+        if key != 'IOKitPersonalities' and not key.startswith('IOKitPersonalities_'):
+            continue
+        if not isinstance(value, dict):
+            continue
+        merged = {}
+        for name, personality in value.items():
+            if isinstance(personality, dict):
+                personality = dict(personality)
+                personality.setdefault('CFBundleIdentifier', bundle_id)
+                personality['IOPersonalityPublisher'] = bundle_id
+            merged[name] = personality
+        out[key] = merged
+
+    # 3. digest of the *original* bytes
+    out['_InfoPlistDigest'] = hashlib.sha256(raw).digest()
+
+    # 4. OSBundleUUID, or the codeless keys
+    exe_name = out.get('CFBundleExecutable')
+    exe_path = None
+    if isinstance(exe_name, str) and exe_dir is not None:
+        candidate = os.path.join(exe_dir, exe_name)
+        if variant and os.path.isfile(candidate + '_' + variant):
+            exe_path = candidate + '_' + variant
+        elif os.path.isfile(candidate):
+            exe_path = candidate
+    if exe_path is not None:
+        uuid = macho_uuid(exe_path)
+        if uuid is not None:
+            out['OSBundleUUID'] = uuid
+    else:
+        out['_CodelessKextBundlePath'] = real_bundle_path
+        out.setdefault('OSBundleTeamIdentifier', 'None')
+        out['kOSBundleDextUniqueIdentifier'] = hashlib.sha256(real_bundle_path.encode()).digest()
+
+    return out
+
+
+def stage(src_root, dst_root, real_root, arch, variant):
+    """Mirror src_root into dst_root; real_root is src_root's path as kmutil sees it."""
+    n_plists = 0
+    n_links = 0
+    for dirpath, dirnames, filenames in os.walk(src_root, followlinks=False):
+        rel = os.path.relpath(dirpath, src_root)
+        dst_dir = dst_root if rel == '.' else os.path.join(dst_root, rel)
+        os.makedirs(dst_dir, exist_ok=True)
+        # A symlinked directory is mirrored as a symlink; nothing inside a kext
+        # in a KDK is one, but do not silently descend if that ever changes.
+        for name in list(dirnames):
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                dirnames.remove(name)
+                link = os.path.join(dst_dir, name)
+                if not os.path.lexists(link):
+                    os.symlink(full, link)
+                    n_links += 1
+        for name in filenames:
+            src = os.path.join(dirpath, name)
+            dst = os.path.join(dst_dir, name)
+            if os.path.lexists(dst):
+                continue
+            handled = False
+            if name == 'Info.plist':
+                # only rewrite the Info.plist that *is* a bundle's Info.plist
+                kext = os.path.dirname(dirpath) if os.path.basename(dirpath) == 'Contents' else dirpath
+                if kext.endswith('.kext'):
+                    info_path, exe_dir = bundle_layout(kext)
+                    if info_path == src:
+                        real_bundle = os.path.join(real_root, os.path.relpath(kext, src_root))
+                        data = augment(kext, info_path, exe_dir, arch, variant, real_bundle)
+                        if data is not None:
+                            with open(dst, 'wb') as f:
+                                plistlib.dump(data, f, fmt=plistlib.FMT_XML, sort_keys=True)
+                            n_plists += 1
+                            handled = True
+            if not handled:
+                os.symlink(src, dst)
+                n_links += 1
+    return n_plists, n_links
+
+
+
+
+def bundles(root, plugins=True):
+    for name in sorted(os.listdir(root)):
+        if not name.endswith('.kext'):
+            continue
+        kext = os.path.join(root, name)
+        info = os.path.join(kext, 'Contents', 'Info.plist')
+        exe_dir = os.path.join(kext, 'Contents', 'MacOS')
+        plug = os.path.join(kext, 'Contents', 'PlugIns')
+        if not os.path.exists(info):                 # flat bundle layout
+            info, exe_dir, plug = (os.path.join(kext, 'Info.plist'),
+                                   kext, os.path.join(kext, 'PlugIns'))
+        # A .kext with no Info.plist at all is not a bundle, but it may still
+        # hold PlugIns that are: the KDK's iPodDriver.kext is nothing but a
+        # Contents/PlugIns holding com.apple.driver.iPodSBCDriver, which is in
+        # the manifest and in kmutil's collection.  Keep descending.
+        if os.path.exists(info):
+            try:
+                pl = plistlib.load(open(info, 'rb'))
+            except Exception:
+                pl = None
+            if pl is not None:
+                yield pl.get('CFBundleIdentifier'), (
+                    os.path.join(exe_dir, pl['CFBundleExecutable'])
+                    if pl.get('CFBundleExecutable') else None)
+        if plugins:
+            seen = set()
+            for p in (plug, os.path.join(kext, 'Contents', 'PlugIns'),
+                      os.path.join(kext, 'PlugIns')):
+                if p in seen or not os.path.isdir(p):
+                    continue
+                seen.add(p)
+                yield from bundles(p, plugins=False)
+
+# The slice names `lipo -archs` would print, read straight out of the Mach-O
+# instead: this script has to run on the Linux build host too, where there is
+# no lipo (base/darwin/toolchain/build-dyld-app-cache-util.sh).
+_CPU = {
+    (0x0100000C, 0): 'arm64',  (0x0100000C, 1): 'arm64v8', (0x0100000C, 2): 'arm64e',
+    (0x0200000C, 1): 'arm64_32',
+    (0x01000007, 3): 'x86_64', (0x01000007, 8): 'x86_64h',
+    (0x00000007, 3): 'i386',
+    (0x0000000C, 9): 'armv7',  (0x0000000C, 11): 'armv7s',
+}
+
+def _arch_name(cputype, cpusubtype):
+    key = (cputype, cpusubtype & 0x00FFFFFF)
+    return _CPU.get(key, '0x%x:%d' % key)
+
+def macho_archs(path):
+    """Slice architectures of a thin or fat Mach-O, as lipo -archs names them."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4096)
+    except OSError:
+        return []
+    if len(head) < 8:
+        return []
+    magic = struct.unpack('>I', head[:4])[0]
+    if magic in (0xCAFEBABE, 0xCAFEBABF):            # fat, headers are big endian
+        wide = (magic == 0xCAFEBABF)
+        n    = struct.unpack('>I', head[4:8])[0]
+        step = 32 if wide else 20
+        out  = []
+        for i in range(n):
+            off = 8 + i * step
+            if off + 8 > len(head):
+                break
+            ct, cs = struct.unpack('>iI', head[off:off + 8])
+            out.append(_arch_name(ct & 0xFFFFFFFF, cs))
+        return out
+    if magic in (0xFEEDFACE, 0xFEEDFACF):            # thin, big endian
+        ct, cs = struct.unpack('>iI', head[4:12])
+    elif struct.unpack('<I', head[:4])[0] in (0xFEEDFACE, 0xFEEDFACF):
+        ct, cs = struct.unpack('<iI', head[4:12])
+    else:
+        return []
+    return [_arch_name(ct & 0xFFFFFFFF, cs)]
+
+
+
+def filter_ids(ext_dir, ids):
+    """(kept, dropped): the ids dyld_app_cache_util can load, and why each other one cannot."""
+    archs = {}
+    for bid, exe in bundles(ext_dir):
+        if bid is None:
+            continue
+        if exe is None or not os.path.exists(exe):
+            archs[bid] = 'codeless'
+            continue
+        out = macho_archs(exe)
+        archs[bid] = 'arm64e' if 'arm64e' in out else ('bad:' + ','.join(out) if out else 'bad:none')
+
+    kept, dropped = [], []
+    for bid in ids:
+        if bid.startswith('com.apple.kpi.'):
+            dropped.append('drop %-45s symbol-set pseudo-kext' % bid); continue
+        state = archs.get(bid)
+        if state is None:
+            dropped.append('drop %-45s not found in %s' % (bid, ext_dir)); continue
+        if state.startswith('bad:'):
+            dropped.append('drop %-45s no arm64e slice (%s)' % (bid, state[4:])); continue
+        kept.append(bid)
+    return kept, dropped
+
+
+PRELINK_EXTRA = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+%s	<key>ManagerVersion</key>
+	<integer>1</integer>
+	<key>OSPrelinkInfoContainsUUIDs</key>
+	<true/>
+</dict>
+</plist>
+"""
+
+
+def die(msg):
+    sys.exit('bench-kc-build: error: ' + msg)
+
+
+def note(msg):
+    print('bench-kc-build: ' + msg, flush=True)
+
+
+def default_kdk():
+    if os.environ.get('KDKROOT'):
+        return os.environ['KDKROOT']
+    kdks = sorted(glob.glob('/Library/Developer/KDKs/KDK_%s_*.kdk' % os.environ.get('MACOS_VERSION', '26.5')))
+    if len(kdks) > 1:
+        die('more than one KDK for MACOS_VERSION; pass --kdk one of: ' + ' '.join(kdks))
+    return kdks[0] if kdks else ''
+
+
+def main():
+    ap = argparse.ArgumentParser(prog='bench-kc-build', description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--kernel', required=True)
+    ap.add_argument('--kdk', default=None)
+    ap.add_argument('--kc-type', required=True)
+    ap.add_argument('--kernel-config', default='DEVELOPMENT')
+    ap.add_argument('--arch', default='arm64e')
+    ap.add_argument('--kmbuildversion', default='')
+    ap.add_argument('--ref-kc', default='')
+    ap.add_argument('--text-exec-order', default=os.environ.get('KCB_TEXT_EXEC_ORDER', 'kexts-first'),
+                    choices=('kexts-first', 'kernel-first'))
+    ap.add_argument('--out', required=True)
+    ap.add_argument('--task', default='kc')
+    ap.add_argument('--variant', default='')
+    ap.add_argument('--soc', default='unknown')
+    args = ap.parse_args()
+
+    if args.kdk is None:
+        args.kdk = default_kdk()
+    if not os.path.isfile(args.kernel):
+        die('no kernel at ' + args.kernel)
+    if not os.path.isdir(args.kdk):
+        die('no KDK at ' + args.kdk)
+    # It hardcodes arm64e/macOS, which is every collection this bench builds;
+    # fail loudly rather than silently ignoring a request for something else.
+    if args.arch != 'arm64e':
+        die('--arch %s: only arm64e is supported' % args.arch)
+    tool = os.environ.get('KCB_TOOL') or shutil.which('dyld_app_cache_util')
+    if not tool or not os.access(tool, os.X_OK):
+        die('no dyld_app_cache_util on PATH; build it with base/darwin/toolchain/build-dyld-app-cache-util.sh')
+
+    # Byte identity needs the KDK at its real macOS path; warn rather than
+    # fail, because a merely-correct collection is still useful.
+    if not re.match(r'^/Library/Developer/KDKs/.*\.kdk/?$', args.kdk):
+        print('bench-kc-build: warning: KDK is at %s, not /Library/Developer/KDKs/...' % args.kdk, file=sys.stderr)
+        print("bench-kc-build: warning: the collection will be correct but not byte-identical to kmutil's", file=sys.stderr)
+
+    kdk = args.kdk.rstrip('/')
+    kc_variant = args.kernel_config.lower()
+    extensions = os.path.join(kdk, 'System/Library/Extensions')
+    manifest = os.path.join(kdk, 'System/Library/KernelCollections',
+                            'kernelcache.release.%s.manifest.plist' % args.kc_type)
+    if not os.path.isfile(manifest):
+        die('no manifest ' + manifest)
+
+    # KMBuildVersion is the project version of the kmutil whose output we are
+    # matching. There is no kmutil on Linux: it comes from --kmbuildversion, or
+    # from a collection built on a Mac, whose __PRELINK_INFO carries it verbatim.
+    km_build_version = args.kmbuildversion
+    if not km_build_version and args.ref_kc:
+        with open(args.ref_kc, 'rb') as f:
+            m = re.search(rb'<key>KMBuildVersion</key>[ \t\r\n]*<string>([^<]*)</string>', f.read())
+        km_build_version = m.group(1).decode() if m else ''
+        if km_build_version:
+            note('kmver read from ' + args.ref_kc)
+    if not km_build_version:
+        # Neither xnu nor dyld reads it; only kmutil's bytes need it.
+        note('no --kmbuildversion / --ref-kc: KMBuildVersion left out, so not byte-identical to kmutil')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # 1. A staging mirror of the KDK's Extensions with kmutil's Info.plists.
+        #    -volume-root makes _PrelinkBundlePath come back out as the real
+        #    /Library/Developer/KDKs/... path.
+        stage_root = os.path.join(tmp, 'stage')
+        src = os.path.realpath(extensions)
+        staged = os.path.join(stage_root, src.lstrip('/'))
+        os.makedirs(staged, exist_ok=True)
+        n_plists, n_links = stage(src, staged, src, args.arch, kc_variant or None)
+        note('stage    %d Info.plists rewritten, %d files linked' % (n_plists, n_links))
+
+        # 2. The manifest's requiredIdentifiers minus $KC_FILTER, then minus
+        #    what this builder cannot take.
+        with open(manifest, 'rb') as f:
+            ids = plistlib.load(f)['requiredIdentifiers']
+        drop_re = os.environ.get('KC_FILTER', '')
+        if drop_re:
+            ids = [b for b in ids if not re.search(drop_re, b)]
+        kept, dropped = filter_ids(staged, ids)
+        kpi = [b for b in ids if re.match(r'com\.apple\.kpi\.', b)]
+
+        # 3. The three top-level keys KernelManagement stamps on the plist.
+        extra = os.path.join(tmp, 'prelink-extra.plist')
+        with open(extra, 'w') as f:
+            f.write(PRELINK_EXTRA % ('\t<key>KMBuildVersion</key>\n\t<string>%s</string>\n' % km_build_version
+                                     if km_build_version else ''))
+
+        note('task     %s%s' % (args.task, ' (%s)' % args.variant if args.variant else ''))
+        note('kdk      ' + kdk)
+        note('kernel   ' + args.kernel)
+        note('kmver    ' + (km_build_version or '(none)'))
+        note('filter   ' + (drop_re or '(none)'))
+        # patches/0004-text-exec-order-env.patch: kexts-first (dyld-1378 default) or
+        # kernel-first (pre-1378 order, required by xnu <= 12377.81 / macOS 26.3).
+        note('textexec ' + args.text_exec_order)
+        note('kexts    %d requested, %d linked, %d codeless symbol sets' % (len(ids), len(kept), len(kpi)))
+        for line in dropped:
+            print('bench-kc-build:   ' + line, file=sys.stderr)
+
+        kc = os.path.join(tmp, 'kc')
+        cmd = [tool, '-create-kernel-collection', kc,
+               '-arch', 'arm64e', '-platform', 'macOS',
+               '-kernel', args.kernel,
+               '-extensions', staged,
+               '-volume-root', stage_root,
+               '-kext-variant', kc_variant,
+               '-prelink-info-extra', extra]
+        for b in kept:
+            cmd += ['-bundle-id', b]
+        for b in kpi:
+            cmd += ['-codeless-bundle-id', b]
+        env = dict(os.environ, KCB_TEXT_EXEC_ORDER=args.text_exec_order)
+        rc = subprocess.run(cmd, env=env).returncode
+        if rc != 0:
+            die('dyld_app_cache_util exited %d (a kernel compiled from source needs KC_FILTER=com.apple.driver.SEPHibernation)' % rc)
+        if not os.path.isfile(kc):
+            die('the builder produced nothing')
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+        shutil.move(kc, args.out)
+
+    with open(args.out, 'rb') as f:
+        digest = hashlib.sha256(f.read()).hexdigest()
+    note('wrote %s (%d bytes, sha256 %s)' % (args.out, os.path.getsize(args.out), digest))
+
+
+if __name__ == '__main__':
+    main()

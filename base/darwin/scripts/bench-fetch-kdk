@@ -1,0 +1,244 @@
+#!/bin/bash
+# bench-fetch-kdk - download and unpack a Kernel Debug Kit, on Linux.
+#
+# This is the `kdk` stage of a task Dockerfile. It
+# needs neither an Apple ID, nor a Mac, nor privilege, nor a loop device, nor a
+# filesystem driver -- so it runs inside `docker build` like every other stage.
+#
+#   bench-fetch-kdk --build 25F84 --version 26.5.2 --out /path/to/KDK_x_y.kdk
+#
+# Where the bits come from
+# ------------------------
+# Apple has no unauthenticated KDK CDN: download.developer.apple.com 302s to
+# /unauthorized/, and the merged sucatalog has no "kernel debug" entry at all.
+# `dortania/KdkSupportPkg` is the de facto public mirror, plain HTTPS on
+# github.com release assets.
+#
+# `ipsw download kdk --build` is what resolves and fetches from it. ipsw
+# hardcodes that same gh-pages manifest, so using it drops a URL, a manifest
+# fetch and a jq parse from this script with no change in what gets downloaded.
+#
+# A task.json's `kdk.url` points at Apple's authenticated URL, which is a
+# statement of *provenance*, not a fetch plan. It is never fetched unless it is
+# passed explicitly as --url, and this script refuses it when it is.
+#
+# The unpack chain, and why each step is what it is
+# -------------------------------------------------
+#   KDK.dmg                     UDIF, LZFSE-compressed, one Apple_HFSX partition
+#     |  7z e                   ipsw's HFS+ reader rejects HFSX (the volume
+#     v                         signature is 'HX'/version 5, not 'H+'/version 4);
+#   KernelDebugKit.pkg          7z reads the DMG *and* the nested HFSX in one
+#     |                         pass, LZFSE included.
+#     v
+#   KDK.pkg/Payload             a flat xar with two component packages; the SDK
+#   KDK_SDK.pkg/Payload         one is small but mandatory (it is the only
+#     |  pbzx-stream.py --xar   source of Kernel.framework's platform headers).
+#     v                         Each member is read out of the xar heap and
+#                               decoded as it streams, never written or held.
+#   cpio -idm                   paths are ./System/... and ./usr/..., i.e.
+#                               already relative to the KDK root.
+#
+# pbzx-stream.py rather than `ipsw pbzx` because the latter only writes
+# <input>.extracted next to its input: the whole decompressed cpio archive
+# would land on disk before cpio read a byte of it. Streaming keeps peak usage
+# at the compressed payload.
+#
+# Idempotent: if --out already holds a KDK, it says so and exits 0. Downloads
+# land in $BENCH_DL_CACHE so a BuildKit cache mount keeps the DMG across
+# rebuilds.
+#
+# EULA: the KDK is Apple material. This stage's layer is LOCAL ONLY and is
+# never pushed; `projects/darwin/crash_check.sh` has no push path for task
+# targets and CI has no login step for them.
+set -euo pipefail
+
+BUILD=""
+VERSION=""
+OUT=""
+URL=""
+SHA256=""
+FORCE=0
+DL_CACHE="${BENCH_DL_CACHE:-/var/cache/darwin-bench}"
+PBZX="${BENCH_PBZX:-/opt/darwin-bench/pbzx-stream.py}"
+
+die()  { echo "bench-fetch-kdk: error: $*" >&2; exit 1; }
+note() { echo "bench-fetch-kdk: $*"; }
+
+usage() {
+    cat >&2 <<'EOF'
+usage: bench-fetch-kdk --build BUILD --out DIR [--version VERSION]
+                       [--url URL] [--sha256 HEX] [--force]
+
+--build     Apple build of the KDK, e.g. 25F84. Resolved and downloaded with
+            `ipsw download kdk --build`, which uses the dortania mirror.
+--out       KDK root to create, e.g. /Library/Developer/KDKs/KDK_26.5.2_25F84.kdk
+--version   marketing version, e.g. 26.5.2. Cross-checked against the DMG
+            filename ipsw writes, and used in messages.
+--url       fetch this DMG instead of resolving --build. Requires --sha256
+            unless BENCH_KDK_ALLOW_UNVERIFIED=1.
+--force     re-unpack even if --out already looks like a KDK.
+EOF
+    exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --build)        BUILD="${2:?}"; shift 2 ;;
+        --version)      VERSION="${2:?}"; shift 2 ;;
+        --out)          OUT="${2:?}"; shift 2 ;;
+        --url)          URL="${2:?}"; shift 2 ;;
+        --sha256)       SHA256="${2:?}"; shift 2 ;;
+        --force)        FORCE=1; shift ;;
+        -h|--help)      usage ;;
+        *)              die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "${OUT}" ]] || usage
+[[ -n "${BUILD}" || -n "${URL}" ]] || die "need --build (or an explicit --url)"
+
+# ---------------------------------------------------------------------------
+# Already there? Then there is nothing to do. This is what makes the stage
+# safe to run unconditionally and what lets a caller point --out at a KDK that
+# was installed by Apple's own installer on a Mac and rsync'd over.
+# ---------------------------------------------------------------------------
+# Counts the KDK's own files, not --out's whole subtree: --out is "/" in the
+# Dockerfile stage, where "${OUT}/usr" is Ubuntu's own /usr and would swamp the
+# number.
+kdk_file_count() {
+    find "${1%/}/System/Library" "${1%/}/usr/local/lib/kernel" -type f 2>/dev/null | wc -l
+}
+
+kdk_looks_complete() {
+    [[ -d "$1/System/Library/Extensions" ]] \
+        && [[ -d "$1/System/Library/KernelSupport" ]] \
+        && [[ -d "$1/usr/local/lib/kernel/platform" ]] \
+        && [[ -d "$1/System/Library/Frameworks/Kernel.framework" ]]
+}
+
+if [[ "${FORCE}" == "0" ]] && kdk_looks_complete "${OUT}"; then
+    note "${OUT} already holds a KDK ($(kdk_file_count "${OUT}") files); nothing to do"
+    exit 0
+fi
+
+for tool in curl 7z ipsw cpio python3 sha256sum; do
+    command -v "${tool}" >/dev/null 2>&1 || die "missing required tool: ${tool}"
+done
+[[ -f "${PBZX}" ]] || die "missing ${PBZX} (set BENCH_PBZX)"
+
+# ---------------------------------------------------------------------------
+# Acquire the DMG.
+#
+# `ipsw download kdk --build` is the resolver: it reads the dortania gh-pages
+# KDK manifest, so no URL lives here, and needs no Apple ID.
+#
+# The sha256 check below is NOT redundant with whatever ipsw does internally.
+# On a second run ipsw prints "File already exists" and returns 0 WITHOUT
+# re-hashing, so a truncated or corrupt cached DMG would be accepted silently.
+# Hashing the bytes we actually got is also stronger than comparing the pin
+# with the manifest, which only checks what the mirror *claims*.
+# ---------------------------------------------------------------------------
+mkdir -p "${DL_CACHE}/kdk"
+
+if [[ -n "${URL}" ]]; then
+    # Explicit --url: fetch it ourselves. ipsw has no "download this URL" mode.
+    # Refuse up front rather than after the download: with --url there is no manifest
+    # and no mirror vouching for the bytes, so --sha256 is the only guarantee.
+    [[ -n "${SHA256}" || "${BENCH_KDK_ALLOW_UNVERIFIED:-0}" == "1" ]] \
+        || die "--url without --sha256 (set BENCH_KDK_ALLOW_UNVERIFIED=1 to accept that)"
+    case "${URL}" in
+        *download.developer.apple.com*)
+            die "${URL} needs an Apple ID (it 302s to /unauthorized/).
+  Drop --url and let --build resolve through ipsw instead." ;;
+    esac
+    DMG="${DL_CACHE}/kdk/KDK_${BUILD:-custom}.dmg"
+    if [[ -f "${DMG}" ]] && { [[ -z "${SHA256}" ]] \
+        || [[ "$(sha256sum "${DMG}" | cut -d' ' -f1)" == "${SHA256}" ]]; }; then
+        note "using the cached DMG at ${DMG}"
+    else
+        note "downloading ${URL}"
+        curl -fL --retry 3 --retry-delay 2 -C - -o "${DMG}" "${URL}" \
+            || die "download failed: ${URL}"
+    fi
+else
+    note "resolving and downloading build ${BUILD} with ipsw download kdk"
+    ipsw download kdk --build "${BUILD}" --output "${DL_CACHE}/kdk" \
+        || die "ipsw download kdk --build ${BUILD} failed.
+  ipsw resolves against dortania/KdkSupportPkg, which carries macOS 13.0 and
+  newer only; there is no public 11.x or 12.x KDK there. Pass --url/--sha256,
+  or put an installed KDK in build_images.py's cache directory as
+      kdk/KDK_<version>_<build>.kdk"
+
+    # ipsw names the file from the manifest: Kernel_Debug_Kit_<version>_build_<build>.dmg
+    mapfile -t found < <(find "${DL_CACHE}/kdk" -maxdepth 1 -type f \
+        -name "*_build_${BUILD}.dmg" -print | sort)
+    [[ "${#found[@]}" -gt 0 ]] \
+        || die "ipsw download kdk reported success but left no *_build_${BUILD}.dmg in ${DL_CACHE}/kdk"
+    [[ "${#found[@]}" -eq 1 ]] \
+        || die "more than one DMG for build ${BUILD} in ${DL_CACHE}/kdk: ${found[*]}"
+    DMG="${found[0]}"
+
+    # The filename carries the marketing version, so --version still gets its
+    # cross-check without a manifest parse.
+    if [[ -n "${VERSION}" ]]; then
+        fname="$(basename "${DMG}")"
+        got_version="${fname#Kernel_Debug_Kit_}"
+        got_version="${got_version%%_build_*}"
+        [[ "${got_version}" == "${VERSION}" ]] \
+            || die "build ${BUILD} is KDK ${got_version} upstream, but the task asked for ${VERSION}"
+    fi
+    note "have $(basename "${DMG}") ($(stat -c %s "${DMG}" 2>/dev/null || stat -f %z "${DMG}") bytes)"
+fi
+
+if [[ -n "${SHA256}" ]]; then
+    got="$(sha256sum "${DMG}" | cut -d' ' -f1)"
+    [[ "${got}" == "${SHA256}" ]] \
+        || die "sha256 mismatch for ${DMG}
+  expected ${SHA256}
+  got      ${got}
+  Either the mirror re-cut the release or the pin is stale; resolve it
+  deliberately rather than by picking one."
+    note "sha256 ${got} verified"
+elif [[ "${BENCH_KDK_ALLOW_UNVERIFIED:-0}" != "1" ]]; then
+    die "no --sha256 to verify ${DMG} against.
+  Pass --sha256 (task.json's kdk.sha256), or set BENCH_KDK_ALLOW_UNVERIFIED=1
+  to trust ipsw's own check alone -- note that on a cache hit ipsw only checks
+  that the file exists, not that its bytes are right."
+fi
+
+# ---------------------------------------------------------------------------
+# Unpack. Everything intermediate lives in a scratch dir that is removed as
+# soon as it is consumed -- peak disk is the DMG plus the KDK, not both plus
+# the decompressed cpio.
+# ---------------------------------------------------------------------------
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/bench-kdk.XXXXXX")"
+cleanup() { rm -rf "${WORK}"; }
+trap cleanup EXIT
+
+note "extracting KernelDebugKit.pkg from the DMG"
+7z e -y -bso0 -bsp0 -o"${WORK}" "${DMG}" "Kernel Debug Kit/KernelDebugKit.pkg" \
+    || die "7z could not read ${DMG}"
+[[ -f "${WORK}/KernelDebugKit.pkg" ]] \
+    || die "no 'Kernel Debug Kit/KernelDebugKit.pkg' inside ${DMG}"
+
+# The component payloads are streamed straight out of the package's xar heap
+# into cpio. `ipsw pkg` would first read each whole Payload into memory, which
+# the OOM killer can end on a small host, and then write it to disk.
+PKG="${WORK}/KernelDebugKit.pkg"
+mapfile -t members < <(python3 "${PBZX}" --xar "${PKG}" --list | sort)
+[[ "${#members[@]}" -gt 0 ]] || die "KernelDebugKit.pkg had no component payloads"
+
+mkdir -p "${OUT}"
+for member in "${members[@]}"; do
+    note "unpacking ${member%/Payload}"
+    # -u so the second component may overwrite the first; the two do overlap in
+    # the Kernel.framework directory entries.
+    ( cd "${OUT}" && python3 "${PBZX}" --xar "${PKG}" --member "${member}" | cpio -idmu --quiet ) \
+        || die "failed to unpack ${member}"
+done
+rm -f "${PKG}"
+
+kdk_looks_complete "${OUT}" \
+    || die "${OUT} does not look like a KDK after unpacking (missing System/Library/Extensions, KernelSupport, usr/local/lib/kernel/platform or Kernel.framework)"
+
+note "KDK ${VERSION:-?} build ${BUILD:-?} ready at ${OUT} ($(kdk_file_count "${OUT}") files)"

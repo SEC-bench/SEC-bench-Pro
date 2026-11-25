@@ -1,0 +1,95 @@
+Linux host build: LP64 integer spellings, and a Platform::current() for Linux
+
+On Darwin `uint64_t` is `unsigned long long` and `size_t` is `unsigned long`;
+on Linux x86_64 (LP64) both are `unsigned long`.  Three constructs in the tree
+depend on the Darwin spelling and do not compile with clang on Linux.  All
+three changes are no-ops on macOS.
+
+  * cache_builder/BuilderConfig.h -- a user-defined literal operator's
+    parameter must be exactly `unsigned long long`; `uint64_t` only happens to
+    be that on Darwin.
+  * cache_builder/Optimizers.h -- `VMOffset(0ull)` is ambiguous once uint64_t
+    is not unsigned long long, because `VMOffset(int32_t)` is `= delete`d and
+    both conversions are equal rank.  Spell the type.
+  * mach_o/Universal.cpp -- `greaterThanAddOrOverflow(sizeof(...), uint32_t, uint64_t)`
+    is ambiguous between the uint32_t and uint64_t overloads for the same
+    reason.  Cast to the intended one.
+
+Plus one non-LP64 hunk that belongs to the same "build this on Linux" story:
+
+  * mach_o/Platform.cpp -- Platform::current() is a chain of #elifs over
+    TARGET_OS_*, ending in `#error unknown platform`.
+    The TargetConditionals.h shim reports the truth (TARGET_OS_LINUX), which lands in
+    that #error.  Add a TARGET_OS_LINUX arm returning macOS: an offline host
+    tool has no Mach-O platform of its own, every caller that matters takes
+    the platform from the command line, and the collections it writes are
+    macOS ones.
+
+diff --git a/cache_builder/BuilderConfig.h b/cache_builder/BuilderConfig.h
+index c7bfd50..e87da91 100644
+--- a/cache_builder/BuilderConfig.h
++++ b/cache_builder/BuilderConfig.h
+@@ -33,17 +33,17 @@
+ namespace cache_builder
+ {
+ 
+-constexpr uint64_t operator""_KB(uint64_t v)
++constexpr uint64_t operator""_KB(unsigned long long v)
+ {
+     return (1ULL << 10) * v;
+ }
+ 
+-constexpr uint64_t operator""_MB(uint64_t v)
++constexpr uint64_t operator""_MB(unsigned long long v)
+ {
+     return (1ULL << 20) * v;
+ }
+ 
+-constexpr uint64_t operator""_GB(uint64_t v)
++constexpr uint64_t operator""_GB(unsigned long long v)
+ {
+     return (1ULL << 30) * v;
+ }
+diff --git a/cache_builder/Optimizers.h b/cache_builder/Optimizers.h
+index 0b03b06..0b31e28 100644
+--- a/cache_builder/Optimizers.h
++++ b/cache_builder/Optimizers.h
+@@ -391,7 +391,7 @@ struct SwiftOptimizer
+     std::vector<PointerHashTableOptimizerInfo>  prespecializedMetadataHashTables;
+ 
+     // Offset to the Swift prespecialized data.
+-    VMOffset                                    prespecializedDataOffset = VMOffset(0ull);
++    VMOffset                                    prespecializedDataOffset = VMOffset((uint64_t)0);
+ };
+ 
+ struct DylibTrieOptimizer
+diff --git a/mach_o/Universal.cpp b/mach_o/Universal.cpp
+index 28b77ee..91929ee 100644
+--- a/mach_o/Universal.cpp
++++ b/mach_o/Universal.cpp
+@@ -79,7 +79,7 @@ Error Universal::valid(uint64_t fileSize) const
+     // 32-bit FAT file must fit n+1 slice headers to possbily account for the past-end arm64 slice.
+     // Theoretically a 32-bit FAT file that fits only n slice headers could be valid too, but that'd be a file with empty slices, so we can ignore that.
+     const uint32_t archHeadersSize = (isFat64 ? (sliceCount * sizeof(fat_arch_64)) : ((sliceCount + 1) * sizeof(fat_arch)));
+-    if ( greaterThanAddOrOverflow(sizeof(fat_header), archHeadersSize, fileSize) )
++    if ( greaterThanAddOrOverflow((uint64_t)sizeof(fat_header), (uint64_t)archHeadersSize, fileSize) )
+         return Error("slice headers extend beyond end of file");
+ 
+     struct SliceRange { uint64_t start; uint64_t end; };
+diff --git a/mach_o/Platform.cpp b/mach_o/Platform.cpp
+index b20f96f..341790d 100644
+--- a/mach_o/Platform.cpp
++++ b/mach_o/Platform.cpp
+@@ -784,6 +784,12 @@ Platform Platform::current()
+     return macOS;
+ #elif TARGET_OS_DRIVERKIT
+     return driverKit;
++#elif TARGET_OS_LINUX
++    // Offline host tool built for Linux (base/darwin/toolchain/build-dyld-app-cache-util.sh).
++    // There is no Mach-O platform for the host; every caller that matters
++    // takes the target platform from the command line (-platform), and the
++    // collections this tool writes are macOS ones.
++    return macOS;
+ #else
+   #error unknown platform
+ #endif

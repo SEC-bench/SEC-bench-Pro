@@ -1,0 +1,58 @@
+--- a/target/arm/helper.c
++++ b/target/arm/helper.c
+@@ -2853,10 +2853,55 @@
+     raw_write(env, ri, value);
+ }
+ 
++/*
++ * DARWIN_VM_DEV_KERNEL_TCR: the TCR_EL1 a development-paired SPTM programs.
++ *
++ * On an SPTM system XNU does not own TCR_EL1 -- SPTM programs it and XNU
++ * asserts that what it finds matches its own TCR_EL1_BOOT. Those assertions
++ * are compiled into DEVELOPMENT and KASAN kernels only, which is why the
++ * release kernelcache boots here and the KDK's kernels do not:
++ *
++ *   TCR_AS_16BIT_ASID (bit 36)  pmap_bootstrap() asserts it. The release SPTM
++ *                               shipped in the IPSW leaves it clear even
++ *                               though the ADT asks for 16384 ASIDs and this
++ *                               CPU reports ID_AA64MMFR0_EL1.ASIDBits = 16-bit.
++ *   TBI1              (bit 38)  KASAN-TBI tags every kernel pointer in its top
++ *                               byte; without top-byte-ignore on TTBR1 each
++ *                               tagged access is a level-0 translation fault.
++ *                               sptm_xnu.h says SPTM cannot know a KASAN
++ *                               variant is booting, so the release build never
++ *                               sets it.
++ *
++ * Setting the bits here, on the way into the register, keeps SPTM and XNU
++ * seeing one consistent TCR_EL1 -- and what they see is what the hardware has.
++ * It is opt-in so an ordinary guest keeps the emulator honest.
++ */
++static bool darwin_vm_dev_kernel_tcr(void)
++{
++    static int cached = -1;
++
++    if (cached < 0) {
++        const char *s = getenv("DARWIN_VM_DEV_KERNEL_TCR");
++        cached = (s && s[0] && s[0] != '0') ? 1 : 0;
++        if (cached) {
++            fprintf(stderr, "note: DARWIN_VM_DEV_KERNEL_TCR=1, TCR_EL1 gets "
++                    "AS(16-bit ASID) and TBI1 as a development SPTM sets them\n");
++        }
++    }
++    return cached != 0;
++}
++
++#define DARWIN_VM_TCR_AS_16BIT  (1ULL << 36)
++#define DARWIN_VM_TCR_TBI1      (1ULL << 38)
++
+ static void vmsa_tcr_el12_write(CPUARMState *env, const ARMCPRegInfo *ri,
+                                uint64_t value)
+ {
+     ARMCPU *cpu = env_archcpu(env);
++
++    if (darwin_vm_dev_kernel_tcr()) {
++        value |= DARWIN_VM_TCR_AS_16BIT | DARWIN_VM_TCR_TBI1;
++    }
+ 
+     /* For AArch64 the A1 bit could result in a change of ASID, so TLB flush. */
+     tlb_flush(CPU(cpu));

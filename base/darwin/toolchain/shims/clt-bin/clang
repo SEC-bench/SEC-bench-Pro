@@ -1,0 +1,33 @@
+#!/bin/bash
+# clang in the CLT's usr/bin: the Darwin cross compiler xnu's makefiles get
+# from `xcrun -find clang` (and through it LD = $(KC++) and MIGCC := $(CC)).
+# It runs the clang built with base/darwin/patches/llvm/ with what Apple's
+# clang does by itself for this target:
+#
+#   -target $DARWIN_TRIPLE  -arch alone does not switch clang off the Linux
+#                       host triple, and xnu never passes -target for MacOSX
+#                       (MakeInc.def uses -mmacosx-version-min).
+#   $CROSS_EXTRA_FLAGS  -fptrauth-function-pointer-type-discrimination (on for
+#                       -mkernel in Apple clang, opt-in upstream);
+#                       -mllvm -disable-atexit-based-global-dtor-lowering, so C++
+#                       static destructors land in __mod_term_func as the
+#                       kernel expects; the __ARM_ARCH_8_2__..8_5__ Apple clang
+#                       predefines for -mcpu=apple-a14.
+#   $XNU_CLANG_DROP_FLAGS  removed: -mno-implicit-sme, Apple-only, which
+#                       MakeInc.def passes; upstream never emits SME implicitly
+#                       here, so dropping it is a no-op.
+#
+# linux-xnu-build finds the compiler, probes these flags and exports
+# CROSS_CLANG, DARWIN_TRIPLE and CROSS_EXTRA_FLAGS; the defaults are what it
+# finds for the patched clang in /usr/local/bin.
+real="${CROSS_CLANG:-/usr/local/bin/clang}"
+drop=(${XNU_CLANG_DROP_FLAGS--mno-implicit-sme})
+args=()
+for a in "$@"; do
+    skip=0
+    for d in "${drop[@]}"; do [ "$a" = "$d" ] && skip=1 && break; done
+    [ "$skip" = 1 ] || args+=("$a")
+done
+exec "${real}" -target "${DARWIN_TRIPLE:-arm64e-apple-macos26.0}" \
+    ${CROSS_EXTRA_FLAGS--fptrauth-function-pointer-type-discrimination -mllvm -disable-atexit-based-global-dtor-lowering -D__ARM_ARCH_8_2__=1 -D__ARM_ARCH_8_3__=1 -D__ARM_ARCH_8_4__=1 -D__ARM_ARCH_8_5__=1} \
+    "${args[@]}"

@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""plutil(1) shim backed by Python's plistlib.
+
+MakeInc.def hard-codes PLUTIL = /usr/bin/plutil and MakeInc.kernel /
+MakeInc.rule use it in three shapes:
+
+    plutil -convert xml1|binary1|json [-o OUT] IN
+    plutil -lint IN
+    plutil -extract KEYPATH KIND [-o OUT] IN   (rare)
+
+Anything else is refused loudly rather than silently succeeding.
+"""
+import plistlib
+import sys
+
+FMT = {"xml1": plistlib.FMT_XML, "binary1": plistlib.FMT_BINARY}
+
+
+def read(path):
+    if path == "-":
+        return plistlib.loads(sys.stdin.buffer.read())
+    with open(path, "rb") as fh:
+        return plistlib.load(fh)
+
+
+def write(obj, path, fmt):
+    data = plistlib.dumps(obj, fmt=fmt, sort_keys=True)
+    if path in (None, "-"):
+        sys.stdout.buffer.write(data)
+    else:
+        with open(path, "wb") as fh:
+            fh.write(data)
+
+
+def main(argv):
+    out = None
+    mode = None
+    conv = None
+    extract = None
+    files = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "-convert":
+            mode, conv = "convert", argv[i + 1]
+            i += 2
+        elif a == "-o":
+            out = argv[i + 1]
+            i += 2
+        elif a == "-lint":
+            mode = "lint"
+            i += 1
+        elif a == "-extract":
+            mode, extract = "extract", (argv[i + 1], argv[i + 2])
+            i += 3
+        elif a in ("-s", "-r", "-p", "--"):
+            i += 1
+        elif a.startswith("-"):
+            print("plutil: unsupported option %s (darwin-bench shim)" % a,
+                  file=sys.stderr)
+            return 1
+        else:
+            files.append(a)
+            i += 1
+
+    if not files:
+        print("plutil: no input file", file=sys.stderr)
+        return 1
+
+    rc = 0
+    for path in files:
+        try:
+            obj = read(path)
+        except Exception as exc:                      # noqa: BLE001
+            print("%s: %s" % (path, exc), file=sys.stderr)
+            rc = 1
+            continue
+        if mode == "lint":
+            print("%s: OK" % path)
+        elif mode == "convert":
+            if conv == "json":
+                import json
+                data = json.dumps(obj).encode()
+                if out in (None, "-"):
+                    sys.stdout.buffer.write(data)
+                else:
+                    open(out, "wb").write(data)
+            elif conv in FMT:
+                write(obj, out if out else path, FMT[conv])
+            else:
+                print("plutil: unknown format %s" % conv, file=sys.stderr)
+                rc = 1
+        elif mode == "extract":
+            keypath, kind = extract
+            cur = obj
+            for part in keypath.split("."):
+                cur = cur[part]
+            if kind == "raw":
+                print(cur)
+            else:
+                write(cur, out, FMT.get(kind, plistlib.FMT_XML))
+        else:
+            write(obj, out, plistlib.FMT_XML)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
